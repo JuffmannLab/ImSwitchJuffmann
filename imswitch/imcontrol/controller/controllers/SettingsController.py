@@ -374,20 +374,23 @@ class SettingsController(ImConWidgetController):
             self.ROIchanged()
 
         else:
-            if frameMode == 'Full chip':
-                fullChipShape = detector.fullShape
-                params.x0.setValue(0)
-                params.y0.setValue(0)
-                params.width.setValue(fullChipShape[0])
-                params.height.setValue(fullChipShape[1])
+            if frameMode == "":
+                pass
             else:
-                roiInfo = self._setupInfo.rois[frameMode]
-                params.x0.setValue(roiInfo.x)
-                params.y0.setValue(roiInfo.y)
-                params.width.setValue(roiInfo.w)
-                params.height.setValue(roiInfo.h)
+                if frameMode == 'Full chip':
+                    fullChipShape = detector.fullShape
+                    params.x0.setValue(0)
+                    params.y0.setValue(0)
+                    params.width.setValue(fullChipShape[0])
+                    params.height.setValue(fullChipShape[1])
+                else:
+                    roiInfo = self._setupInfo.rois[frameMode]
+                    params.x0.setValue(roiInfo.x)
+                    params.y0.setValue(roiInfo.y)
+                    params.width.setValue(roiInfo.w)
+                    params.height.setValue(roiInfo.h)
 
-            self.adjustFrame(detector=detector)
+                self.adjustFrame(detector=detector)
 
         self.syncFrameParams(doAdjustFrame=False)
 
