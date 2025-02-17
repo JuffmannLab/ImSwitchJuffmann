@@ -158,7 +158,11 @@ class SettingsController(ImConWidgetController):
 
         # Adjust frame
         params = self.allParams[detector.name]
-        binning = int(params.binning.value())
+        try:
+            binning = int(params.binning.value())
+        except Exception as e:
+            print(f'Error with binning value setting it to 1: {e}')
+            binning = int(1)
         width = params.width.value()
         height = params.height.value()
         x0 = params.x0.value()
