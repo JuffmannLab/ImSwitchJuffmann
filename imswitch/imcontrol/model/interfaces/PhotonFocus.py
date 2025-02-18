@@ -29,13 +29,14 @@ class PhotonFocusBitflowCamera:
         self.nframes = nframes
         self.mode = mode
         self.pfcam_port = pfcam_port
-        self.model = self.get_attribute('CameraName')
+        self.camera = None
         
         self._init_cam(port=self.pfcam_port)
 
     def _init_cam(self, index=1, camfile=None, port=0):
 
         self.camera = PhotonFocus.PhotonFocusBitFlowCamera(index, camfile, port)
+        self.model = self.get_attribute('CameraName')
         self.open()
         self.set_attribute('EposureTime', self.exposure_time)
         
