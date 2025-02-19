@@ -3,6 +3,14 @@ import numpy as np
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import DetectorManager, DetectorAction, DetectorNumberParameter
 
+"""
+Manager for PhotonFocus camera connected via CameraLink to a Bitflow Frame Grabber
+To Do:
+-Fix recording and live view
+-Enable change of ROI
+-Check how to display the live image over the whole canvas
+"""
+
 class PhotonFocusManager(DetectorManager):
     
     def __init__(self, detectorInfo, name, **_lowlevelManagers):
