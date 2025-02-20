@@ -81,8 +81,7 @@ class PhotonFocusBitflowCamera:
         newframe = self.camera.read_newest_image()
         if type(newframe) == np.ndarray:
             vid.append(newframe)       
-        video = np.array(vid)
-        return video
+        return vid
         
     def get_attribute(self, attribute_name):
         if attribute_name == 'All':
