@@ -191,7 +191,7 @@ class GXPIPYManager(DetectorManager):
 
     def _getGXObj(self, cameraId, binning=1):
         try:
-            from imswitch.imcontrol.model.interfaces.gxipycamera import CameraGXIPY
+            from imswitch.imcontrol.model.interfaces.gxipyCamera import CameraGXIPY
             self.__logger.debug(f'Trying to initialize Daheng Imaging camera {cameraId}')
             camera = CameraGXIPY(cameraNo=cameraId, binning=binning)
         except Exception as e:
