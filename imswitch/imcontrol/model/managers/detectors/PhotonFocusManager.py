@@ -31,7 +31,7 @@ class PhotonFocusManager(DetectorManager):
         
         # Prepare parameters
         parameters = {
-            'ExposureTime': DetectorNumberParameter(group='Misc', value=10, valueUnits='ms',
+            'ExposureTime': DetectorNumberParameter(group='Misc', value=0.005, valueUnits='s',
                                                 editable=True),
             'FramePeriod': DetectorNumberParameter(group='Misc', value=self.camera.get_attribute('FramePeriod'), valueUnits='arb.u.',
                                                 editable=True),
