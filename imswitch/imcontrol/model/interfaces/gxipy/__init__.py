@@ -4,7 +4,6 @@
 
 from .gxiapi import *
 from .gxidef import *
-from .gxwrapper import *
 
 __all__ = ["gxwrapper", "dxwrapper", "gxiapi", "gxidef"]
 

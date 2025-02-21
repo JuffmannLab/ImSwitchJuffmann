@@ -6,7 +6,17 @@ from imswitch.imcommon.model import initLogger
 from PIL import Image
 
 from skimage.filters import gaussian, median
-import gxipy as gx
+
+import sys
+import os
+print("sys.path before import:", sys.path)
+
+# Ensure the 'interfaces' folder is in sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\interfaces")))
+
+print("sys.path after modification:", sys.path)
+
+import imswitch.imcontrol.model.interfaces.gxipy as gx
 import collections
 
 class TriggerMode:
@@ -94,7 +104,8 @@ class CameraGXIPY:
         self.set_frame_rate(self.frame_rate)
 
         # set blacklevel
-        self.camera.BlackLevel.set(self.blacklevel)
+        # does not work!
+        # self.camera.BlackLevel.set(self.blacklevel)
 
         # set camera to mono12 mode
         availablePixelFormats = self.camera.PixelFormat.get_range()
@@ -117,9 +128,9 @@ class CameraGXIPY:
         #data_stream.register_capture_callback(callback_fct)
         user_param = None
         # set the acq buffer count
-        self.camera.data_stream[0].set_acquisition_buffer_number(1)
+        #self.camera.data_stream[0].set_acquisition_buffer_number(1)
 
-        self.camera.register_capture_callback(user_param, callback_fct)
+        #self.camera.register_capture_callback(user_param, callback_fct)
 
         # set things if RGB camera is used
         # get param of improving image quality
@@ -215,8 +226,6 @@ class CameraGXIPY:
 
     def setBinning(self, binning=1):
         # Unfortunately this does not work
-        self.camera.BinningHorizontal.set(binning)
-        self.camera.BinningVertical.set(binning)
         self.binning = binning
 
     def getLast(self, is_resize=True, returnFrameNumber=False, timeout=1):
@@ -232,6 +241,10 @@ class CameraGXIPY:
                     return None, -1
         if self.isFlatfielding and self.flatfieldImage is not None:
             self.frame = self.frame/self.flatfieldImage
+        else:
+            raw_image = self.camera.data_stream[0].get_image()
+            self.frame = raw_image.get_numpy_array()
+             
         self.lastFrameId = self.frameNumber
         if returnFrameNumber:
             return self.frame, self.frameNumber
