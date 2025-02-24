@@ -9,12 +9,9 @@ from skimage.filters import gaussian, median
 
 import sys
 import os
-print("sys.path before import:", sys.path)
 
 # Ensure the 'interfaces' folder is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\interfaces")))
-
-print("sys.path after modification:", sys.path)
 
 import imswitch.imcontrol.model.interfaces.gxipy as gx
 import collections
@@ -244,7 +241,7 @@ class CameraGXIPY:
         else:
             raw_image = self.camera.data_stream[0].get_image()
             self.frame = raw_image.get_numpy_array()
-             
+
         self.lastFrameId = self.frameNumber
         if returnFrameNumber:
             return self.frame, self.frameNumber
