@@ -50,17 +50,16 @@ class PCOCamera:
             pass
 
     def getLastChunk(self):
-        while True:    
-            try:
-                self.camera.wait_for_frame()
-                pco_newframe = self.camera.read_newest_image()
-                if type(pco_newframe) == np.ndarray:
-                    self.pco_vid.append(pco_newframe) 
-                pco_video = np.array(self.pco_vid)
-                return pco_video
-            except Exception as e:
-                self.__logger.error(e)
-                self.__logger.warning(f'Something went wrong in acquiring a video')
+        try:
+            self.camera.wait_for_frame()
+            pco_newframe = self.camera.read_newest_image()
+
+            if isinstance(pco_newframe, np.ndarray):  
+                return np.expand_dims(pco_newframe, axis=0)  
+
+        except Exception as e:
+            self.__logger.error(e)
+            self.__logger.warning(f'Something went wrong in acquiring a video')
 
     def setExposure(self, exposuretime):
         self.exposure_time = exposuretime
