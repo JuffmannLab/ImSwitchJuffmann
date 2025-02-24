@@ -1,0 +1,23 @@
+print(cam.get_device_info())
+print(cam.get_capabilities())
+print(cam.get_internal_buffer_status())
+print(cam.get_frame_timings())
+print(cam.get_detector_size())
+print(cam.get_roi())
+print(cam.requires_symmetric_roi())
+print(cam.get_roi_limits())
+#print(cam.get_acquisition_parameters())
+print(cam.get_settings())
+
+--->
+
+TDeviceInfo(model='pco.edge rolling shutter X2', interface='cl', sensor='001102072', serial_number='307')
+['GENERALCAPS1_NOISE_FILTER', 'GENERALCAPS1_HOT_PIXEL_CORRECTION', 'GENERALCAPS1_DATAFORMAT5X16', 'GENERALCAPS1_NO_RECORDER', 'GENERALCAPS1_SETFRAMERATE_ENABLED', 'GENERALCAPS1_CCM', 'GENERALCAPS1_HW_IO_SIGNAL_DESCRIPTOR']
+TInternalBufferStatus(scheduled=0, scheduled_max=0, overruns=0)
+TAcqTimings(exposure=0.009991385, frame_period=0.029726434000000003)
+(2560, 2160)
+(0, 2560, 0, 2160, 1, 1)
+(False, True)
+(TAxisROILimit(min=160, max=2560, pstep=160, sstep=160, maxbin=4), TAxisROILimit(min=16, max=2160, pstep=1, sstep=1, maxbin=4))
+{'image_indexing': 'rct', 'frame_format': 'list', 'frame_info_format': 'namedtuple', 'frame_info_period': 1, 'exposure': 0.009991385, 'double_image_mode': False, 'roi': (0, 2560, 0, 2160, 1, 1), 'trigger_mode': 
+'int', 'frame_delay': 0.0, 'frame_period': 0.029726434000000003, 'bit_alignment': 'LSB', 'hotpixel_correction': True, 'noise_filter': 1, 'status_line': (False, False), 'pixel_rate': 95333333}
