@@ -76,12 +76,17 @@ class PhotonFocusBitflowCamera:
             self.camera.pausing_acquisition()
             
     def grab_video(self):
-        vid = []
-        self.camera.wait_for_frame()
-        newframe = self.camera.read_newest_image()
-        if type(newframe) == np.ndarray:
-            vid.append(newframe)       
-        return vid
+        try:
+            self.camera.wait_for_frame()
+            pf_newframe = self.camera.read_newest_image()
+
+            if isinstance(pf_newframe, np.ndarray):  
+                return np.expand_dims(pf_newframe, axis=0)  
+
+        except Exception as e:
+            self.__logger.error(e)
+            self.__logger.warning(f'Something went wrong in acquiring a video')
+            pass
         
     def get_attribute(self, attribute_name):
         if attribute_name == 'All':
