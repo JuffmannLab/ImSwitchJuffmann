@@ -11,26 +11,55 @@ from pylablib.devices import PCO
 from logging import raiseExceptions
 from imswitch.imcommon.model import initLogger
 
+"""
+Interface for PCO camera using Pylablib    
+"""
+
 class PCOCamera:
-    def __init__(self, idx = 0, cam_interface = None, reboot_on_fail = True, exposure_time = 1, ):
+    def __init__(self, idx = 0, cam_interface = None, reboot_on_fail = True, exposure_time = 1, binning = 1):
         self.__logger = initLogger(self, tryInheritParent=True)
 
         # camera parameters
         self.camera = None
         self.camera_idx = idx
+        self.model = 'pco.edge rolling shutter X2'
         self.cam_interface = cam_interface
         self.reboot_on_fail = reboot_on_fail
         self.exposure_time = exposure_time
+        
+        # Binning is done in h and v direction. Even though we synchronize it for simplicity
+        self.hbin = binning
+        self.vbin = binning
+        
+        # define the buffer here:
+        # is it necessary as we have a frame grabber?
 
         # initialise camera
-        self._init_cam(idx=self.camera_idx, cam_interface=self.cam_interface, reboot_on_fail=self.reboot_on_fail)
+        self._init_cam(idx=self.camera_idx, cam_interface=self.cam_interface, reboot_on_fail=self.reboot_on_fail, binning=binning)
 
-    def _init_cam(self, idx, cam_interface, reboot_on_fail):
+    def _init_cam(self, idx, cam_interface, reboot_on_fail, binning = 1, hotpixelcorrection = True, noisefilter = 'on', doubleimagemode = False):
+        
+        self.hotpixelcorrection = hotpixelcorrection
+        self.noisefilter = noisefilter
+        self.doubleimagemode = doubleimagemode
         
         self.camera = PCO.SC2.PCOSC2Camera(idx, cam_interface, reboot_on_fail)
-
-        self.pco_vid = []
-
+        if self.camera.is_opened() == True:
+            self.__logger.warning(f'Camera already opened, Rebooting')
+            self.reboot()
+        else:
+            self.open()
+            
+        self.setBinning(binning=binning)
+        
+        self.setPropertyValue('hotpixel', hotpixelcorrection)
+        
+        if noisefilter == 'on':
+            self.setPropertyValue('noisefilter', noisefilter)
+        
+        self.setPropertyValue('doubleimagemode', doubleimagemode)
+        
+        
     def open(self):
         self.camera.open()
 
@@ -63,9 +92,78 @@ class PCOCamera:
 
     def setExposure(self, exposuretime):
         self.exposure_time = exposuretime
+        # it takes seconds as input variable, we change it to ms
         self.setPropertyValue('exposure', self.exposure_time*0.001)
+        
+    def setFramePeriod(self, frametime, adjust_exposure=True):
+        self.frametime = frametime
+        self.adjust_exposrue = adjust_exposure
+        
+        self.camera.set_frame_period(frame_time=frametime, adjust_exposure=adjust_exposure)
+             
+    def setBinning(self, binning):
+        self.hbin = binning
+        self.vbin = binning
 
+    def setROI(self, hstart, hend, vstart, vend, symmetric=False):
+        # Check if the ROI has to be symmetric
+        requires_h_symmetry, requires_v_symmetry = self.camera.requires_symmetric_roi()
+        
+        # get the center coordinates of the ROI
+        h_center = (hstart + hend)/2
+        v_center = (vstart + vend)/2
+        h_width = (hend-hstart)
+        v_height = (vend - vstart)
+        
+        # horizontal constrains min=160, max=2560, sstep=160, maxbin=4
+        if not (0 <= hstart <=2560-160 and 160 <= hend <= 2560):
+            self.__logger.warning(f'Horizontal Values must be between 160 and 2560')
+            pass
+        elif (hstart % 160 != 0) or (hend % 160 != 0):
+            self.__logger.warning(f'Horizontal Values must be multiples of 160')
+            pass
+        elif hstart >= hend:
+            self.__logger.warning(f'hstart must be smaller than hend')
+            pass
+        elif hend - hstart < 160:
+            self.__logger.warning(f'Horizontal ROI width must be at least 160 pixels')
+            pass
+        elif self.hbin > 4:
+            self.__logger.warning(f'Binning value not supported')
+            pass
+        
+        # vertical constrains min=16, max=2160, sstep=1, maxbin=4
+        elif not (0 <= vstart <=2160-16 and 16 <= vend <= 2160):
+            self.__logger.warning(f'Vertical Values must be between 16 and 2160')
+            pass
+        elif vstart >= vend:
+            self.__logger.warning(f'vstart must be smaller than vend')
+            pass
+        elif vend - vstart < 16:
+            self.__logger.warning(f'Vertical ROI height must be at least 16 pixels')
+        elif self.vbin > 4:
+            self.__logger.warning(f'Binning value not supported')
+            pass
+        
+        # Check for symmetric ROI requirement:
+        elif requires_h_symmetry:
+            hstart_expected = int(h_center - h_width/2)
+            hend_expected = int(h_center + h_width/2)
+            if (hstart, hend) != (hstart_expected, hend_expected):
+                self.__logger.warning(f'Symmetric ROI in h direction required')
+        
+        elif requires_v_symmetry:
+            vstart_expected = int(v_center - v_height/2)
+            vend_expected = int(v_center + v_height/2)
+            if (vstart, vend) != (vstart_expected, vend_expected):
+                self.__logger.warning(f'Symmetric ROI v direction required')
+             
+        else:
+            property_value = (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
+            self.setPropertyValue('roi', property_value)
 
+        return property_value
+        
     def reboot(self):
         self.camera.reboot(wait=True)
 
@@ -117,18 +215,12 @@ class PCOCamera:
     def setPropertyValue(self, property_name, property_value):
         if property_name == 'exposure':
             self.camera.set_exposure(property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
-        elif property_name == '':
-            self.camera.set_device_variable(property_name ,property_value)
+        elif property_name == 'roi':
+            self.camera.set_roi(property_value)
+        elif property_name == 'hotpixel':
+            self.camera.set_device_variable('hotpixel_correction', bool(property_value))
+        elif property_name == 'noisefilter':
+            self.camera.set_device_variable('noise_filter', int(property_value))
+        elif property_name == 'doubleimagemode':
+            self.camera.set_device_variable('double_image_mode', bool(property_value))
 
