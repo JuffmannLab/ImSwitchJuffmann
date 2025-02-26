@@ -47,12 +47,13 @@ class PCOCamera:
         
         self.camera = PCO.SC2.PCOSC2Camera(idx, cam_interface, reboot_on_fail)
         if self.camera.is_opened() == True:
-            self.__logger.warning(f'Camera already opened, Rebooting')
-            self.reboot()
+            self.__logger.info(f'Camera already opened, Rebooting')
         else:
             self.open()
             
         self.setBinning(binning=binning)
+
+        self.setExposure(exposuretime=self.exposure_time)
         
         self.setPropertyValue('hotpixel', hotpixelcorrection)
         
@@ -154,10 +155,10 @@ class PCOCamera:
                 self.__logger.warning(f'Symmetric ROI v direction required')
              
         else:
-            property_value = (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
-            self.setPropertyValue('roi', property_value)
+            roi_values = (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
+            self.setPropertyValue('roi', roi_values)
 
-        return property_value
+        return roi_values
         
     def reboot(self):
         self.camera.reboot(wait=True)
@@ -168,47 +169,45 @@ class PCOCamera:
         elif property_name == 'exposure':
             property_value = self.camera.get_exposure()
         elif property_name == 'indexing':
-            property_value = self.camera.get_settings('image_indexing')
+            property_value = self.camera.get_settings()['image_indexing']
         elif property_name == 'frameformat':
-            property_value = self.camera.get_settings('frame_format')
+            property_value = self.camera.get_settings()['frame_format']
         elif property_name == 'frameinfoformat':
-            property_value = self.camera.get_settings('frame_info_format')
+            property_value = self.camera.get_settings()['frame_info_format']
         elif property_name == 'frameinfoperiod':
-            property_value = self.camera.get_settings('frame_info_period')
+            property_value = self.camera.get_settings()['frame_info_period']
         elif property_name == 'image_height':
             property_value = self.camera.get_detector_size()[1]
         elif property_name == 'image_width':
             property_value = self.camera.get_detector_size()[0]
         elif property_name == 'doubleimagemode':
-            property_value = self.camera.get_settings('double_image_mode')
+            property_value = self.camera.get_settings()['double_image_mode']
         elif property_name == 'roi':
-            property_value = self.camera.get_settings('roi')
+            property_value = self.camera.get_settings()['roi']
         elif property_name == 'roilimits':
             property_value = self.camera.get_roi_limits()
         elif property_name == 'triggermode':
-            property_value = self.camera.get_settings('trigger_mode')
+            property_value = self.camera.get_settings()['trigger_mode']
         elif property_name == 'framedelay':
-            property_value = self.camera.get_settings('frame_delay')
+            property_value = self.camera.get_settings()['frame_delay']
         elif property_name == 'frameperiod':
-            property_value = self.camera.get_settings('frame_period')
+            property_value = self.camera.get_settings()['frame_period']
         elif property_name == 'bitalignment':
-            property_value = self.camera.get_settings('bit_alignment')
+            property_value = self.camera.get_settings()['bit_alignment']
         elif property_name == 'hotpixel':
-            if self.camera.get_settings('hotpixel_correction'):
+            if self.camera.get_settings()['hotpixel_correction']:
                 property_value = 'On'
             else:
                 property_value = 'Off'
         elif property_name == 'noisefilter':
-            if self.camera.get_settings('noise_filter') == 0:
+            if self.camera.get_settings()['noise_filter'] == 0:
                 property_value = 'Off'
-            elif self.camera.get_settings('noise_filter') == 1:
+            elif self.camera.get_settings()['noise_filter'] == 1:
                 property_value = 'On'
-            else:
-                property_value = 'NC_HP_ON'
         elif property_name == 'statusline':
-            property_value = self.camera.get_settings('status_line')
+            property_value = self.camera.get_settings()['status_line']
         elif property_name == 'pixelrate':
-            property_value = self.camera.get_settings('pixel_rate')
+            property_value = self.camera.get_settings()['pixel_rate']
         elif property_name == 'temperature':
             property_value = self.camera.get_temperature()
         elif property_name == 'conversionfactor':
@@ -234,8 +233,6 @@ class PCOCamera:
                 self.camera.set_device_variable('noise_filter', 0)
             elif property_value == 'On':
                 self.camera.set_device_variable('noise_filter', 1)
-            elif property_value == 'NC_HP_ON':
-                self.camera.set_device_variable('noise_filter', 2)
         elif property_name == 'Set Double Imaging Mode':
             if property_value == 'Off':
                 self.camera.set_device_variable('double_image_mode', False)
@@ -243,7 +240,7 @@ class PCOCamera:
                 self.camera.set_device_variable('double_imaging_mode', True)
         elif property_name == 'Adjust Exposure Time for Frame Period':
             self.adjust_exposure = bool(property_value)
-            self.camera.set_frame_period(frame_time=float(self.camera.get_frame_period[0]), adjust_exposure=self.adjust_exposure)
+            self.camera.set_frame_period(frame_time=float(self.camera.get_frame_period()), adjust_exposure=self.adjust_exposure)
         elif property_name == 'Set Frame Period':
             self.camera.set_frame_period(frame_time=property_value, adjust_exposure=bool(property_value))   
             

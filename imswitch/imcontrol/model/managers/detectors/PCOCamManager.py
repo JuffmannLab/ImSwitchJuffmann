@@ -27,7 +27,7 @@ class PCOCamManager(DetectorManager):
     # Parameters    
         parameters = {
             'Set Exposure Time': DetectorNumberParameter(group='Timings', value=1, valueUnits='ms',
-                                                    editable=True),
+                                                    editable=True),                                         
             'Adjust Exposure Time for Frame Period': DetectorListParameter(group='Settings', value=True, 
                                                                            options=[True,
                                                                                     False],
@@ -143,7 +143,7 @@ class PCOCamManager(DetectorManager):
 
     def _getCameraObj(self, cameraId):
         try:
-            from imswitch.imcontrol.model.interfaces import PCOCamera
+            from imswitch.imcontrol.model.interfaces.PCOCamera import PCOCamera
             self.__logger.debug(f'Trying to initialze PCO camera {cameraId}')
             camera = PCOCamera(idx=cameraId)
         except Exception as e:
