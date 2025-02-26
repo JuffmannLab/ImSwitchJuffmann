@@ -23,7 +23,7 @@ from imswitch.imcommon.model import initLogger
 class PhotonFocusBitflowCamera:
     def __init__(self, exposure_time = 10, nframes = 100, mode = 'sequence', pfcam_port = 0):
         super().__init__()
-        self._logger = initLogger(self, tryInheritParent=True)
+        self.__logger = initLogger(self, tryInheritParent=True)
         
         self.exposure_time = exposure_time
         self.nframes = nframes
@@ -36,9 +36,9 @@ class PhotonFocusBitflowCamera:
     def _init_cam(self, index=0, camfile=None, port=0):
 
         self.camera = PhotonFocus.PhotonFocusBitFlowCamera(index, camfile, port)
-        self.model = self.get_attribute('CameraName')
+        self.model = self.getPropertyValue('CameraName')
         self.open()
-        self.set_attribute('EposureTime', self.exposure_time)
+        self.setPropertyValue('EposureTime', self.exposure_time)
         
     def open(self):
         self.camera.open()
@@ -46,14 +46,25 @@ class PhotonFocusBitflowCamera:
     def close(self):
         self.camera.close()
         
-    def set_roi(self, hstart, vstart):
-        self.camera.set_roi(hstart=hstart, hend=hstart+128, vstart=vstart, vend=vstart+128)
+    def setROI(self, hstart, hend, vstart, vend):
+        # Defining the ROI settings. Only multiples of 128 are allowed,
+        # therefore it is rounding to the next instance of 128. 
+        # I don't know how this interacts with the camfile actually
+        # maybe needs to be changed
+
+        def clamp_and_snap(value, min_val, max_val, step, snap=True):
+            value = max(min_val, min(max_val, value))
+            return round(value / step) * step if snap else value
+
+        hstart = clamp_and_snap(hstart, 0, 1024 - 128, 128, snap=False)
+        vstart = clamp_and_snap(vstart, 0, 1024 - 128, 128, snap=False)
+        hend = clamp_and_snap(hend, 128, 1024, 128)
+        vend = clamp_and_snap(vend, 128, 1024, 128)
+
+        self.camera.set_roi(hstart, hend, vstart, vend)
+
+        return hstart, vstart, hend, vend
             
-    def shift_roi(self):
-        roi =self.get_attribute('ROI')
-        hstart = roi[0]
-        vstart = roi[2]
-        self.camera.fast_shift_roi(hstart, vstart)
         
     def getLast(self):
         try:
@@ -61,21 +72,21 @@ class PhotonFocusBitflowCamera:
         except:
             pass
     
-    def start_acquisition(self):
+    def start_live(self):
         nframes = self.nframes
         mode = self.mode
         if self.camera.acquisition_in_progress == False:
             self.camera.start_acquisition(nframes=nframes, mode=mode)
             
-    def stop_acquisition(self):
+    def stop_live(self):
         if self.camera.acquisition_in_progress == True:
             self.camera.stop_acquisition()
             
-    def pause_acquistion(self):
+    def suspend_live(self):
         if self.camera.acquisition_in_progress == True:
             self.camera.pausing_acquisition()
             
-    def grab_video(self):
+    def getLastChunk(self):
         try:
             self.camera.wait_for_frame()
             pf_newframe = self.camera.read_newest_image()
@@ -88,7 +99,7 @@ class PhotonFocusBitflowCamera:
             self.__logger.warning(f'Something went wrong in acquiring a video')
             pass
         
-    def get_attribute(self, attribute_name):
+    def getPropertyValue(self, attribute_name):
         if attribute_name == 'All':
             attribute_value = self.camera.get_all_attribute_values()
         elif attribute_name == 'ExposureTime':
@@ -103,16 +114,16 @@ class PhotonFocusBitflowCamera:
             attribute_value = self.camera.get_roi_limits()
         elif attribute_name == 'BlackLevelOffset':
             attribute_value = self.camera.get_attribute_value('Voltages/BlackLevelOffset')
-        elif attribute_name == 'ImageWidth':
+        elif attribute_name == 'image_width':
             attribute_value = self.camera.get_attribute_value('Window/H')
-        elif attribute_name == 'ImageHeight':
+        elif attribute_name == 'image_height':
             attribute_value = self.camera.get_attribute_value('Window/W')
         elif attribute_name == 'CameraName':
             attribute_value = self.camera.get_attribute_value('CameraName')
             
         return attribute_value
             
-    def set_attribute(self, attribute_name, attribute_value):
+    def setPropertyValue(self, attribute_name, attribute_value):
         if attribute_name == 'ExposureTime':
             self.camera.set_exposure(attribute_value)
         elif attribute_name == 'FramePeriod':
