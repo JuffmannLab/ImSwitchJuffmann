@@ -95,16 +95,20 @@ class PCOCamera:
     def setExposure(self, exposuretime):
         self.exposure_time = exposuretime
         # it takes seconds as input variable, we change it to ms
-        self.setPropertyValue('Set exposure time', self.exposure_time*0.001)
+        self.camera.set_exposure(self.exposure_time*0.001)
         
     def setBinning(self, binning):
         self.hbin = binning
         self.vbin = binning
 
-    def setROI(self, hstart, hend, vstart, vend, symmetric=False):
+    def setROI(self, hstart, hend, vstart, vend):
         # Check if the ROI has to be symmetric
         requires_h_symmetry, requires_v_symmetry = self.camera.requires_symmetric_roi()
         
+        # Old version of setting ROI and proofing for constrains, however it will close the 
+        # code if the input values does not fulfill the constrains. Therefore created a new 
+        # definition which rounds to the nex allowed value. 
+        """
         # get the center coordinates of the ROI
         h_center = (hstart + hend)/2
         v_center = (vstart + vend)/2
@@ -158,8 +162,40 @@ class PCOCamera:
             roi_values = (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
             self.setPropertyValue('roi', roi_values)
 
-        return roi_values
+        return roi_values if roi_values else (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
+        """
+    # Ensure ROI values are within allowed constraints
+        def clamp(value, min_val, max_val, step=1):
+            value = max(min_val, min(max_val, value))  # Clamp within range
+            return round(value / step) * step  # Snap to nearest step
+
+        # Define constraints
+        hstart = clamp(hstart, 0, 2560 - 160, step=1)
+        hend = clamp(hend, 160, 2560, step=160)+hstart
+        vstart = clamp(vstart, 0, 2160 - 16, step=1)
+        vend = clamp(vend, 16, 2160, step=16)+vstart
         
+        # Ensure hstart < hend and vstart < vend
+        if hstart >= hend:
+            hstart = hend - 160 
+        if vstart >= vend:
+            vstart = vend - 16
+        
+        # Apply symmetric ROI constraints if required
+        if requires_h_symmetry:
+            h_center = (hstart + hend) // 2
+            h_width = (hend - hstart)
+            hstart = h_center - (h_width // 2)
+            hend = h_center + (h_width // 2)
+        if requires_v_symmetry:
+            v_center = (vstart + vend) // 2
+            v_height = (vend - vstart)
+            vstart = v_center - v_height // 2
+            vend = v_center + (v_height // 2)
+        
+        roi_values = (hstart, hend, vstart, vend)
+        return roi_values
+
     def reboot(self):
         self.camera.reboot(wait=True)
 
@@ -220,7 +256,7 @@ class PCOCamera:
 
     def setPropertyValue(self, property_name, property_value):
         if property_name == 'Set exposure time':
-            self.camera.set_exposure(property_value)
+            self.setExposure(property_value)
         elif property_name == 'roi':
             self.camera.set_roi(property_value)
         elif property_name == 'Set Hotpixel Correction':
