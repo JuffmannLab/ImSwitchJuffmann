@@ -16,6 +16,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\inte
 import imswitch.imcontrol.model.interfaces.gxipy as gx
 import collections
 
+"""
+Interface for Dahen Imaging cameras.
+TODO: Recording is not working. Camera does not return correct chunk (Doesn't return anything) 
+"""
+
+
+
 class TriggerMode:
     SOFTWARE = 'Software Trigger'
     HARDWARE = 'Hardware Trigger'
@@ -251,12 +258,27 @@ class CameraGXIPY:
         self.frameid_buffer.clear()
         self.frame_buffer.clear()
 
+    """
     def getLastChunk(self):
         chunk = np.array(self.frame_buffer)
         frameids = np.array(self.frameid_buffer)
         self.flushBuffer()
         self.__logger.debug("Buffer: "+str(chunk.shape)+" IDs: " + str(frameids))
         return chunk
+    """
+
+    def getLastChunk(self):
+        try:
+            
+            newframe = self.getLast()
+
+            if isinstance(newframe, np.ndarray):  
+                return np.expand_dims(newframe, axis=0)  
+
+        except Exception as e:
+            self.__logger.error(e)
+            self.__logger.warning(f'Something went wrong in acquiring a video')
+
 
     def setROI(self,hpos=None,vpos=None,hsize=None,vsize=None):
         #hsize = max(hsize, 25)*10  # minimum ROI size
@@ -300,7 +322,7 @@ class CameraGXIPY:
                 message = self.camera.OffsetY.set(self.ROI_vpos)
                 self.__logger.debug(message)
             else:
-                self.__logger.debug("OffsetX is not implemented or not writable")
+                self.__logger.debug("OffsetY is not implemented or not writable")
 
         return hpos,vpos,hsize,vsize
 

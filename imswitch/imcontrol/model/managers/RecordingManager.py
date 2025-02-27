@@ -386,7 +386,7 @@ class RecordingWorker(Worker):
                     = self.__recordingManager.detectorsManager[detectorName].pixelSizeUm
                 datasets[detectorName].attrs['writing'] = True
 
-            elif self.saveFormat == SaveFormat.TIFF:
+            elif self.saveFormat == SaveFormat.TIFF or self.saveFormat == SaveFormat.NPY:
                 fileExtension = str(self.saveFormat.name).lower()
                 filenames[detectorName] = self.__recordingManager.getSaveFilePath(
                     f'{self.savename}_{detectorName}.{fileExtension}', False, False)
