@@ -19,7 +19,7 @@ class FFTWidget(Widget):
         super().__init__(*args, **kwargs)
 
         # Graphical elements
-        self.showCheck = QtWidgets.QCheckBox('Show FFT')
+        self.showCheck = QtWidgets.QCheckBox('Show Differential')
         self.showCheck.setCheckable(True)
         self.posCheck = guitools.BetterPushButton('Period (pix)')
         self.posCheck.setCheckable(True)
@@ -43,12 +43,6 @@ class FFTWidget(Widget):
         self.img.setTransform(self.img.transform().translate(-0.5, -0.5))
         self.vb.addItem(self.img)
         self.vb.setAspectLocked(True)
-        self.hist = pg.HistogramLUTItem(image=self.img)
-        self.hist.vb.setLimits(yMin=0, yMax=66000)
-        self.hist.gradient.loadPreset('greyclip')
-        for tick in self.hist.gradient.ticks:
-            tick.hide()
-        self.cwidget.addItem(self.hist, row=1, col=2)
 
         # Add lines to viewbox
         self.vb.addItem(self.vline)
