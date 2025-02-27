@@ -20,20 +20,20 @@ class PhotonFocusManager(DetectorManager):
         self.camera = self._getPFObj(cameraId)
        
         for propertyName, propertyValue in detectorInfo.managerProperties['PFCam'].items():
-           self.camera.set_attribute(propertyName, propertyValue)
+           self.camera.setPropertyValue(propertyName, propertyValue)
         
         model = self.camera.model
         self._running = False
         self._adjustingParameters = False
         
-        fullShape = (self.camera.get_attribute('ImageWidth'),
-                     self.camera.get_attribute('ImageHeight'))
+        fullShape = (self.camera.getPropertyValue('ImageWidth'),
+                     self.camera.getPropertyValue('ImageHeight'))
         
         # Prepare parameters
         parameters = {
-            'ExposureTime': DetectorNumberParameter(group='Misc', value=0.005, valueUnits='s',
+            'ExposureTime': DetectorNumberParameter(group='Timings', value=0.005, valueUnits='s',
                                                 editable=True),
-            'FramePeriod': DetectorNumberParameter(group='Misc', value=self.camera.get_attribute('FramePeriod'), valueUnits='arb.u.',
+            'FramePeriod': DetectorNumberParameter(group='Timings', value=self.camera.get_attribute('FramePeriod'), valueUnits='arb.u.',
                                                 editable=True),
             'FineGain': DetectorNumberParameter(group='Misc', value=1, valueUnits='arb.u.', 
                                             editable=True),
@@ -59,7 +59,7 @@ class PhotonFocusManager(DetectorManager):
         if name not in self._DetectorManager__parameters:
             raise AttributeError(f'Non-existent parameter "{name}" specified')
 
-        value = self.camera.set_attribute(name, value)
+        value = self.camera.setPropertyValue(name, value)
         return value
     
     def getParameter(self, name):
@@ -67,7 +67,7 @@ class PhotonFocusManager(DetectorManager):
         if name not in self._parameters:
             raise AttributeError(f'Non-existent parameter "{name}" specified')
 
-        value = self.camera.get_attribute(name)
+        value = self.camera.getPropertyValue(name)
         return value
     
     def setBinning(self, binning):
@@ -75,7 +75,7 @@ class PhotonFocusManager(DetectorManager):
     
     def getChunk(self):
         try:
-            return self.camera.grab_video()
+            return self.camera.getLastChunk()
         except:
             return None
         
@@ -84,18 +84,20 @@ class PhotonFocusManager(DetectorManager):
     
     def startAcquisition(self):
         if not self._running:
-            self.camera.start_acquisition()
+            self.camera.start_live()
             self._running = True
             self.__logger.debug('startlive')
             
     def stopAcquisition(self):
         if self._running:
             self._running = False
-            self.camera.stop_acquisition()
-            self.__logger.debug('suspendlive')
+            self.camera.stop_live()
+            self.__logger.debug('stoplive')
             
     def stopAcquisitionForROIChange(self):
-        pass
+        self._running = False
+        self.camera.stop_live()
+        self.__logger.debug('stoplive') 
 
     @property
     def pixelSizeUm(self):

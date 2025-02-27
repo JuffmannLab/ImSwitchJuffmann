@@ -102,7 +102,15 @@ class HDF5Storer(Storer):
                 dataset[:, ...] = np.moveaxis(image, 0, -1)
             
                 file.close()
-        
+
+class NPYStorer(Storer):
+    """ A storer that stores the images as .npy files """
+
+    def snap(self, images: Dict[str, np.ndarray], attrs: Dict[str, str] = None):
+        for channel, image in images.items():
+            with AsTemporayFile(f'{self.filepath}_{channel}.npy') as path:
+                np.save(path, image)
+                logger.info(f"Saved image to npy file {path}")
 
 class TiffStorer(Storer):
     """ A storer that stores the images in a series of tiff files """
@@ -125,12 +133,14 @@ class SaveFormat(enum.Enum):
     HDF5 = 1
     TIFF = 2
     ZARR = 3
+    NPY = 4
 
 
 DEFAULT_STORER_MAP: Dict[str, Type[Storer]] = {
     SaveFormat.ZARR: ZarrStorer,
     SaveFormat.HDF5: HDF5Storer,
-    SaveFormat.TIFF: TiffStorer
+    SaveFormat.TIFF: TiffStorer,
+    SaveFormat.NPY: NPYStorer
 }
 
 
@@ -281,6 +291,8 @@ class RecordingManager(SignalInterface):
             file.close()
         elif saveFormat == SaveFormat.TIFF:
             tiff.imwrite(filePath, image)
+        elif saveFormat == SaveFormat.NPY:
+            np.save(filePath, image)
         if saveFormat == SaveFormat.ZARR:
             path = self.getSaveFilePath(f'{savename}.{fileExtension}')
             store = zarr.storage.DirectoryStore(path)
@@ -419,8 +431,18 @@ class RecordingWorker(Worker):
                                     filePath = filenames[detectorName]
                                     tiff.imwrite(filePath, newFrames, append=True)
                                 except ValueError:
-                                    self.__logger.error("TIFF File exceeded 4GB.")
+                                    self.__logger.error("TIFF File exceeds available Storage.")
                                     if self.saveFormat == SaveFormat.TIFF:
+                                        filePath = self.__recordingManager.getSaveFilePath(
+                                            f'{self.savename}_{detectorName}.{fileExtension}', False, False)
+                                        continue
+                            if self.saveFormat == SaveFormat.NPY:
+                                try:
+                                    filePath = filenames[detectorName]
+                                    np.save(filePath, newFrames)
+                                except ValueError:
+                                    self.__logger.error("NPY File exceeds available Storage.")
+                                    if self.saveFormat == SaveFormat.NPY:
                                         filePath = self.__recordingManager.getSaveFilePath(
                                             f'{self.savename}_{detectorName}.{fileExtension}', False, False)
                                         continue
@@ -471,8 +493,18 @@ class RecordingWorker(Worker):
                                     filePath = filenames[detectorName]
                                     tiff.imwrite(filePath, newFrames, append=True)
                                 except ValueError:
-                                    self.__logger.error("TIFF File exceeded 4GB.")
+                                    self.__logger.error("TIFF File exceeds available storage.")
                                     if self.saveFormat == SaveFormat.TIFF:
+                                        filePath = self.__recordingManager.getSaveFilePath(
+                                            f'{self.savename}_{detectorName}.{fileExtension}', False, False)
+                                        continue
+                            elif self.saveFormat == SaveFormat.NPY:
+                                try:
+                                    filePath = filenames[detectorName]
+                                    np.save(filePath, newFrames)
+                                except ValueError:
+                                    self.__logger.error("NPY File exceeds available storage.")
+                                    if self.saveFormat == SaveFormat.NPY:
                                         filePath = self.__recordingManager.getSaveFilePath(
                                             f'{self.savename}_{detectorName}.{fileExtension}', False, False)
                                         continue
@@ -508,12 +540,21 @@ class RecordingWorker(Worker):
                                     filePath = filenames[detectorName]
                                     tiff.imwrite(filePath, newFrames, append=True)
                                 except ValueError:
-                                    self.__logger.error("TIFF File exceeded 4GB.")
+                                    self.__logger.error("TIFF File exeeds available storage.")
                                     if self.saveFormat == SaveFormat.TIFF:
                                         filePath = self.__recordingManager.getSaveFilePath(
                                             f'{self.savename}_{detectorName}.{fileExtension}', False, False)
                                         continue
-
+                            elif self.saveFormat == SaveFormat.NPY:
+                                try:
+                                    filePath = filenames[detectorName]
+                                    np.save(filePath, newFrames)
+                                except ValueError:
+                                    self.__logger.error("NPY File exeeds available storage.")
+                                    if self.saveFormat == SaveFormat.NPY:
+                                        filePath = self.__recordingManager.getSaveFilePath(
+                                            f'{self.savename}_{detectorName}.{fileExtension}', False, False)
+                                        continue
                             elif self.saveFormat == SaveFormat.HDF5:
                                 it = currentFrame[detectorName]
                                 dataset = datasets[detectorName]
