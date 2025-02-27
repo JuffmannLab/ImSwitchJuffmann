@@ -258,6 +258,7 @@ class CameraGXIPY:
         self.frameid_buffer.clear()
         self.frame_buffer.clear()
 
+    # Not working
     """
     def getLastChunk(self):
         chunk = np.array(self.frame_buffer)
@@ -266,7 +267,7 @@ class CameraGXIPY:
         self.__logger.debug("Buffer: "+str(chunk.shape)+" IDs: " + str(frameids))
         return chunk
     """
-
+    # this seems to work but it is very slow. 
     def getLastChunk(self):
         try:
             
@@ -279,6 +280,34 @@ class CameraGXIPY:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')
 
+    # also not working
+    """
+    def getLastChunk(self, timeout=1):
+        try:
+            frames = []
+            frame_ids = []
+
+            for _ in range(self.NBuffer):
+                new_frame, frame_number = self.getLast(timeout=timeout, returnFrameNumber=True)
+                
+                if new_frame is not None:
+                    frames.append(new_frame)
+                    frame_ids.append(frame_number)
+                else:
+                    self.__logger.warning('Failed to acquire a frame, continuing to next frame.')
+                    break
+
+            if len(frames) > 0:
+                chunk = np.array(frames)
+                return chunk
+            else:
+                self.__logger.warning('No frames were retrieved for the chunk.')
+                return None
+
+        except Exception as e:
+            self.__logger.error(f'Error while retrieving chunk: {e}')
+            return None
+        """
 
     def setROI(self,hpos=None,vpos=None,hsize=None,vsize=None):
         #hsize = max(hsize, 25)*10  # minimum ROI size
