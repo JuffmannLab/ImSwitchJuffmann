@@ -18,4 +18,4 @@ from .ULensesController import ULensesController
 from .ViewController import ViewController
 from .TilingController import TilingController
 from .WatcherController import WatcherController
-from .DifferentialViewController import DifferentilViewController
+from .DifferentialViewController import DifferentialViewController
