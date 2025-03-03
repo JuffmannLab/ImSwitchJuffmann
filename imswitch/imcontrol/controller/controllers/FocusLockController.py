@@ -18,6 +18,8 @@ class FocusLockController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+
+        # Reads the specific values from the configuration file. 
         if self._setupInfo.focusLock is None:
             return
 
@@ -43,6 +45,7 @@ class FocusLockController(ImConWidgetController):
         self._widget.zStackBox.stateChanged.connect(self.zStackVarChange)
         self._widget.twoFociBox.stateChanged.connect(self.twoFociVarChange)
 
+        # Set the initial values
         self.setPointSignal = 0
         self.locked = False
         self.aboutToLock = False
@@ -59,6 +62,7 @@ class FocusLockController(ImConWidgetController):
         self.timeData = np.zeros(self.buffer)
         self.lockingData = np.zeros(7)
 
+        # Starts acquisition. I don't know if this can cause problems if, the camera of interest is also used for acquisition
         self._master.detectorsManager[self.camera].startAcquisition()
         self.__processDataThread = ProcessDataThread(self)
 
@@ -66,7 +70,8 @@ class FocusLockController(ImConWidgetController):
         self.timer.timeout.connect(self.update)
         self.timer.start(int(self.focusTime))
         self.startTime = perf_counter()
-
+    
+    # Following functions are just for controlling and setting different parameters
     def __del__(self):
         self.__processDataThread.quit()
         self.__processDataThread.wait()
@@ -181,6 +186,7 @@ class ProcessDataThread(Thread):
         self._controller = controller
         super().__init__(*args, **kwargs)
 
+    # Get the live view
     def grabCameraFrame(self):
         detectorManager = self._controller._master.detectorsManager[self._controller.camera]
         self.latestimg = detectorManager.getLatestFrame()
