@@ -46,7 +46,7 @@ class ShutterWidget(Widget):
         """Stores the delay value from input and emits a signal."""
         try:
             self.delay = int(self.delay_input.text())
-            self.sigsetdelay(self.delay)
+            self.sigsetdelay.emit(self.delay)
             print(f"Delay set to {self.delay} ms")
         except ValueError:
             print("Invalid delay value. Please enter a number.")
