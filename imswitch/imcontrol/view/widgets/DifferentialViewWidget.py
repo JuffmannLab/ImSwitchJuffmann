@@ -6,6 +6,21 @@ from imswitch.imcommon.view.guitools import pyqtgraphtools
 from imswitch.imcontrol.view import guitools
 from .basewidgets import Widget, NapariHybridWidget
 
+"""
+Widget for showing differential imaging. 
+Right now, the Widget is in hybrid mode with the napari viewer, showing the diff img in the viewer.
+For more controllability I think it would be benefitial to show it in the widget itself. 
+Also enables us to add colorbars etc.
+
+Missing:
+-Input for Batch Size
+-Colorbar
+-pyqtgraph implementation
+
+-maybe showing the noise floor?
+"""
+
+
 class DifferentialViewWidget(NapariHybridWidget):
     """ Displays the differential image for iScat measurements. """
 

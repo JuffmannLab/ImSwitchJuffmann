@@ -219,6 +219,21 @@ class NidaqInfo:
             return f'Dev1/ctr{self.timerCounterChannel}'  # for backwards compatibility
         else:
             return self.timerCounterChannel
+        
+@dataclass(frozen=True)
+class ShutterInfo:
+    ComChannel: Optional[Union[str, int]] = None
+
+    Baudrate: Optional[int] = 9600
+
+    timeout: Optional[int] = 1
+
+    def getComChannel(self):
+        
+        if isinstance(self.ComChannel, int):
+            return f'COM{self.ComChannel}'
+        else:
+            return self.ComChannel
 
 
 @dataclass(frozen=True)
@@ -278,6 +293,9 @@ class SetupInfo:
 
     nidaq: NidaqInfo = field(default_factory=NidaqInfo)
     """ NI-DAQ settings. """
+
+    shutter: ShutterInfo = field(default_factory=ShutterInfo)
+    """ Shutter Settings"""
 
     pulseStreamer: PulseStreamerInfo = field(default_factory=PulseStreamerInfo)
     """ Pulse Streamer settings. """

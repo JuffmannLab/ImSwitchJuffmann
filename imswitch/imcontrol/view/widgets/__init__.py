@@ -20,3 +20,4 @@ from .ViewWidget import ViewWidget
 from .TilingWidget import TilingWidget
 from .basewidgets import WidgetFactory
 from .DifferentialViewWidget import DifferentialViewWidget
+from .ShutterWidget import ShutterWidget

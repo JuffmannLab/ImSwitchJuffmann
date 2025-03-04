@@ -19,3 +19,4 @@ from .ViewController import ViewController
 from .TilingController import TilingController
 from .WatcherController import WatcherController
 from .DifferentialViewController import DifferentialViewController
+from .ShutterController import ShutterController

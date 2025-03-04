@@ -6,6 +6,14 @@ from imswitch.imcommon.framework import Signal, Thread, Worker, Mutex
 from imswitch.imcontrol.view import guitools
 from ..basecontrollers import LiveUpdatedController
 
+"""
+Controller for showing differential imaging. 
+Right now, the Widget is in hybrid mode with the napari viewer, showing the diff img in the viewer.
+For more controllability I think it would be benefitial to show it in the widget itself. 
+Also enables us to add colorbars etc. 
+"""
+
+
 class DifferentialViewController(LiveUpdatedController):
     "Linked to DifferentialViewWidget"
 
@@ -48,7 +56,7 @@ class DifferentialViewController(LiveUpdatedController):
             batch2 = previous_batches[0][0]
             batch2 = np.where(batch2 == 0, 1e-6, batch2)
             diff_img = (batch1 / batch2) - 1
-            diff_img = np.clip(diff_img * 255, 0, 255).astype(np.uint8)
+            diff_img = np.clip(diff_img * 255, 0, 255).astype(np.uint8) #puts the pixel values in range of 0 to 255 to make sure it is compatible with the napari viewer
 
             return diff_img  
         
