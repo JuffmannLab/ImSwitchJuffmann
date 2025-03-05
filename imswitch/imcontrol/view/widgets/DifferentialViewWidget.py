@@ -21,33 +21,64 @@ Missing:
 """
 
 
-class DifferentialViewWidget(NapariHybridWidget):
-    """ Displays the differential image for iScat measurements. """
+class DifferentialViewWidget(Widget):
+    """Displays the differential image for iScat measurements."""
 
-    sigShowToggled = QtCore.Signal(bool)
-    def __post_init__(self, *args, **kwargs):
+    sigshowpushed = QtCore.Signal(bool)
+    sigbatchsize = QtCore.Signal(int)
 
-        self.showCheck = QtWidgets.QCheckBox('Differential View')
-        self.showCheck.setCheckable(True)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
+        # Button to activate differential view
+        self.showdiffpush = guitools.BetterPushButton("Differential View")
+        self.showdiffpush.setCheckable(True)
+        self.showdiffpush.toggled.connect(self.sigshowpushed.emit)
 
+        # Input for batch size
+        self.linebatchsize = QtWidgets.QLineEdit("1")
+        self.linebatchsize.setValidator(QtWidgets.QIntValidator(1, 1000))  # Ensures positive integer input
+        self.linebatchsize.textChanged.connect(self.update_batch_size)
+
+        # pyqtgraph Viewbox
+        self.diffimagegraph = pg.GraphicsLayoutWidget()
+        self.diffimg = pg.ImageItem(border="w")
+        self.viewbox = self.diffimagegraph.addViewBox(invertY=False, invertX=False)
+        self.viewbox.setAspectLocked(True)
+        self.viewbox.addItem(self.diffimg)
+
+        # Colorbar
+        self.colorbar = pg.ColorBarItem(interactive=True)
+        self.colorbar.setImageItem(self.diffimg, insert_in=self.diffimagegraph)
+
+        # Layout
         grid = QtWidgets.QGridLayout()
         self.setLayout(grid)
-        grid.addWidget(self.showCheck, 1, 0, 1, 1)
-
-        self.showCheck.toggled.connect(self.sigShowToggled)
+        grid.addWidget(self.showdiffpush, 0, 0, 1, 1)
+        grid.addWidget(QtWidgets.QLabel("Batch Size:"), 0, 1, 1, 1)
+        grid.addWidget(self.linebatchsize, 0, 2, 1, 1)
+        grid.addWidget(self.diffimagegraph, 1, 0, 1, 3)
 
         self.layer = None
 
+    def update_batch_size(self):
+        """Emit the batch size when the input changes."""
+        text = self.linebatchsize.text()
+        if text:
+            self.sigbatchsize.emit(int(text))
+
     def getDifferentialViewChecked(self):
-        return self.showCheck.isChecked()
+        return self.showdiffpush.isChecked()
+    
+    def getBatchSize(self):
+        return int(self.linebatchsize.text())
     
     def getImage(self):
-        if self.layer is not None:
-            return self.layer.data
+        return self.diffimg.image
         
     def setImage(self, im):
-        if self.layer is None or self.layer.name not in self.viewer.layers:
-            self.layer = self.viewer.add_image(im, rgb = False, name = "Holo", blending="additive")
-        self.layer.data = im
+        self.diffimg.setImage(im, autoLevels=False)
+
+    def updateImageLimits(self, imgWidth, imgHeight):
+        pyqtgraphtools.setPGBestImageLimits(self.viewbox, imgWidth, imgHeight)
 
