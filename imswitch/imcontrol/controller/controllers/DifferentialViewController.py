@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 from collections import deque
+import time
 
 from imswitch.imcommon.framework import Signal, Thread, Worker, Mutex
 from imswitch.imcontrol.view import guitools
@@ -24,9 +25,13 @@ class DifferentialViewController(LiveUpdatedController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.updateRate = 2
+        self.it = 0
+        self.init = False
+
         # internal state:
         self.active = self._widget.getDifferentialViewChecked()
-        self.batch_size = self._widget.getBatchsize()
+        self.batch_size = self._widget.getBatchSize()
         self.batch_store = deque(maxlen=self.batch_size)
         self.previou_batches = deque(maxlen=2)
 
@@ -49,6 +54,7 @@ class DifferentialViewController(LiveUpdatedController):
     def setShowDifferentialView(self, enabled):
 
         self.active = enabled
+        self.init = False
         if not enabled:
             self._widget.setImage(np.zeros((100, 100), dtype=np.uint8))
 
@@ -65,6 +71,7 @@ class DifferentialViewController(LiveUpdatedController):
 
         if shapeChanged or not self.init:
             self.adjustFrame()
+            self.init = True
 
     def adjustFrame(self):
         """Adjusts the view frame based on the image size."""
@@ -77,8 +84,12 @@ class DifferentialViewController(LiveUpdatedController):
     def update(self, detectorName, im, init, isCurrentDetector):
 
         if self.active:
-            self.imageprocessingworker.prepareForNewImage(im, self.batch_size)
-            self.sigImageReceived.emit()
+            if self.it == self.updateRate:
+                self.it = 0
+                self.imageprocessingworker.prepareForNewImage(im, self.batch_size)
+                self.sigImageReceived.emit()
+            else:
+                self.it += 1
 
 
 class DifferentialImageWorker(Worker):
@@ -93,41 +104,44 @@ class DifferentialImageWorker(Worker):
         self.batch_store = deque(maxlen=1)
         self.previous_batches = deque(maxlen=2)
 
-    def process_image(self, img, batch_size):
+    def process_image(self):
         """Processes the image and computes the differential image."""
-        self._numQueuedImagesMutex.lock()
-        if self._numQueuedImages > 1:
+        try:
+            start_time = time.time()
+            if self._numQueuedImages > 1:
+                return  # Skip frame to avoid backlog
+
+            self.batch_store.append(self._img.astype(np.float32))
+
+            if len(self.batch_store) < self._batch_size:
+                self.sigDiffImageComputed.emit(self._img)
+                return
+
+            batch1 = np.mean(np.stack(self.batch_store), axis=0)
+            self.previous_batches.append(batch1)
+
+            if len(self.previous_batches) < 2:
+                self.sigDiffImageComputed.emit(self._img)
+                return
+
+            batch2 = self.previous_batches[0]
+            batch2 = np.where(batch2 == 0, 1e-6, batch2)  # Avoid division by zero
+
+            diff_img = (batch1 / batch2) - 1
+            diff_img = np.clip(diff_img * 255, 0, 255).astype(np.uint8)  # Normalize for display
+
+            self.sigDiffImageComputed.emit(diff_img)
+
+
+        finally:
+            self._numQueuedImagesMutex.lock()
+            self._numQueuedImages -= 1
             self._numQueuedImagesMutex.unlock()
-            return  # Skip frame to avoid backlog
-        self._numQueuedImagesMutex.unlock()
-
-        self.batch_store.append(img.astype(np.float32))
-
-        if len(self.batch_store) < batch_size:
-            self.sigDiffImageComputed.emit(img)
-            return
-
-        batch1 = np.mean(np.stack(self.batch_store), axis=0)
-        self.previous_batches.append(batch1)
-
-        if len(self.previous_batches) < 2:
-            self.sigDiffImageComputed.emit(img)
-            return
-
-        batch2 = self.previous_batches[0]
-        batch2 = np.where(batch2 == 0, 1e-6, batch2)  # Avoid division by zero
-
-        diff_img = (batch1 / batch2) - 1
-        diff_img = np.clip(diff_img * 255, 0, 255).astype(np.uint8)  # Normalize for display
-
-        self.sigDiffImageComputed.emit(diff_img)
 
     def prepareForNewImage(self, image, batch_size):
         """Updates the image queue and triggers processing."""
+        self._img = image
+        self._batch_size = batch_size
         self._numQueuedImagesMutex.lock()
         self._numQueuedImages += 1
-        self._numQueuedImagesMutex.unlock()
-        self.process_image(image, batch_size)
-        self._numQueuedImagesMutex.lock()
-        self._numQueuedImages -= 1
         self._numQueuedImagesMutex.unlock()

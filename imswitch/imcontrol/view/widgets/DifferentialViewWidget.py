@@ -1,6 +1,6 @@
 import pyqtgraph as pg
 import numpy as np
-from qtpy import QtCore, QtWidgets
+from qtpy import QtCore, QtWidgets, QtGui
 
 from imswitch.imcommon.view.guitools import pyqtgraphtools
 from imswitch.imcontrol.view import guitools
@@ -37,19 +37,21 @@ class DifferentialViewWidget(Widget):
 
         # Input for batch size
         self.linebatchsize = QtWidgets.QLineEdit("1")
-        self.linebatchsize.setValidator(QtWidgets.QIntValidator(1, 1000))  # Ensures positive integer input
+        self.linebatchsize.setValidator(QtGui.QIntValidator(1, 1000))  # Ensures positive integer input
         self.linebatchsize.textChanged.connect(self.update_batch_size)
 
         # pyqtgraph Viewbox
         self.diffimagegraph = pg.GraphicsLayoutWidget()
         self.diffimg = pg.ImageItem(border="w")
         self.viewbox = self.diffimagegraph.addViewBox(invertY=False, invertX=False)
+        self.viewbox.setMouseMode(pg.ViewBox.RectMode)
         self.viewbox.setAspectLocked(True)
         self.viewbox.addItem(self.diffimg)
 
         # Colorbar
-        self.colorbar = pg.ColorBarItem(interactive=True)
-        self.colorbar.setImageItem(self.diffimg, insert_in=self.diffimagegraph)
+        #self.colorbar = pg.ColorBarItem(interactive=True)
+        #self.colorbar.setImageItem(self.diffimg)
+        #self.diffimagegraph.addItem(self.colorbar)
 
         # Layout
         grid = QtWidgets.QGridLayout()
