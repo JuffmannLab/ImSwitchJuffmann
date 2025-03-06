@@ -9,9 +9,8 @@ from ..basecontrollers import LiveUpdatedController
 
 """
 Controller for showing differential imaging. 
-Right now, the Widget is in hybrid mode with the napari viewer, showing the diff img in the viewer.
-For more controllability I think it would be benefitial to show it in the widget itself. 
-Also enables us to add colorbars etc. 
+Right now, displaying the processed image takes forever even though we put the computation 
+in an new thread. Something needs to be done here. 
 """
 
 
@@ -44,12 +43,19 @@ class DifferentialViewController(LiveUpdatedController):
         self.updateBatchSize(self.batch_size)
 
         # prepare worker thread
+        # the thread is initialized when starting the GUI
         self.imageprocessingthread = Thread()
         self.imageprocessingworker = DifferentialImageWorker()
         self.imageprocessingworker.moveToThread(self.imageprocessingthread)
         self.imageprocessingworker.sigDiffImageComputed.connect(self.displayImage)
         self.sigImageReceived.connect(self.imageprocessingworker.process_image)
         self.imageprocessingthread.start()
+
+    def __del__(self):
+        self.imageprocessingthread.quit()
+        self.imageprocessingthread.wait()
+        if hasattr(super(), '__del__'):
+            super().__del__()
 
     def setShowDifferentialView(self, enabled):
 

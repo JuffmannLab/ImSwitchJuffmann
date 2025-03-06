@@ -31,6 +31,10 @@ class Thread(QtCore.QThread, base.Thread, metaclass=QObjectMeta):
     def wait(self) -> None:
         if not self.__isWrappedCObjDeleted():
             super().wait()
+    
+    def start(self) -> None:
+        print('Starting new Thread!')
+        super().start()
 
     def __isWrappedCObjDeleted(self) -> bool:
         try:
