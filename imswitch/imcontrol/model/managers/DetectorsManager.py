@@ -10,6 +10,7 @@ class DetectorsManager(MultiManager, SignalInterface):
     """ DetectorsManager is an interface for dealing with DetectorManagers. It
     is a MultiManager for detectors. """
 
+    # Creating Signals
     sigAcquisitionStarted = Signal()
     sigAcquisitionStopped = Signal()
     sigDetectorSwitched = Signal(str, str)  # (newDetectorName, oldDetectorName)
@@ -17,12 +18,13 @@ class DetectorsManager(MultiManager, SignalInterface):
         str, np.ndarray, bool, bool
     )  # (detectorName, image, init, isCurrentDetector)
 
-    def __init__(self, detectorInfos, updatePeriod, **lowLevelManagers):
+    def __init__(self, detectorInfos, updatePeriod, batch_size, **lowLevelManagers):
         MultiManager.__init__(self, detectorInfos, 'detectors', **lowLevelManagers)
         SignalInterface.__init__(self)
 
         self._activeAcqHandles = []
         self._activeAcqLVHandles = []
+        self._activeDVHandles = []
         self._activeAcqsMutex = Mutex()
 
         self._currentDetectorName = None
@@ -47,9 +49,18 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._thread.started.connect(self._lvWorker.run)
         self._thread.finished.connect(self._lvWorker.stop)
 
+        # Create another thread for Differential View processing
+        self._dvworker = DVWorker(self, batch_size, updatePeriod)
+        self._dvthread = Thread()
+        self._dvworker.moveToThread(self._dvthread)
+        self._thread.started.connect(self._dvworker.run)
+        self._thread.finished.connect(self._dvworker.stop)
+
     def __del__(self):
         self._thread.quit()
         self._thread.wait()
+        self._dvthread.quit()
+        self._dvthread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
 
@@ -88,65 +99,82 @@ class DetectorsManager(MultiManager, SignalInterface):
 
         return self.execOn(self._currentDetectorName, func)
 
-    def startAcquisition(self, liveView=False):
-        """ Starts detector acquisition if it is not already started. If
-        liveView is True, sigImageUpdated will be emitted for every new frame.
-        Returns a handle that can be passed to stopAcquisition when the
-        detector data is no longer needed. """
-
+    def startAcquisition(self, liveView=False, differentialView=False):
+        """ Starts detector acquisition. If `liveView` is True, sigImageUpdated will be emitted for every new frame.
+            If `differentialView` is True, differential images will be computed and emitted instead of raw frames.
+            Returns a handle that can be used to stop acquisition.
+        """
+        
         self._activeAcqsMutex.lock()
         try:
-            # Generate handle that will be used to stop acquisition
-            handle = np.random.randint(2 ** 31)
+            handle = np.random.randint(2**31)
 
-            # Add to handle list and set enable acquisition/LV flags if not already enabled
-            if not liveView:
+            if not liveView and not differentialView:
                 self._activeAcqHandles.append(handle)
                 enableLV = False
-            else:
+                enableDV = False
+            elif liveView:
                 self._activeAcqLVHandles.append(handle)
                 enableLV = len(self._activeAcqLVHandles) == 1
-            enableAcq = len(self._activeAcqHandles) + len(self._activeAcqLVHandles) == 1
+                enableDV = differentialView  # Enable DV only if requested
+            elif differentialView:
+                self._activeDVHandles.append(handle)
+                enableDV = len(self._activeDVHandles) == 1
+                enableLV = False  # Differential view does not need live view
+
+            enableAcq = len(self._activeAcqHandles) + len(self._activeAcqLVHandles) + len(self._activeDVHandles) == 1
+
         finally:
             self._activeAcqsMutex.unlock()
 
-        # Do actual enabling
+        # Start actual acquisition
         if enableAcq:
             self.execOnAll(lambda c: c.startAcquisition(), condition=lambda c: c.forAcquisition)
             self.sigAcquisitionStarted.emit()
+
         if enableLV:
             sleep(0.3)
             self._thread.start()
 
+        if enableDV and not self._dvthread.isRunning():
+            self._dvthread.start()
+
         return handle
 
-    def stopAcquisition(self, handle, liveView=False):
-        """ Stops detector acquisition if it is not already stopped and no
-        other handle is active. """
+    def stopAcquisition(self, handle, liveView=False, differentialView=False):
+        """ Stops detector acquisition if no other handle is active. """
 
         self._activeAcqsMutex.lock()
         try:
-            # Remove from handle list and set disable acquisition/LV flags if not already disabled
-            if not liveView:
-                if handle not in self._activeAcqHandles:
-                    raise ValueError('Invalid or already used handle')
-
-                self._activeAcqHandles.remove(handle)
-                disableLV = False
-            else:
-                if handle not in self._activeAcqLVHandles:
-                    raise ValueError('Invalid or already used handle')
-
+            if liveView and handle in self._activeAcqLVHandles:
                 self._activeAcqLVHandles.remove(handle)
                 disableLV = len(self._activeAcqLVHandles) < 1
-            disableAcq = len(self._activeAcqHandles) < 1 and len(self._activeAcqLVHandles) < 1
+            else:
+                disableLV = False
+
+            if differentialView and handle in self._activeDVHandles:
+                self._activeDVHandles.remove(handle)
+                disableDV = len(self._activeDVHandles) < 1
+            else:
+                disableDV = False
+
+            if not liveView and not differentialView and handle in self._activeAcqHandles:
+                self._activeAcqHandles.remove(handle)
+
+            disableAcq = len(self._activeAcqHandles) + len(self._activeAcqLVHandles) + len(self._activeDVHandles) < 1
+
         finally:
             self._activeAcqsMutex.unlock()
 
-        # Do actual disabling
+        # Stop threads if no more active handles
         if disableLV:
             self._thread.quit()
             self._thread.wait()
+
+        if disableDV:
+            self._dvthread.quit()
+            self._dvthread.wait()
+
         if disableAcq:
             self.execOnAll(lambda c: c.stopAcquisition(), condition=lambda c: c.forAcquisition)
             self.sigAcquisitionStopped.emit()
@@ -181,6 +209,74 @@ class LVWorker(Worker):
 
     def setUpdatePeriod(self, updatePeriod):
         self._updatePeriod = updatePeriod
+
+class DVWorker(Worker):
+    def __init__(self, detectorsManager, batch_size, updatePeriod):
+        super().__init__()
+        self._detectorsManager = detectorsManager
+        self._batch_size = batch_size
+        self._frames = []  # Stores averaged batches
+        self._updatePeriod = updatePeriod
+        self._vtimer = None
+
+    def run(self):
+        """ Continuously processes frames as they become available. """
+        self._timer = Timer()
+        self._timer.timeout.connect(self.process_frame)
+        self._timer.start(self._updatePeriod)
+
+    def stop(self):
+        if self._vtimer is not None:
+            self._vtimer.stop()
+
+    def process_frame(self):
+        """ Collects a batch, averages it, and computes the differential image. """
+        current_detector = self._detectorsManager.getCurrentDetector()
+
+        if current_detector is None:
+            return  # No active detector
+
+        # Collect batch_size frames
+        batch_frames = []
+        for _ in range(self._batch_size):
+            chunk = current_detector.getLastChunk()  # Returns (1, H, W)
+            if chunk is None or not isinstance(chunk, np.ndarray):
+                return  # Skip if no valid frame
+            batch_frames.append(chunk.squeeze(0))
+
+        # Stack frames into (batch_size, H, W) and compute batch mean
+        batch_avg = np.mean(np.stack(batch_frames), axis=0)
+
+        # Store batch average
+        self._frames.append(batch_avg)
+
+        # Ensure we have at least two batch averages for differential calculation
+        if len(self._frames) >= 2:
+            batch1_avg = self._frames[-2]  # Older batch
+            batch2_avg = self._frames[-1]  # Newer batch
+
+            # Compute the differential image
+            diff_image = batch2_avg - batch1_avg
+
+            # Emit the differential image
+            self.emit_diff_image(diff_image)
+
+            # Keep only the latest batch
+            self._frames = [self._frames[-1]]
+
+    def emit_diff_image(self, diff_image):
+        """ Emit the differential image. """
+        self._detectorsManager.sigImageUpdated.emit(
+            self._detectorsManager.getCurrentDetectorName(),
+            diff_image,
+            False,  # 'init' is False for differential images
+            True    # This is the current detector's image
+        )
+
+    def set_batch_size(self, batch_size):
+        """ Update the batch size and reset the frame buffer. """
+        self._batch_size = batch_size
+        self._frames = []  # Reset frame buffer
 
 
 class NoDetectorsError(RuntimeError):
