@@ -19,7 +19,7 @@ class ShutterManager:
             self.timeout = 1
 
         self.arduino = serial.Serial(port=self.comchannel, baudrate=self.Baudrate, timeout=self.timeout)
-        #self.arduino.flush()
+        self.arduino.flush()
 
     def send_command(self, command):
         self.arduino.write(f"{command}\n".encode())

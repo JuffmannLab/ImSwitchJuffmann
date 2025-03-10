@@ -1,53 +1,39 @@
-import tkinter as tk
-import serial
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Set up the serial connection to the Arduino
-arduino = serial.Serial('COM4', 9600, timeout=1)
-arduino.flush()
+def lissajous_figure (fx, fy, N):
+    
+    # constants for our setup:
+    
+    lbd = 465e-9
+    theta_deflected = 4.1
+    center_frequency = 100e6
+    max_frequency = 50e6
 
-# Function to send commands to the Arduino
-def send_command(command):
-    arduino.write(f"{command}\n".encode())  # Send command as a string
+    # objective constants:
+    
+    FOV = 0.44e-3
+    Magn = 60
+    focal_length = 3e-3
 
-# Function to open the shutter
-def open_shutter():
-    delay = delay_input.get()
-    if delay:  # If there is a delay value
-        send_command(f"ONETURN {delay}")
-    else:
-        send_command("OPEN")  # Send command without delay
+    FOV_Backside = FOV / Magn
+    Angular_Range = FOV_Backside / focal_length
 
-# Function to close the shutter
-def close_shutter():
-        send_command("CLOSE")  # Close the shutter
+    # angle modulation to cover full FOV:
+    
+    angular_modulation = (Angular_Range / theta_deflected) * 2 * max_frequency
 
-# Function to loop the shutter
-def loop_shutter():
-    delay = delay_input.get()
-    if delay:  # If there is a delay value
-        send_command(f"LOOP {delay}")  # Send LOOP with delay time
-    else:
-        send_command("LOOP")  # Send LOOP without delay
-        
-# Create the GUI window
-window = tk.Tk()
-window.title("Shutter Control")
+    t_max = N / np.gcd(int(fx), int(fy))
+    t = np.linspace(0, t_max, int(t_max*center_frequency))
 
-# Create the "Open" button
-open_button = tk.Button(window, text="OPEN", command=open_shutter, width=20)
-open_button.pack(pady=10)
+    X = center_frequency + angular_modulation/2 * np.sin(2*np.pi*fx*t)
+    Y = center_frequency + angular_modulation/2 * np.sin(2*np.pi*fy*t)
 
-# Create the "Close" button
-close_button = tk.Button(window, text="CLOSE", command=close_shutter, width=20)
-close_button.pack(pady=10)
+    plt.figure(figsize=(6,6))
 
-# Create the "Loop" button
-close_button = tk.Button(window, text="LOOP", command=loop_shutter, width=20)
-close_button.pack(pady=10)
+    plt.plot(X, Y)
+    plt.show()
 
-# Create the delay input field
-delay_input = tk.Entry(window, width=10)
-delay_input.pack(pady=10)
+lissajous_figure(83e3, 79e3, 1)
 
-# Run the GUI loop
-window.mainloop()
+
