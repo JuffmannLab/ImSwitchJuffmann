@@ -15,6 +15,7 @@ class ViewController(ImConWidgetController):
         self._widget.sigGridToggled.connect(self.gridToggle)
         self._widget.sigCrosshairToggled.connect(self.crosshairToggle)
         self._widget.sigLiveviewToggled.connect(self.liveview)
+        self._widget.sigDifferentialviewToggled.connect(self.differentialview)
 
     def liveview(self, enabled):
         """ Start liveview and activate detector acquisition. """
@@ -24,6 +25,14 @@ class ViewController(ImConWidgetController):
         elif not enabled and self._acqHandle is not None:
             self._master.detectorsManager.stopAcquisition(self._acqHandle, liveView=True)
             self._acqHandle = None
+
+    def differentialview(self, enabled):
+        """Start differential view, activate detector acquisition and calculate the differential image"""
+        if enabled and self._acqHandle is None:
+            self._acqHandle = self._master.detectorsManager.startAcquisition(differentialView=True)
+            self._widget.setViewToolsEnabled(True)
+        elif not enabled and self._acqHandle is not None:
+            self._master.detectorsManager.stopAcquisition(self._acqHandle, differentialView=True) 
 
     def gridToggle(self, enabled):
         """ Connect with grid toggle from Image Widget through communication channel. """
@@ -35,7 +44,7 @@ class ViewController(ImConWidgetController):
 
     def closeEvent(self):
         if self._acqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._acqHandle, liveView=True)
+            self._master.detectorsManager.stopAcquisition(self._acqHandle, liveView=True, differentialView=True)
 
     def get_image(self, detectorName):
         if detectorName is None:
@@ -47,6 +56,10 @@ class ViewController(ImConWidgetController):
     def setLiveViewActive(self, active: bool) -> None:
         """ Sets whether the LiveView is active and updating. """
         self._widget.setLiveViewActive(active)
+
+    @APIExport(runOnUIThread=True)
+    def setDifferentialViewActive(self, active: bool) -> None:
+        self._widget.setDifferentialViewActive(active)
 
     @APIExport(runOnUIThread=True)
     def setLiveViewGridVisible(self, visible: bool) -> None:

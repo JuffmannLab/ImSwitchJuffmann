@@ -6,11 +6,13 @@ from .basewidgets import Widget
 
 
 class ViewWidget(Widget):
-    """ View settings (liveview, grid, crosshair). """
+    """ View settings (liveview, grid, crosshair).
+        Adapted for a separate Differential View Button"""
 
     sigGridToggled = QtCore.Signal(bool)  # (enabled)
     sigCrosshairToggled = QtCore.Signal(bool)  # (enabled)
     sigLiveviewToggled = QtCore.Signal(bool)  # (enabled)
+    sigDifferentialviewToggled = QtCore.Signal(bool)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -35,17 +37,27 @@ class ViewWidget(Widget):
                                           QtWidgets.QSizePolicy.Expanding)
         self.liveviewButton.setEnabled(True)
 
+        # Differential View
+        self.differentialviewButton = guitools.BetterPushButton('Differential View')
+        self.differentialviewButton.setStyleSheet("font-size:20px")
+        self.differentialviewButton.setCheckable(True)
+        self.liveviewButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
+                                          QtWidgets.QSizePolicy.Expanding)
+        self.liveviewButton.setEnabled(True)
+
         # Add elements to GridLayout
         self.viewCtrlLayout = QtWidgets.QGridLayout()
         self.setLayout(self.viewCtrlLayout)
         self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 2)
         self.viewCtrlLayout.addWidget(self.gridButton, 1, 0)
         self.viewCtrlLayout.addWidget(self.crosshairButton, 1, 1)
+        self.viewCtrlLayout.addWidget(self.differentialviewButton, 2, 0, 1, 2)
 
         # Connect signals
         self.gridButton.toggled.connect(self.sigGridToggled)
         self.crosshairButton.toggled.connect(self.sigCrosshairToggled)
         self.liveviewButton.toggled.connect(self.sigLiveviewToggled)
+        self.differentialviewButton.toggled.connect(self.sigDifferentialviewToggled)
 
     def getLiveViewActive(self):
         return self.liveviewButton.isChecked()
@@ -57,6 +69,12 @@ class ViewWidget(Widget):
     def setLiveViewActive(self, active):
         """ Sets whether the LiveView is active. """
         self.liveviewButton.setChecked(active)
+
+    def getDifferentialViewActive(self):
+        return self.differentialviewButton.isChecked()
+    
+    def setDiffrentialViewActive(self, active):
+        self.differentialviewButton.setChecked(active)
 
     def setLiveViewGridVisible(self, visible):
         """ Sets whether the LiveView grid is visible. """
@@ -77,6 +95,10 @@ class ViewWidget(Widget):
     @shortcut('Ctrl+H', "Crosshair")
     def toggleCrosshairButton(self):
         self.crosshairButton.toggle()
+
+    @shortcut('Ctrl+D', "Differential View")
+    def toggleDifferentialviewButton(self):
+        self.differentialviewButton.toggle()
 
 
 # Copyright (C) 2020-2021 ImSwitch developers

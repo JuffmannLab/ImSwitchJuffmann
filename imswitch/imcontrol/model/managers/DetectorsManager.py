@@ -7,8 +7,11 @@ from .MultiManager import MultiManager
 
 
 class DetectorsManager(MultiManager, SignalInterface):
-    """ DetectorsManager is an interface for dealing with DetectorManagers. It
-    is a MultiManager for detectors. """
+    """ 
+    DetectorsManager is an interface for dealing with DetectorManagers. It
+    is a MultiManager for detectors. Implemented Differential view in order to get the Chunks for the Batches
+    directly from the camera which is faster than using the Live View image and save it in a deque data structure.
+    """
 
     # Creating Signals
     sigAcquisitionStarted = Signal()
@@ -53,8 +56,8 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._dvworker = DVWorker(self, batch_size, updatePeriod)
         self._dvthread = Thread()
         self._dvworker.moveToThread(self._dvthread)
-        self._thread.started.connect(self._dvworker.run)
-        self._thread.finished.connect(self._dvworker.stop)
+        self._dvthread.started.connect(self._dvworker.run)
+        self._dvthread.finished.connect(self._dvworker.stop)
 
     def __del__(self):
         self._thread.quit()
@@ -239,7 +242,7 @@ class DVWorker(Worker):
         # Collect batch_size frames
         batch_frames = []
         for _ in range(self._batch_size):
-            chunk = current_detector.getLastChunk()  # Returns (1, H, W)
+            chunk = current_detector.getChunk()  # Returns (1, H, W)
             if chunk is None or not isinstance(chunk, np.ndarray):
                 return  # Skip if no valid frame
             batch_frames.append(chunk.squeeze(0))
