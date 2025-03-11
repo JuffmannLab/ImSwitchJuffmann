@@ -2,15 +2,23 @@ from abc import abstractmethod
 
 import napari
 import numpy as np
+
+from matplotlib import pyplot as plt
+from matplotlib.cm import ScalarMappable
+
 from napari.utils.translations import trans
+from napari.utils.colormaps import Colormap, ensure_colormap
 from qtpy import QtCore, QtGui, QtWidgets
 from vispy.color import Color
 from vispy.scene.visuals import Compound, Line, Markers
 from vispy.visuals.transforms import STTransform
 
+
 from .imagetools import minmaxLevels
 
-
+import matplotlib.colors as mcolors
+from matplotlib.colors import ListedColormap, Normalize
+"""
 def addNapariGrayclipColormap():
     if hasattr(napari.utils.colormaps.AVAILABLE_COLORMAPS, 'grayclip'):
         return
@@ -22,6 +30,32 @@ def addNapariGrayclipColormap():
     napari.utils.colormaps.AVAILABLE_COLORMAPS['grayclip'] = napari.utils.Colormap(
         name='grayclip', colors=grayclip
     )
+"""
+
+def addNapariGrayclipColormap():
+    if 'grayclip' in napari.utils.colormaps.AVAILABLE_COLORMAPS:
+        return  
+
+    # Create grayscale colormap with last value red
+    colors = np.linspace(0, 1, 255)[:, None]  
+    colors = np.hstack([colors, colors, colors])  
+    colors = np.vstack([colors, [1, 0, 0]])  
+
+    grayclip_colormap = Colormap(colors, name='grayclip')
+    ensure_colormap(grayclip_colormap)
+
+def addMatplotlibGrayclipColormap():
+    if 'grayclip' in plt.colormaps():
+        return  
+
+    # Create grayscale colormap with last value red
+    colors = np.linspace(0, 1, 255)[:, None]  
+    colors = np.hstack([colors, colors, colors])  
+    colors = np.vstack([colors, [1, 0, 0]])  
+
+    grayclip_colormap = ListedColormap(colors, name='grayclip')
+    plt.register_cmap('grayclip', grayclip_colormap)
+
 
 
 class EmbeddedNapari(napari.Viewer):
@@ -138,6 +172,47 @@ class NapariUpdateLevelsWidget(NapariBaseWidget):
         for layer in self.viewer.layers.selected:
             layer.contrast_limits = minmaxLevels(layer.data)
 
+
+class NapariColorbarWidget(NapariBaseWidget):
+    """ Widget to display a colormap colorbar for the active image layer. """
+
+    @property
+    def name(self):
+        return "Colorbar"
+
+    def __init__(self, napariViewer):
+        super().__init__(napariViewer)
+
+        # Matplotlib figure for colorbar
+        self.fig, self.ax = plt.subplots(figsize=(1, 5))
+        self.canvas = self.fig.canvas
+
+        self.setLayout(QtWidgets.QVBoxLayout())
+        self.layout().addWidget(self.canvas)
+        self.update_colorbar()
+
+        self.viewer.layers.selection.events.changed.connect(self.update_colorbar)
+
+    def update_colorbar(self, event=None):
+        """ Update colorbar based on active image layer. """
+        self.ax.clear()
+
+        layer = self.viewer.layers.selection.active
+        if layer and isinstance(layer, napari.layers.Image):
+            cmap = layer.colormap
+
+            if isinstance(cmap, napari.utils.colormaps.Colormap):
+                colors = cmap.colors
+                mpl_cmap = mcolors.LinearSegmentedColormap.from_list("custom_colormap", colors, N=256)
+            else:
+                mpl_cmap = cmap
+
+            norm = Normalize(vmin=layer.contrast_limits[0], vmax=layer.contrast_limits[1])
+            sm = ScalarMappable(norm=norm, cmap=mpl_cmap)
+
+            self.fig.colorbar(sm, cax=self.ax, orientation='vertical')
+
+        self.canvas.draw()
 
 class NapariShiftWidget(NapariBaseWidget):
     """ Napari widget for shifting the currently selected layer by a
