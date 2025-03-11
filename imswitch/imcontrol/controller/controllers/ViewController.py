@@ -9,7 +9,7 @@ class ViewController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self._acqHandle = None
 
-        self._widget.setViewToolsEnabled(False)
+        self._widget.setViewToolsEnabled(False, 'LV')
 
         # Connect ViewWidget signals
         self._widget.sigGridToggled.connect(self.gridToggle)
@@ -21,18 +21,21 @@ class ViewController(ImConWidgetController):
         """ Start liveview and activate detector acquisition. """
         if enabled and self._acqHandle is None:
             self._acqHandle = self._master.detectorsManager.startAcquisition(liveView=True)
-            self._widget.setViewToolsEnabled(True)
+            self._widget.setViewToolsEnabled(True, 'LV')
         elif not enabled and self._acqHandle is not None:
             self._master.detectorsManager.stopAcquisition(self._acqHandle, liveView=True)
             self._acqHandle = None
+            self._widget.setViewToolsEnabled(False, 'LV')
 
     def differentialview(self, enabled):
         """Start differential view, activate detector acquisition and calculate the differential image"""
         if enabled and self._acqHandle is None:
             self._acqHandle = self._master.detectorsManager.startAcquisition(differentialView=True)
-            self._widget.setViewToolsEnabled(True)
+            self._widget.setViewToolsEnabled(True, 'DV')
         elif not enabled and self._acqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._acqHandle, differentialView=True) 
+            self._master.detectorsManager.stopAcquisition(self._acqHandle, differentialView=True)
+            self._acqHandle = None
+            self._widget.setViewToolsEnabled(False, 'DV') 
 
     def gridToggle(self, enabled):
         """ Connect with grid toggle from Image Widget through communication channel. """

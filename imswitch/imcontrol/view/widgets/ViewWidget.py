@@ -62,9 +62,17 @@ class ViewWidget(Widget):
     def getLiveViewActive(self):
         return self.liveviewButton.isChecked()
 
-    def setViewToolsEnabled(self, enabled):
+    def setViewToolsEnabled(self, enabled, mode):
         self.crosshairButton.setEnabled(enabled)
         self.gridButton.setEnabled(enabled)
+        if enabled == True and mode == 'LV':
+            self.differentialviewButton.setEnabled(False)
+        elif enabled == False and mode == 'LV':
+            self.differentialviewButton.setEnabled(True)
+        elif enabled == True and mode == 'DV':
+            self.liveviewButton.setEnabled(False)
+        elif enabled == False and mode == 'DV':
+            self.liveviewButton.setEnabled(True)
 
     def setLiveViewActive(self, active):
         """ Sets whether the LiveView is active. """
