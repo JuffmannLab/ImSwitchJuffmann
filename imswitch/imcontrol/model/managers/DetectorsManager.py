@@ -25,6 +25,8 @@ class DetectorsManager(MultiManager, SignalInterface):
         MultiManager.__init__(self, detectorInfos, 'detectors', **lowLevelManagers)
         SignalInterface.__init__(self)
 
+        self.batchSize = batch_size
+
         self._activeAcqHandles = []
         self._activeAcqLVHandles = []
         self._activeDVHandles = []
@@ -53,7 +55,7 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._thread.finished.connect(self._lvWorker.stop)
 
         # Create another thread for Differential View processing
-        self._dvworker = DVWorker(self, batch_size, updatePeriod)
+        self._dvworker = DVWorker(self, self.batchSize, updatePeriod)
         self._dvthread = Thread()
         self._dvworker.moveToThread(self._dvthread)
         self._dvthread.started.connect(self._dvworker.run)
@@ -66,6 +68,9 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._dvthread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
+
+    def adjustBatchSize(self, batch_size):
+        self._dvworker._batch_size = batch_size
 
     def getCurrentDetectorName(self):
         """ Returns the name of the current detector. """
@@ -214,6 +219,8 @@ class LVWorker(Worker):
         self._updatePeriod = updatePeriod
 
 class DVWorker(Worker):
+    sigSetBatchSize = Signal(int)
+
     def __init__(self, detectorsManager, batch_size, updatePeriod):
         super().__init__()
         self._detectorsManager = detectorsManager
@@ -237,20 +244,18 @@ class DVWorker(Worker):
         current_detector = self._detectorsManager.getCurrentDetector()
 
         if current_detector is None:
-            return  # No active detector
+            return 
 
         # Collect batch_size frames
         batch_frames = []
         for _ in range(self._batch_size):
-            chunk = current_detector.getChunk()  # Returns (1, H, W)
+            chunk = current_detector.getChunk()
             if chunk is None or not isinstance(chunk, np.ndarray):
-                return  # Skip if no valid frame
+                return
             batch_frames.append(chunk.squeeze(0))
 
         # Stack frames into (batch_size, H, W) and compute batch mean
         batch_avg = np.mean(np.stack(batch_frames), axis=0)
-
-        # Store batch average
         self._frames.append(batch_avg)
 
         # Ensure we have at least two batch averages for differential calculation
@@ -258,10 +263,7 @@ class DVWorker(Worker):
             batch1_avg = self._frames[-2]  # Older batch
             batch2_avg = self._frames[-1]  # Newer batch
 
-            # Compute the differential image
             diff_image = batch2_avg - batch1_avg
-
-            # Emit the differential image
             self.emit_diff_image(diff_image)
 
             # Keep only the latest batch
@@ -279,7 +281,7 @@ class DVWorker(Worker):
     def set_batch_size(self, batch_size):
         """ Update the batch size and reset the frame buffer. """
         self._batch_size = batch_size
-        self._frames = []  # Reset frame buffer
+        self._frames = []
 
 
 class NoDetectorsError(RuntimeError):

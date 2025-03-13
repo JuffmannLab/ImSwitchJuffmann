@@ -16,6 +16,7 @@ class ViewController(ImConWidgetController):
         self._widget.sigCrosshairToggled.connect(self.crosshairToggle)
         self._widget.sigLiveviewToggled.connect(self.liveview)
         self._widget.sigDifferentialviewToggled.connect(self.differentialview)
+        self._widget.sigSliderValueChanged.connect(self.sliderValue)
 
     def liveview(self, enabled):
         """ Start liveview and activate detector acquisition. """
@@ -35,7 +36,10 @@ class ViewController(ImConWidgetController):
         elif not enabled and self._acqHandle is not None:
             self._master.detectorsManager.stopAcquisition(self._acqHandle, differentialView=True)
             self._acqHandle = None
-            self._widget.setViewToolsEnabled(False, 'DV') 
+            self._widget.setViewToolsEnabled(False, 'DV')
+
+    def sliderValue(self, batch_size):
+        self._master.detectorsManager.adjustBatchSize(batch_size)
 
     def gridToggle(self, enabled):
         """ Connect with grid toggle from Image Widget through communication channel. """
