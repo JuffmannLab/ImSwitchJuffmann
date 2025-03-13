@@ -227,7 +227,7 @@ class DVWorker(Worker):
         self._batch_size = batch_size
         self._frames = []  # Stores averaged batches
         self._updatePeriod = updatePeriod
-        self._vtimer = None
+        self._timer = None
 
     def run(self):
         """ Continuously processes frames as they become available. """
@@ -236,8 +236,8 @@ class DVWorker(Worker):
         self._timer.start(self._updatePeriod)
 
     def stop(self):
-        if self._vtimer is not None:
-            self._vtimer.stop()
+        if self._timer is not None:
+            self._timer.stop()
 
     def process_frame(self):
         """ Collects a batch, averages it, and computes the differential image. """
