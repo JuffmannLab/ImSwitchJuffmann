@@ -45,6 +45,9 @@ class DetectorInfo(DeviceInfo):
     forFocusLock: bool = False
     """ Whether the detector is used for focus lock. """
 
+    forDifferential: bool = False
+    """ Wether the detector is used for differential view. """
+
 
 @dataclass(frozen=True)
 class LaserInfo(DeviceInfo):

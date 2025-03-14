@@ -16,6 +16,7 @@ class ImageController(LiveUpdatedController):
         self._lastShape = self._master.detectorsManager.execOnCurrent(lambda c: c.shape)
         self._shouldResetView = False
 
+        # create live view layer for detectors which have the Attribute forAcquisition
         self._widget.setLiveViewLayers(
             self._master.detectorsManager.getAllDeviceNames(lambda c: c.forAcquisition)
         )

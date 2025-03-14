@@ -34,7 +34,7 @@ class DetectorsManager(MultiManager, SignalInterface):
 
         self._currentDetectorName = None
         for detectorName, detectorInfo in detectorInfos.items():
-            if not self._subManagers[detectorName].forAcquisition:
+            if not self._subManagers[detectorName].forAcquisition and not self._subManagers[detectorName].forDifferential:
                 continue
             # Connect signals
             self._subManagers[detectorName].sigImageUpdated.connect(
@@ -70,6 +70,8 @@ class DetectorsManager(MultiManager, SignalInterface):
             super().__del__()
 
     def adjustBatchSize(self, batch_size):
+        """ Adjusting the batch size for the Differential View inside the dvworker class """
+
         self._dvworker._batch_size = batch_size
 
     def getCurrentDetectorName(self):
@@ -232,29 +234,30 @@ class DVWorker(Worker):
     def run(self):
         """ Continuously processes frames as they become available. """
         self._timer = Timer()
-        self._timer.timeout.connect(self.process_frame)
+        self._timer.timeout.connect(
+            lambda: self._detectorsManager.execOnAll(lambda c: self.process_frame(c),
+                                                     condition=lambda c: c.forDifferential)
+        )
         self._timer.start(self._updatePeriod)
 
     def stop(self):
         if self._timer is not None:
             self._timer.stop()
 
-    def process_frame(self):
-        """ Collects a batch, averages it, and computes the differential image. """
-        current_detector = self._detectorsManager.getCurrentDetector()
-
-        if current_detector is None:
-            return 
-
-        # Collect batch_size frames
+    def process_frame(self, detector):
+        """ Processes frames for the given detector and computes the differential image. """
         batch_frames = []
+        
         for _ in range(self._batch_size):
-            chunk = current_detector.getChunk()
+            chunk = detector.getChunk()
             if chunk is None or not isinstance(chunk, np.ndarray):
                 return
             batch_frames.append(chunk.squeeze(0))
 
-        # Stack frames into (batch_size, H, W) and compute batch mean
+        if len(batch_frames) == 0:
+            return
+
+        # Compute batch average
         batch_avg = np.mean(np.stack(batch_frames), axis=0)
         self._frames.append(batch_avg)
 
@@ -264,15 +267,16 @@ class DVWorker(Worker):
             batch2_avg = self._frames[-1]  # Newer batch
 
             diff_image = batch2_avg - batch1_avg
-            self.emit_diff_image(diff_image)
+            self.emit_diff_image(detector, diff_image)
 
             # Keep only the latest batch
             self._frames = [self._frames[-1]]
 
-    def emit_diff_image(self, diff_image):
+
+    def emit_diff_image(self, detector, diff_image):
         """ Emit the differential image. """
         self._detectorsManager.sigImageUpdated.emit(
-            self._detectorsManager.getCurrentDetectorName(),
+            detector.name,
             diff_image,
             False,  # 'init' is False for differential images
             True    # This is the current detector's image
