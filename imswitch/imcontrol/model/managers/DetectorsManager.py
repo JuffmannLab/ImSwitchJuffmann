@@ -27,6 +27,10 @@ class DetectorsManager(MultiManager, SignalInterface):
 
         self.batchSize = batch_size
 
+        self._activeDetectorAcqHandles = {}
+        self._activeDetectorAcqLVHandles = {}
+        self._activeDetectorDVHandles = {}
+
         self._activeAcqHandles = []
         self._activeAcqLVHandles = []
         self._activeDVHandles = []
@@ -194,6 +198,89 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._thread.quit()
         self._thread.wait()
         self._thread.start()
+
+    def startDetectorAcquisition(self, detector, liveView=False, differentialView=False):
+        """Starts acquisition for a specific detector."""
+        self._activeAcqsMutex.lock()
+        try:
+            handle = np.random.randint(2**31)
+
+            if detector not in self._activeDetectorAcqHandles:
+                self._activeDetectorAcqHandles[detector] = set()
+
+            self._activeDetectorAcqHandles[detector].add(handle)
+
+            if liveView:
+                if detector not in self._activeDetectorAcqLVHandles:
+                    self._activeDetectorAcqLVHandles[detector] = set()
+                self._activeDetectorAcqLVHandles[detector].add(handle)
+                enableLV = len(self._activeDetectorAcqLVHandles[detector]) == 1
+            else:
+                enableLV = False
+
+            if differentialView:
+                if detector not in self._activeDetectorDVHandles:
+                    self._activeDetectorDVHandles[detector] = set()
+                self._activeDetectorDVHandles[detector].add(handle)
+                enableDV = len(self._activeDetectorDVHandles[detector]) == 1
+            else:
+                enableDV = False
+
+            enableAcq = all(
+                len(handles) == 1 for handles in self._activeDetectorAcqHandles.values()
+            )
+
+        finally:
+            self._activeAcqsMutex.unlock()
+
+        # Start acquisition only for this detector
+        if enableAcq:
+            self.execOnAll(lambda c: c.startAcquisition(), condition=lambda c: c == detector)
+
+        if enableLV:
+            sleep(0.3)
+            self._thread.start()
+
+        if enableDV and not self._dvthread.isRunning():
+            self._dvthread.start()
+
+        return handle
+    
+    def stopDetectorAcquisition(self, detector, handle, liveView=False, differentialView=False):
+        """Stops acquisition for a specific detector."""
+        self._activeAcqsMutex.lock()
+        try:
+            if liveView and detector in self._activeDetectorAcqLVHandles and handle in self._activeDetectorAcqLVHandles[detector]:
+                self._activeDetectorAcqLVHandles[detector].remove(handle)
+                disableLV = len(self._activeDetectorAcqLVHandles[detector]) == 0
+            else:
+                disableLV = False
+
+            if differentialView and detector in self._activeDetectorDVHandles and handle in self._activeDetectorDVHandles[detector]:
+                self._activeDetectorDVHandles[detector].remove(handle)
+                disableDV = len(self._activeDetectorDVHandles[detector]) == 0
+            else:
+                disableDV = False
+
+            if detector in self._activeDetectorAcqHandles and handle in self._activeDetectorAcqHandles[detector]:
+                self._activeDetectorAcqHandles[detector].remove(handle)
+
+            disableAcq = all(len(handles) == 0 for handles in self._activeDetectorAcqHandles.values())
+
+        finally:
+            self._activeAcqsMutex.unlock()
+
+        if disableLV:
+            self._thread.quit()
+            self._thread.wait()
+
+        if disableDV:
+            self._dvthread.quit()
+            self._dvthread.wait()
+
+        if disableAcq:
+            self.execOnAll(lambda c: c.stopAcquisition(), condition=lambda c: c == detector)
+
 
 
 class LVWorker(Worker):
