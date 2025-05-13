@@ -26,18 +26,18 @@ class PhotonFocusManager(DetectorManager):
         self._running = False
         self._adjustingParameters = False
         
-        fullShape = (self.camera.getPropertyValue('ImageWidth'),
-                     self.camera.getPropertyValue('ImageHeight'))
+        fullShape = (self.camera.getPropertyValue('image_width'),
+                     self.camera.getPropertyValue('image_height'))
         
         # Prepare parameters
         parameters = {
             'ExposureTime': DetectorNumberParameter(group='Timings', value=0.005, valueUnits='s',
                                                 editable=True),
-            'FramePeriod': DetectorNumberParameter(group='Timings', value=self.camera.get_attribute('FramePeriod'), valueUnits='arb.u.',
+            'FramePeriod': DetectorNumberParameter(group='Timings', value=self.camera.getPropertyValue('FramePeriod'), valueUnits='arb.u.',
                                                 editable=True),
             'FineGain': DetectorNumberParameter(group='Misc', value=1, valueUnits='arb.u.', 
                                             editable=True),
-            'BlackLevelOffset': DetectorNumberParameter(group='Misc', value=self.camera.get_attribute('BlackLevelOffset'), valueUnits='arb.u.', 
+            'BlackLevelOffset': DetectorNumberParameter(group='Misc', value=self.camera.getPropertyValue('BlackLevelOffset'), valueUnits='arb.u.', 
                                             editable=True),
             }
         
