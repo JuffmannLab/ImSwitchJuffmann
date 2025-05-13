@@ -26,8 +26,8 @@ class PhotonFocusManager(DetectorManager):
         self._running = False
         self._adjustingParameters = False
         
-        fullShape = (self.camera.getPropertyValue('ImageWidth'),
-                     self.camera.getPropertyValue('ImageHeight'))
+        fullShape = (self.camera.getPropertyValue('image_width'),
+                     self.camera.getPropertyValue('image_height'))
         
         # Prepare parameters
         parameters = {
