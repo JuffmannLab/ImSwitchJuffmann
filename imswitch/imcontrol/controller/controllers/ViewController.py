@@ -22,22 +22,49 @@ class ViewController(ImConWidgetController):
     def liveview(self, enabled):
         """ Start liveview and activate detector acquisition. """
         if enabled and self._lvacqHandle is None:
-            self._lvacqHandle = self._master.detectorsManager.startAcquisition(liveView=True)
-            #self._widget.setViewToolsEnabled(True, 'LV')
+            self._lvacqHandle = self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
+                condition = lambda c: c.forAcquisition
+            )
+            print(f"LV ACQ HANDLE: {self._lvacqHandle}")
+            if self._dvacqHandle is not None:
+                self._master.detectorsManager.execOnAll(
+                    lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
+                    condition = lambda c: c.forDifferential
+                )
         elif not enabled and self._lvacqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._lvacqHandle, liveView=True)
+            self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
+                condition = lambda c: c.forAcquisition
+            )
             self._lvacqHandle = None
-            #self._widget.setViewToolsEnabled(False, 'LV')
 
     def differentialview(self, enabled):
         """Start differential view, activate detector acquisition and calculate the differential image"""
         if enabled and self._dvacqHandle is None:
-            self._dvacqHandle = self._master.detectorsManager.startAcquisition(differentialView=True)
-            #self._widget.setViewToolsEnabled(True, 'DV')
+            self._dvacqHandle = self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, differentialView=True),
+                condition = lambda c: c.forDifferential
+            )
+            if self._lvacqHandle is not None:
+                self._master.detectorsManager.execOnAll(
+                    lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
+                    condition = lambda c: c.forDifferential
+                )
+
         elif not enabled and self._dvacqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._dvacqHandle, differentialView=True)
+            self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
+                condition = lambda c: c.forDifferential
+            )
             self._dvacqHandle = None
-           # self._widget.setViewToolsEnabled(False, 'DV')
+            
+            self._lvacqHandle = self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
+                condition = lambda c: c.forDifferential
+            )
+            
+
 
     def sliderValue(self, batch_size):
         self._master.detectorsManager.adjustBatchSize(batch_size)
@@ -56,7 +83,7 @@ class ViewController(ImConWidgetController):
             self._master.detectorsManager.stopAcquisition(self._lvacqHandle, liveView=True)
             self._lvacqHandle = None
 
-        if self._dvAcqHandle is not None:
+        if self._dvacqHandle is not None:
             self._master.detectorsManager.stopAcquisition(self._dvacqHandle, differentialView=True)
             self._dvacqHandle = None
 

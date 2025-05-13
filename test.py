@@ -2,26 +2,25 @@ import napari
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Create the viewer
-viewer = napari.Viewer()
+def add_handler(detector, liveView=False):
 
-# Dummy image
-image = np.random.random((512, 512))
+    test_main_handler = {}
+    handler = np.random.randint(2**31)
 
-# Add image to Napari
-layer = viewer.add_image(image, colormap='magma', contrast_limits=[0, 1])
+    if detector not in test_main_handler:
+        test_main_handler[detector] = set()
 
-# Create a Matplotlib figure for the colorbar
-fig, ax = plt.subplots(figsize=(1, 5))
-im = ax.imshow(image, cmap='magma', vmin=np.min(image), vmax=np.max(image))
-cb = plt.colorbar(im, ax=ax)
-ax.axis('off')
+    test_main_handler[detector].add(handler)
 
-# Convert the colorbar figure to an image
-fig.canvas.draw()
-colorbar_image = np.array(fig.canvas.renderer.buffer_rgba())
+    return test_main_handler
 
-# Add as an image overlay in Napari
-viewer.add_image(colorbar_image, name="Colorbar", opacity=0.7, colormap='gray')
+my_dict = {'Cam1': 564784558
+           }
+print(my_dict)
+def reading_dict(dict):
+    handles = [value if isinstance(value, set) else {value} for value in dict.values()]
+    values = [next(iter(value_set)) for value_set in handles]
+    for value in values:
+        print(value)
 
-napari.run()
+reading_dict(my_dict)

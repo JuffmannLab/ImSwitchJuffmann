@@ -203,13 +203,15 @@ class DetectorsManager(MultiManager, SignalInterface):
         """Starts acquisition for a specific detector."""
         self._activeAcqsMutex.lock()
         try:
-            handle = np.random.randint(2**31)
-
-            if detector not in self._activeDetectorAcqHandles:
+            handle = np.random.randint(2**31) # Creates a unique handler
+            
+            # adds the detector as a key in a dictionary, with the unique handler
+            if detector not in self._activeDetectorAcqHandles:  
                 self._activeDetectorAcqHandles[detector] = set()
 
             self._activeDetectorAcqHandles[detector].add(handle)
-
+            
+            # creates another dictionary for the live view with the specific handler
             if liveView:
                 if detector not in self._activeDetectorAcqLVHandles:
                     self._activeDetectorAcqLVHandles[detector] = set()
@@ -242,28 +244,37 @@ class DetectorsManager(MultiManager, SignalInterface):
             self._thread.start()
 
         if enableDV and not self._dvthread.isRunning():
+            sleep(0.3)
             self._dvthread.start()
 
         return handle
     
-    def stopDetectorAcquisition(self, detector, handle, liveView=False, differentialView=False):
+    def stopDetectorAcquisition(self, detector, handles_dict, liveView=False, differentialView=False):
         """Stops acquisition for a specific detector."""
         self._activeAcqsMutex.lock()
+        # read the given dictionary and convert the values to set form for readout
+        handles_dict_sets = [value_set if isinstance(value_set, set) else {value_set} for value_set in handles_dict.values()]
+        handles = [next(iter(value_set)) for value_set in handles_dict_sets]
         try:
-            if liveView and detector in self._activeDetectorAcqLVHandles and handle in self._activeDetectorAcqLVHandles[detector]:
-                self._activeDetectorAcqLVHandles[detector].remove(handle)
-                disableLV = len(self._activeDetectorAcqLVHandles[detector]) == 0
-            else:
-                disableLV = False
+            disableLV = False 
+            disableDV = False  
+            
+            if liveView and detector in self._activeDetectorAcqLVHandles:
+                for handle in handles:
+                    if handle in self._activeDetectorAcqLVHandles[detector]:
+                        self._activeDetectorAcqLVHandles[detector].remove(handle)
+                        disableLV = len(self._activeDetectorAcqLVHandles[detector]) == 0
 
-            if differentialView and detector in self._activeDetectorDVHandles and handle in self._activeDetectorDVHandles[detector]:
-                self._activeDetectorDVHandles[detector].remove(handle)
-                disableDV = len(self._activeDetectorDVHandles[detector]) == 0
-            else:
-                disableDV = False
+            if differentialView and detector in self._activeDetectorDVHandles:
+                for handle in handles:
+                    if handle in self._activeDetectorDVHandles[detector]:
+                        self._activeDetectorDVHandles[detector].remove(handle)
+                        disableDV = len(self._activeDetectorDVHandles[detector]) == 0
 
-            if detector in self._activeDetectorAcqHandles and handle in self._activeDetectorAcqHandles[detector]:
-                self._activeDetectorAcqHandles[detector].remove(handle)
+            if detector in self._activeDetectorAcqHandles: 
+                for handle in handles:
+                    if handle in self._activeDetectorAcqHandles[detector]:
+                        self._activeDetectorAcqHandles[detector].remove(handle)
 
             disableAcq = all(len(handles) == 0 for handles in self._activeDetectorAcqHandles.values())
 
