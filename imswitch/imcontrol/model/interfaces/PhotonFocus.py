@@ -13,8 +13,6 @@ if(platform.system() == 'Windows'):
         os.add_dll_directory('C:\BitFlow SDK 6.5\Bin64')
         os.add_dll_directory('C:\Program Files\CameraLink\Serial')
 
-
-import pylablib
 from pylablib.devices import PhotonFocus
 
 from logging import raiseExceptions
@@ -35,7 +33,7 @@ class PhotonFocusBitflowCamera:
 
     def _init_cam(self, index=0, camfile=None, port=0):
 
-        self.camera = PhotonFocus.PhotonFocusBitFlowCamera(index, camfile, port)
+        self.camera = PhotonFocus.PhotonFocusBitFlowCamera(index, camfile, port) # to do: provide the path to the camfile in order to change the ROI
         self.model = self.getPropertyValue('CameraName')
         self.open()
         self.setPropertyValue('EposureTime', self.exposure_time)
@@ -48,24 +46,28 @@ class PhotonFocusBitflowCamera:
         
     def setROI(self, hstart, hend, vstart, vend):
         # Defining the ROI settings. Only multiples of 128 are allowed,
-        # therefore it is rounding to the next instance of 128. 
-        # I don't know how this interacts with the camfile actually
-        # maybe needs to be changed
+        # therefore it is rounding to the next instance of 128.
+        # if the starting value + the roi size exceeds the frame size (1024)
+        # the starting values will be changed accordingly 
 
-        def clamp_and_snap(value, min_val, max_val, step, snap=True):
+        def clamp_and_snap(value, min_val, max_val, step):
             value = max(min_val, min(max_val, value))
-            return round(value / step) * step if snap else value
+            return round(value / step) * step
 
-        hstart = clamp_and_snap(hstart, 0, 1024 - 128, 128, snap=False)
-        vstart = clamp_and_snap(vstart, 0, 1024 - 128, 128, snap=False)
-        hend = clamp_and_snap(hend, 128, 1024, 128)
-        vend = clamp_and_snap(vend, 128, 1024, 128)
+        roi_width = clamp_and_snap(hend, 128, 1024, 128)
+        roi_height = clamp_and_snap(vend, 128, 1024, 128)
 
-        self.camera.set_roi(hstart, hend, vstart, vend)
+        hstart = min(hstart, 1024 - roi_width)
+        vstart = min(vstart, 1024 - roi_height)
+
+        hstart = (hstart // 128) * 128
+        vstart = (vstart // 128) * 128
+
+        hend = hstart + roi_width
+        vend = vstart + roi_height
 
         return hstart, vstart, hend, vend
             
-        
     def getLast(self):
         try:
             return self.camera.snap()
@@ -87,12 +89,14 @@ class PhotonFocusBitflowCamera:
             self.camera.pausing_acquisition()
             
     def getLastChunk(self):
+        frames = []
         try:
             self.camera.wait_for_frame()
             pf_newframe = self.camera.read_newest_image()
 
-            if isinstance(pf_newframe, np.ndarray):  
-                return np.expand_dims(pf_newframe, axis=0)  
+            if isinstance(pf_newframe, np.ndarray):   
+                frames.append(pf_newframe)
+                return frames
 
         except Exception as e:
             self.__logger.error(e)

@@ -54,7 +54,6 @@ class Storer(abc.ABC):
 
 
 
-
 class ZarrStorer(Storer):
     """ A storer that stores the images in a zarr file store """
     
@@ -420,7 +419,8 @@ class RecordingWorker(Worker):
                     for detectorName in self.detectorNames:
                         if currentFrame[detectorName] >= recFrames:
                             continue  # Reached requested number of frames with this detector, skip
-
+                        
+                        # Here the actual recording happens
                         newFrames = self._getNewFrames(detectorName)
                         n = len(newFrames)
 
@@ -660,6 +660,11 @@ class RecordingWorker(Worker):
         return files, fileDests, filePaths
 
     def _getNewFrames(self, detectorName):
+        """
+        This function connects with the respective detector manager and calls its getChunk function.
+        In principle it should return a list or another structure that contains arrays.
+        It returns the video as an np array. 
+        """
         newFrames = self.__recordingManager.detectorsManager[detectorName].getChunk()
         newFrames = np.array(newFrames)
         return newFrames
