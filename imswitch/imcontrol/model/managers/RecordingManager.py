@@ -436,10 +436,11 @@ class RecordingWorker(Worker):
                                         filePath = self.__recordingManager.getSaveFilePath(
                                             f'{self.savename}_{detectorName}.{fileExtension}', False, False)
                                         continue
-                            if self.saveFormat == SaveFormat.NPY:
+                            elif self.saveFormat == SaveFormat.NPY:
                                 try:
                                     filePath = filenames[detectorName]
                                     np.save(filePath, newFrames)
+                                    currentFrame[detectorName] += 1
                                 except ValueError:
                                     self.__logger.error("NPY File exceeds available Storage.")
                                     if self.saveFormat == SaveFormat.NPY:
