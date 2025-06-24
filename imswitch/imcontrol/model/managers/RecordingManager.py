@@ -347,7 +347,7 @@ class RecordingWorker(Worker):
         currentFrame = {}
         datasets = {}
         filenames = {}
-        NPYframes = []
+        # NPYframes = []
         for detectorName in self.detectorNames:
             currentFrame[detectorName] = 0
 
@@ -422,15 +422,15 @@ class RecordingWorker(Worker):
                             continue  # Reached requested number of frames with this detector, skip
                         
                         # Here the actual recording happens
-                        # newFrames = self._getNewFrames(detectorName)
-                        # n = len(newFrames)
+                        newFrames = self._getNewFrames(detectorName)
+                        n = len(newFrames)
                     
-                        newNPYframes = self._getNewFramesNPY(detectorName)
+                        # newNPYframes = self._getNewFramesNPY(detectorName)
 
-                        if isinstance(newNPYframes, np.ndarray):   
-                            NPYframes.append(newNPYframes)
-                            n = len(NPYframes)
-                            currentFrame[detectorName] += 1
+                        # if isinstance(newNPYframes, np.ndarray):   
+                        #    NPYframes.append(newNPYframes)
+                        #    n = len(NPYframes)
+                        #    currentFrame[detectorName] += 1
                         
                         if n > 0:
                             it = currentFrame[detectorName]
@@ -678,7 +678,6 @@ class RecordingWorker(Worker):
         """
         newFrames = self.__recordingManager.detectorsManager[detectorName].getChunk()
         newFrames = np.array(newFrames)
-        print(np.shape(newFrames))
         return newFrames
 
     def _getNewFramesNPY(self, detectorName):

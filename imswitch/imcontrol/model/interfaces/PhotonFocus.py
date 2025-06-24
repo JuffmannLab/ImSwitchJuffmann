@@ -88,6 +88,7 @@ class PhotonFocusBitflowCamera:
         if self.camera.acquisition_in_progress() == True:
             self.camera.pausing_acquisition()
             
+    """        
     def getLastChunk(self):
         print("It called the recording function!")
         print(self.camera.acquisition_in_progress())
@@ -100,7 +101,19 @@ class PhotonFocusBitflowCamera:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')
             pass
-        
+    """
+
+    def getLastChunk(self):
+
+        try: 
+            vid = self.camera.grab(nframes=100)
+            return vid
+        except Exception as e:
+            self.__logger.error(e)
+            self.__logger.warning(f'Something went wrong in acquiring a video')
+            pass
+
+
     def getPropertyValue(self, attribute_name):
         if attribute_name == 'All':
             attribute_value = self.camera.get_all_attribute_values()
