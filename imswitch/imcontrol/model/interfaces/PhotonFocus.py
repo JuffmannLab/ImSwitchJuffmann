@@ -77,26 +77,24 @@ class PhotonFocusBitflowCamera:
     def start_live(self):
         nframes = self.nframes
         mode = self.mode
-        if self.camera.acquisition_in_progress == False:
+        if self.camera.acquisition_in_progress() == False:
             self.camera.start_acquisition(nframes=nframes, mode=mode)
             
     def stop_live(self):
-        if self.camera.acquisition_in_progress == True:
+        if self.camera.acquisition_in_progress() == True:
             self.camera.stop_acquisition()
             
     def suspend_live(self):
-        if self.camera.acquisition_in_progress == True:
+        if self.camera.acquisition_in_progress() == True:
             self.camera.pausing_acquisition()
             
     def getLastChunk(self):
-        frames = []
+        print("It called the recording function!")
+        print(self.camera.acquisition_in_progress())
         try:
             self.camera.wait_for_frame()
             pf_newframe = self.camera.read_newest_image()
-
-            if isinstance(pf_newframe, np.ndarray):   
-                frames.append(pf_newframe)
-                return frames
+            return pf_newframe
 
         except Exception as e:
             self.__logger.error(e)

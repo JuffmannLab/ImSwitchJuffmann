@@ -347,6 +347,7 @@ class RecordingWorker(Worker):
         currentFrame = {}
         datasets = {}
         filenames = {}
+        NPYframes = []
         for detectorName in self.detectorNames:
             currentFrame[detectorName] = 0
 
@@ -421,9 +422,16 @@ class RecordingWorker(Worker):
                             continue  # Reached requested number of frames with this detector, skip
                         
                         # Here the actual recording happens
-                        newFrames = self._getNewFrames(detectorName)
-                        n = len(newFrames)
+                        # newFrames = self._getNewFrames(detectorName)
+                        # n = len(newFrames)
+                    
+                        newNPYframes = self._getNewFramesNPY(detectorName)
 
+                        if isinstance(newNPYframes, np.ndarray):   
+                            NPYframes.append(newNPYframes)
+                            n = len(NPYframes)
+                            currentFrame[detectorName] += 1
+                        
                         if n > 0:
                             it = currentFrame[detectorName]
                             if self.saveFormat == SaveFormat.TIFF:
@@ -436,11 +444,13 @@ class RecordingWorker(Worker):
                                         filePath = self.__recordingManager.getSaveFilePath(
                                             f'{self.savename}_{detectorName}.{fileExtension}', False, False)
                                         continue
-                            elif self.saveFormat == SaveFormat.NPY:
+                            elif self.saveFormat == SaveFormat.NPY and n == recFrames:
+                                print("Jumped into NPY")
                                 try:
                                     filePath = filenames[detectorName]
-                                    np.save(filePath, newFrames)
-                                    currentFrame[detectorName] += 1
+                                    np.save(filePath, NPYframes)
+                                    print(f"current frame: {currentFrame}")
+
                                 except ValueError:
                                     self.__logger.error("NPY File exceeds available Storage.")
                                     if self.saveFormat == SaveFormat.NPY:
@@ -668,8 +678,12 @@ class RecordingWorker(Worker):
         """
         newFrames = self.__recordingManager.detectorsManager[detectorName].getChunk()
         newFrames = np.array(newFrames)
+        print(np.shape(newFrames))
         return newFrames
 
+    def _getNewFramesNPY(self, detectorName):
+        newFrames = self.__recordingManager.detectorsManager[detectorName].getChunk()
+        return newFrames
 
 class RecMode(enum.Enum):
     SpecFrames = 1
