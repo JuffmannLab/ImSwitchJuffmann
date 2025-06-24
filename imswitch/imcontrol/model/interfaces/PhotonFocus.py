@@ -73,7 +73,10 @@ class PhotonFocusBitflowCamera:
             return self.camera.snap()
         except:
             pass
-    
+
+    def flushBuffer(self):
+        self.camera.BufferManager(self.camera).reset()
+
     def start_live(self):
         nframes = self.nframes
         mode = self.mode
@@ -88,7 +91,9 @@ class PhotonFocusBitflowCamera:
         if self.camera.acquisition_in_progress() == True:
             self.camera.pausing_acquisition()
             
-    """        
+    """
+    # old way of doing it. would require to rewrite the recording manager. 
+
     def getLastChunk(self):
         print("It called the recording function!")
         print(self.camera.acquisition_in_progress())
@@ -106,8 +111,9 @@ class PhotonFocusBitflowCamera:
     def getLastChunk(self):
 
         try: 
-            vid = self.camera.grab(nframes=100)
+            vid = self.camera.grab(nframes=100, frame_timeout=self.exposure_time) # unfortunately 100 frames is the maximum buffer size
             return vid
+        
         except Exception as e:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')

@@ -49,7 +49,7 @@ class PhotonFocusManager(DetectorManager):
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1],
                          model=model, parameters=parameters, actions=actions, croppable=False) 
 
-    def getLatestFrame(self):
+    def getLatestFrame(self, is_save = True):
         return self.camera.getLast()
     
     def setParameter(self, name, value):
@@ -59,7 +59,13 @@ class PhotonFocusManager(DetectorManager):
         if name not in self._DetectorManager__parameters:
             raise AttributeError(f'Non-existent parameter "{name}" specified')
 
-        value = self.camera.setPropertyValue(name, value)
+        try:
+            self.camera.setPropertyValue(name, value)
+            print(f"Changed {name} to {value}")
+        except Exception as e:
+            self.__logger.debug(e)
+            self.__logger.warning(f'Failed to change value of {name}')
+            
         return value
     
     def getParameter(self, name):
@@ -80,7 +86,7 @@ class PhotonFocusManager(DetectorManager):
             return None
         
     def flushBuffers(self):
-        pass
+        self.camera.flushBuffer()
     
     def startAcquisition(self):
         if not self._running:
