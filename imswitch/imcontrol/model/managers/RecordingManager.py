@@ -223,7 +223,8 @@ class RecordingManager(SignalInterface):
             self.__logger.info('Stopping recording')
         self.__record = False
         self.__thread.quit()
-        if emitSignal:
+        if emitSignal or (hasattr(self.__recordingWorker, 'recMode') and 
+                          self.__recordingWorker.recMode == RecMode.SpecFrames):
             self.sigRecordingEnded.emit()
         if wait:
             self.__thread.wait()
