@@ -1,7 +1,7 @@
 import numpy as np
 
 from imswitch.imcommon.model import initLogger
-from .DetectorManager import DetectorManager, DetectorAction, DetectorNumberParameter
+from .DetectorManager import DetectorManager, DetectorAction, DetectorNumberParameter, DetectorListParameter
 
 """
 Manager for PhotonFocus camera connected via CameraLink to a Bitflow Frame Grabber
@@ -39,6 +39,18 @@ class PhotonFocusManager(DetectorManager):
                                             editable=True),
             'BlackLevelOffset': DetectorNumberParameter(group='Misc', value=self.camera.getPropertyValue('BlackLevelOffset'), valueUnits='arb.u.', 
                                             editable=True),
+            'NumberOfFrames': DetectorNumberParameter(group='Misc', value=100, valueUnits='arb.u.',
+                                            editable=True),
+            'CFR': DetectorListParameter(group='Advanced',                            
+                                         value= True,
+                                         options=[ True,
+                                                   False],
+                                         editable=True),
+            'StatusLine': DetectorListParameter(group='Advanced',                            
+                                         value= False,
+                                         options=[ True,
+                                                  False],
+                                         editable=True)
             }
         
         actions = {

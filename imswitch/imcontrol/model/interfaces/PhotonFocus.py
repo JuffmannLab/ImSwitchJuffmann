@@ -76,6 +76,8 @@ class PhotonFocusBitflowCamera:
 
     def flushBuffer(self):
         self.camera.BufferManager(self.camera).reset()
+        self.camera.clear_acquisition()
+        
 
     def start_live(self):
         nframes = self.nframes
@@ -111,7 +113,7 @@ class PhotonFocusBitflowCamera:
     def getLastChunk(self):
 
         try: 
-            vid = self.camera.grab(nframes=100, frame_timeout=self.exposure_time) # unfortunately 100 frames is the maximum buffer size
+            vid = self.camera.grab(nframes=self.nframes, frame_timeout=4) # unfortunately 100 frames is the maximum buffer size
             return vid
         
         except Exception as e:
@@ -153,6 +155,13 @@ class PhotonFocusBitflowCamera:
             self.camera.set_attribute_value('FineGain', attribute_value)
         elif attribute_name == 'BlackLevelOffset':
             self.camera.set_attribute_value('Voltages/BlackLevelOffset', attribute_value)
+        elif attribute_name == 'CFR':
+            self.camera.enable_CFR(attribute_value)
+        elif attribute_name == 'StatusLine':
+            self.camera.enable_status_line(attribute_value)
+        elif attribute_name == 'NumberOfFrames':
+            self.nframes = attribute_value
+
             
     def openPropertiesGUI(self):
         pass
