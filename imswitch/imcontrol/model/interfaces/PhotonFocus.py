@@ -43,6 +43,29 @@ class PhotonFocusBitflowCamera:
     
     def close(self):
         self.camera.close()
+
+    def setROI_shift(self, hstart, vstart):
+        
+        max_roi = self.getPropertyValue('MaxROI')
+        h_max = max_roi[0].max
+        v_max = max_roi[1].max
+        h_current = self.getPropertyValue('image_width')
+        v_current = self.getPropertyValue('image_height')
+        h_limit = h_max - h_current
+        v_limit = v_max - v_current
+
+        if hstart <= h_limit and vstart <= v_limit:
+
+            self.camera.fast_shift_roi(hstart, vstart)
+        else:
+            self.__logger.warning(
+                f'ROI shift exceeds maximum boundaries. '
+                f'Maximum horizontal start: {h_limit}. '
+                f'Maximum vertical start: {v_limit}. '
+                f'Requested: {hstart},{vstart}')
+        
+        return hstart, vstart
+
         
     def setROI(self, hstart, hend, vstart, vend):
         # Defining the ROI settings. Only multiples of 128 are allowed,
@@ -122,6 +145,10 @@ class PhotonFocusBitflowCamera:
             attribute_value = self.camera.get_attribute_value('Window/W')
         elif attribute_name == 'CameraName':
             attribute_value = self.camera.get_attribute_value('CameraName')
+        elif attribute_name == 'Hstart':
+            attribute_value = self.camera.get_all_attribute_values('Window/X')
+        elif attribute_name == 'Vstart':
+            attribute_value = self.camera.get_all_attribute_values('Window/Y')
             
         return attribute_value
             
@@ -134,6 +161,10 @@ class PhotonFocusBitflowCamera:
             self.camera.set_attribute_value('FineGain', attribute_value)
         elif attribute_name == 'BlackLevelOffset':
             self.camera.set_attribute_value('Voltages/BlackLevelOffset', attribute_value)
+        elif attribute_name == 'Hstart':
+            self.camera.set_attribute_value('Window/X', attribute_value)
+        elif attribute_name == 'Vstart':
+            self.camera.set_attribute_value('Window/Y', attribute_value)
             
     def openPropertiesGUI(self):
         pass

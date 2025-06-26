@@ -41,14 +41,18 @@ class PhotonFocusManager(DetectorManager):
                                             editable=True),
             'NumberOfFrames': DetectorNumberParameter(group='Misc', value=100, valueUnits='arb.u.',
                                             editable=True),
+            'Hstart': DetectorNumberParameter(group = 'Frame', value=self.camera.getPropertyValue('Hstart'), valueUnits='px',
+                                              editable = True),
+            'Vstart': DetectorNumberParameter(group = 'Frame', value=self.camera.getPropertyValue('Vstart'), valueUnits='px',
+                                              editable = True),
             'CFR': DetectorListParameter(group='Advanced',                            
                                          value= True,
-                                         options=[ True,
-                                                   False],
+                                         options=[True,
+                                                  False],
                                          editable=True),
             'StatusLine': DetectorListParameter(group='Advanced',                            
                                          value= False,
-                                         options=[ True,
+                                         options=[True,
                                                   False],
                                          editable=True)
             }
@@ -59,7 +63,7 @@ class PhotonFocusManager(DetectorManager):
         } 
         
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1],
-                         model=model, parameters=parameters, actions=actions, croppable=True) 
+                         model=model, parameters=parameters, actions=actions, croppable=False) 
 
     def getLatestFrame(self, is_save = True):
         return self.camera.getLast()
