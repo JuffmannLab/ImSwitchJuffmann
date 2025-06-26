@@ -66,6 +66,8 @@ class PhotonFocusBitflowCamera:
         hend = hstart + roi_width
         vend = vstart + roi_height
 
+        self.camera.set_roi(hstart, hend, vstart, vend)
+
         return hstart, vstart, hend, vend
             
     def getLast(self):
@@ -73,12 +75,7 @@ class PhotonFocusBitflowCamera:
             return self.camera.snap()
         except:
             pass
-
-    def flushBuffer(self):
-        self.camera.BufferManager(self.camera).reset()
-        self.camera.clear_acquisition()
-        
-
+    
     def start_live(self):
         nframes = self.nframes
         mode = self.mode
@@ -93,12 +90,7 @@ class PhotonFocusBitflowCamera:
         if self.camera.acquisition_in_progress() == True:
             self.camera.pausing_acquisition()
             
-    """
-    # old way of doing it. would require to rewrite the recording manager. 
-
     def getLastChunk(self):
-        print("It called the recording function!")
-        print(self.camera.acquisition_in_progress())
         try:
             self.camera.wait_for_frame()
             pf_newframe = self.camera.read_newest_image()
@@ -108,20 +100,7 @@ class PhotonFocusBitflowCamera:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')
             pass
-    """
-
-    def getLastChunk(self):
-
-        try: 
-            vid = self.camera.grab(nframes=self.nframes, frame_timeout=4) # unfortunately 100 frames is the maximum buffer size
-            return vid
         
-        except Exception as e:
-            self.__logger.error(e)
-            self.__logger.warning(f'Something went wrong in acquiring a video')
-            pass
-
-
     def getPropertyValue(self, attribute_name):
         if attribute_name == 'All':
             attribute_value = self.camera.get_all_attribute_values()
@@ -155,13 +134,6 @@ class PhotonFocusBitflowCamera:
             self.camera.set_attribute_value('FineGain', attribute_value)
         elif attribute_name == 'BlackLevelOffset':
             self.camera.set_attribute_value('Voltages/BlackLevelOffset', attribute_value)
-        elif attribute_name == 'CFR':
-            self.camera.enable_CFR(attribute_value)
-        elif attribute_name == 'StatusLine':
-            self.camera.enable_status_line(attribute_value)
-        elif attribute_name == 'NumberOfFrames':
-            self.nframes = attribute_value
-
             
     def openPropertiesGUI(self):
         pass

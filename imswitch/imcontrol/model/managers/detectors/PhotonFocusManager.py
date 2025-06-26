@@ -59,7 +59,7 @@ class PhotonFocusManager(DetectorManager):
         } 
         
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1],
-                         model=model, parameters=parameters, actions=actions, croppable=False) 
+                         model=model, parameters=parameters, actions=actions, croppable=True) 
 
     def getLatestFrame(self, is_save = True):
         return self.camera.getLast()
@@ -122,7 +122,32 @@ class PhotonFocusManager(DetectorManager):
         return [1, 1, 1]
 
     def crop(self, hpos, vpos, hsize, vsize):
-        pass 
+        """Crop the camera frame to the specified ROI"""
+        # Stop acquisition if running
+        was_running = self._running
+        if was_running:
+            self.stopAcquisitionForROIChange()
+        
+        try:
+            # Set the new ROI
+            actual_hpos, actual_vpos, actual_hsize, actual_vsize = self.camera.setROI(hpos, hsize, vpos, vsize)
+            
+            # Update frame parameters
+            self._frameStart = (actual_hpos, actual_vpos)
+            self._shape = (actual_hsize, actual_vsize)
+            
+            # Log the change
+            self.__logger.debug(f'ROI set to: X={actual_hpos}, Y={actual_vpos}, '
+                            f'Width={actual_hsize}, Height={actual_vsize}')
+            
+            return True
+        except Exception as e:
+            self.__logger.error(f'Error setting ROI: {str(e)}')
+            return False
+        finally:
+            # Restart acquisition if it was running
+            if was_running:
+                self.startAcquisition()
     
     def _performSafeCameraAction(self, function):
         """ This method is used to change those camera properties that need
