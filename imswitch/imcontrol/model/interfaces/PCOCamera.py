@@ -16,7 +16,7 @@ Interface for PCO camera using Pylablib
 """
 
 class PCOCamera:
-    def __init__(self, idx = 0, cam_interface = None, reboot_on_fail = True, exposure_time = 1, binning = 1):
+    def __init__(self, idx = 0, cam_interface = None, reboot_on_fail = True, exposure_time = 1, binning = 1, nframes = 100):
         super().__init__()
         self.__logger = initLogger(self, tryInheritParent=True)
 
@@ -27,13 +27,14 @@ class PCOCamera:
         self.cam_interface = cam_interface
         self.reboot_on_fail = reboot_on_fail
         self.exposure_time = exposure_time
+        self.nframes = nframes
         
         # Binning is done in h and v direction. Even though we synchronize it for simplicity
         self.hbin = binning
         self.vbin = binning
         
         # define the buffer here:
-        # is it necessary as we have a frame grabber?
+        
 
         # initialise camera
         self._init_cam(idx=self.camera_idx, cam_interface=self.cam_interface, reboot_on_fail=self.reboot_on_fail, binning=binning)
@@ -81,16 +82,15 @@ class PCOCamera:
             pass
 
     def getLastChunk(self):
-        try:
-            self.camera.wait_for_frame()
-            pco_newframe = self.camera.read_newest_image()
 
-            if isinstance(pco_newframe, np.ndarray):  
-                return np.expand_dims(pco_newframe, axis=0)  
-
+        try: 
+            vid = self.camera.grab(nframes=self.nframes, frame_timeout=4) # unfortunately 100 frames is the maximum buffer size
+            return vid
+        
         except Exception as e:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')
+            pass
 
     def setExposure(self, exposuretime):
         self.exposure_time = exposuretime
@@ -278,6 +278,8 @@ class PCOCamera:
             self.adjust_exposure = bool(property_value)
             self.camera.set_frame_period(frame_time=float(self.camera.get_frame_period()), adjust_exposure=self.adjust_exposure)
         elif property_name == 'Set Frame Period':
-            self.camera.set_frame_period(frame_time=property_value, adjust_exposure=bool(property_value))   
-            
-
+            self.camera.set_frame_period(frame_time=property_value, adjust_exposure=bool(property_value))
+        elif property_name == 'Buffer Frames':
+            self.camera.setup_acquisition(property_value)
+        elif property_name == 'Status Line':
+            self.camera.set_status_line_mode(binary = True, text = property_value)

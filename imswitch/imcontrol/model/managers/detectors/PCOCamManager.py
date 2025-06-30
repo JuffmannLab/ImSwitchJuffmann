@@ -26,13 +26,13 @@ class PCOCamManager(DetectorManager):
         
     # Parameters    
         parameters = {
-            'Set Exposure Time': DetectorNumberParameter(group='Timings', value=1, valueUnits='ms',
+            'Set Exposure Time': DetectorNumberParameter(group='Acquisition', value=1, valueUnits='ms',
                                                     editable=True),                                         
             'Adjust Exposure Time for Frame Period': DetectorListParameter(group='Settings', value=True, 
                                                                            options=[True,
                                                                                     False],
                                                                             editable=True),
-            'Set Frame Period': DetectorNumberParameter(group='Timings', value=self._camera.getPropertyValue('frameperiod'), valueUnits='arb.u.',
+            'Set Frame Period': DetectorNumberParameter(group='Acquisition', value=self._camera.getPropertyValue('frameperiod'), valueUnits='arb.u.',
                                                         editable=True),
             'Set Hotpixel Correction': DetectorListParameter(group='Settings', value='On', 
                                                              options= ['Off',
@@ -46,7 +46,9 @@ class PCOCamManager(DetectorManager):
             'Set Double Imaging Mode': DetectorListParameter(group='Settings', value='Off', 
                                                              options=['Off',
                                                                       'On'],
-                                                            editable=True)
+                                                            editable=True),
+            'Buffer Frames': DetectorNumberParameter(group='Acquisition', value = self._camera.nframes,
+                                                     editable=True)
             }
         
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1,2,3,4],
@@ -85,6 +87,7 @@ class PCOCamManager(DetectorManager):
         try:
             return self._camera.getLastChunk()
         except:
+            
             return None
     
     def startAcquisition(self):
