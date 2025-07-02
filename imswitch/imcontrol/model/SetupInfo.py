@@ -259,6 +259,8 @@ class SetupInfo:
     their properties.
     """
 
+    shutter: Optional[dict] = field(default_factory=dict)
+
     slm: Optional[SLMInfo] = field(default_factory=lambda: None)
     """ SLM settings. Required to be defined to use SLM functionality. """
 
