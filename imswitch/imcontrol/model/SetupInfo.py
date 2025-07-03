@@ -234,6 +234,11 @@ class PyroServerInfo:
     port: Optional[int] = 54333
     active: Optional[bool] = False
 
+@dataclass(frozen=True)
+class ShutterInfo:
+    delay: int
+
+    managerName: str
 
 @dataclass_json(undefined=Undefined.INCLUDE)
 @dataclass
@@ -259,7 +264,7 @@ class SetupInfo:
     their properties.
     """
 
-    shutter: Optional[dict] = field(default_factory=dict)
+    shutter: Optional[ShutterInfo] = field(default_factory=lambda : None)
 
     slm: Optional[SLMInfo] = field(default_factory=lambda: None)
     """ SLM settings. Required to be defined to use SLM functionality. """

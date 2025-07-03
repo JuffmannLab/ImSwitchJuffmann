@@ -9,12 +9,16 @@ class ShutterManager(SignalInterface):
         if shutterInfo is None:
             return
         self.__shutterInfo = shutterInfo
-        self._delay = self.__shutterInfo.defaultDelay
+        self.__delay = self.__shutterInfo.delay
 
-    def getDelay(self):
-        return self._delay
+    @property
+    def delay(self)->int:
+        return self.__delay
 
     def setDelay(self, delay):
         self._delay = delay
         self.__logger.info("Delay set to: %d" % delay)
         return
+
+    def showDelay(self):
+        return self._delay
