@@ -49,39 +49,39 @@ class LaserWidget(Widget):
         self.layout.addWidget(self.scrollArea, 0, 0)
 
         # Presets box
-        self.presetsBox = QtWidgets.QHBoxLayout()
-        self.presetsLabel = QtWidgets.QLabel('Presets: ')
-        self.presetsList = QtWidgets.QComboBox()
-        self.presetsList.currentIndexChanged.connect(
-            lambda i: self.sigPresetSelected.emit(self.presetsList.itemData(i))
-        )
-        self.loadPresetButton = guitools.BetterPushButton('Load selected')
-        self.loadPresetButton.clicked.connect(self.sigLoadPresetClicked)
-        self.savePresetButton = guitools.BetterPushButton('Save to selected')
-        self.savePresetButton.clicked.connect(self.sigSavePresetClicked)
-        self.savePresetAsButton = guitools.BetterPushButton('Save as…')
-        self.savePresetAsButton.clicked.connect(self.sigSavePresetAsClicked)
-        self.moreButton = QtWidgets.QToolButton()
-        self.moreButton.setText('More…')
-        self.moreButton.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.deletePresetAction = QtWidgets.QAction('Delete selected')
-        self.deletePresetAction.triggered.connect(self.sigDeletePresetClicked)
-        self.moreButton.addAction(self.deletePresetAction)
-        self.presetScanDefaultAction = QtWidgets.QAction('Make selected default for scanning')
-        self.presetScanDefaultAction.triggered.connect(self.sigPresetScanDefaultToggled)
-        self.moreButton.addAction(self.presetScanDefaultAction)
-
-        self.setCurrentPreset(None)
-        self.setScanDefaultPresetActive(False)
-
-        self.presetsBox.addWidget(self.presetsLabel)
-        self.presetsBox.addWidget(self.presetsList, 1)
-        self.presetsBox.addWidget(self.loadPresetButton)
-        self.presetsBox.addWidget(self.savePresetButton)
-        self.presetsBox.addWidget(self.savePresetAsButton)
-        self.presetsBox.addWidget(self.moreButton)
-
-        self.layout.addLayout(self.presetsBox, 1, 0)
+        # self.presetsBox = QtWidgets.QHBoxLayout()
+        # self.presetsLabel = QtWidgets.QLabel('Presets: ')
+        # self.presetsList = QtWidgets.QComboBox()
+        # self.presetsList.currentIndexChanged.connect(
+        #     lambda i: self.sigPresetSelected.emit(self.presetsList.itemData(i))
+        # )
+        # self.loadPresetButton = guitools.BetterPushButton('Load selected')
+        # self.loadPresetButton.clicked.connect(self.sigLoadPresetClicked)
+        # self.savePresetButton = guitools.BetterPushButton('Save to selected')
+        # self.savePresetButton.clicked.connect(self.sigSavePresetClicked)
+        # self.savePresetAsButton = guitools.BetterPushButton('Save as…')
+        # self.savePresetAsButton.clicked.connect(self.sigSavePresetAsClicked)
+        # self.moreButton = QtWidgets.QToolButton()
+        # self.moreButton.setText('More…')
+        # self.moreButton.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        # self.deletePresetAction = QtWidgets.QAction('Delete selected')
+        # self.deletePresetAction.triggered.connect(self.sigDeletePresetClicked)
+        # self.moreButton.addAction(self.deletePresetAction)
+        # self.presetScanDefaultAction = QtWidgets.QAction('Make selected default for scanning')
+        # self.presetScanDefaultAction.triggered.connect(self.sigPresetScanDefaultToggled)
+        # self.moreButton.addAction(self.presetScanDefaultAction)
+        #
+        # self.setCurrentPreset(None)
+        # self.setScanDefaultPresetActive(False)
+        #
+        # self.presetsBox.addWidget(self.presetsLabel)
+        # self.presetsBox.addWidget(self.presetsList, 1)
+        # self.presetsBox.addWidget(self.loadPresetButton)
+        # self.presetsBox.addWidget(self.savePresetButton)
+        # self.presetsBox.addWidget(self.savePresetAsButton)
+        # self.presetsBox.addWidget(self.moreButton)
+        #
+        # self.layout.addLayout(self.presetsBox, 1, 0)
 
     def addLaser(self, laserName, valueUnits, valueDecimals, wavelength, valueRange=None,
                  valueRangeStep=1, frequencyRange=(0, 0, 0)):
@@ -165,55 +165,55 @@ class LaserWidget(Widget):
         """ Sets the modulation duty cycle of the specified laser. """
         self.laserModules[laserName].setModulationDutyCycle(value)
 
-    def getCurrentPreset(self):
-        """ Returns the name of the currently selected preset. """
-        return self.presetsList.currentData()
-
-    def setCurrentPreset(self, name):
-        """ Sets the selected preset in the preset list. Pass None to unselect
-        all presets. """
-        anyPresetSelected = True if name else False
-
-        if anyPresetSelected:
-            nameIndex = self.presetsList.findData(name)
-            if nameIndex > -1:
-                self.presetsList.setCurrentIndex(nameIndex)
-        else:
-            self.presetsList.setCurrentIndex(-1)
-
-        self.loadPresetButton.setEnabled(anyPresetSelected)
-        self.savePresetButton.setEnabled(anyPresetSelected)
-        self.deletePresetAction.setEnabled(anyPresetSelected)
-        self.presetScanDefaultAction.setEnabled(anyPresetSelected)
-        if not anyPresetSelected:
-            self.presetScanDefaultAction.setChecked(False)
-
-    def setScanDefaultPreset(self, name):
-        """ Sets which preset that is default for scanning. Pass None if there
-        is no default. """
-        for i in range(self.presetsList.count()):
-            self.presetsList.setItemText(i, self.presetsList.itemData(i))
-
-        nameIndex = self.presetsList.findData(name)
-        if nameIndex > -1:
-            self.presetsList.setItemText(nameIndex, f'{name} [scan default]')
-
-    def setScanDefaultPresetActive(self, active):
-        """ Sets whether the preset that is default for scanning is active. """
-        self.presetScanDefaultAction.setText(
-            'Make selected default for scanning' if not active else 'Unset default for scanning'
-        )
-
-    def addPreset(self, name):
-        """ Adds a preset to the preset list. """
-        self.presetsList.addItem(name, name)
-        self.presetsList.model().sort(0)
-
-    def removePreset(self, name):
-        """ Removes a preset from the preset list. """
-        nameIndex = self.presetsList.findData(name)
-        if nameIndex > -1:
-            self.presetsList.removeItem(nameIndex)
+    # def getCurrentPreset(self):
+    #     """ Returns the name of the currently selected preset. """
+    #     return self.presetsList.currentData()
+    #
+    # def setCurrentPreset(self, name):
+    #     """ Sets the selected preset in the preset list. Pass None to unselect
+    #     all presets. """
+    #     anyPresetSelected = True if name else False
+    #
+    #     if anyPresetSelected:
+    #         nameIndex = self.presetsList.findData(name)
+    #         if nameIndex > -1:
+    #             self.presetsList.setCurrentIndex(nameIndex)
+    #     else:
+    #         self.presetsList.setCurrentIndex(-1)
+    #
+    #     self.loadPresetButton.setEnabled(anyPresetSelected)
+    #     self.savePresetButton.setEnabled(anyPresetSelected)
+    #     self.deletePresetAction.setEnabled(anyPresetSelected)
+    #     self.presetScanDefaultAction.setEnabled(anyPresetSelected)
+    #     if not anyPresetSelected:
+    #         self.presetScanDefaultAction.setChecked(False)
+    #
+    # def setScanDefaultPreset(self, name):
+    #     """ Sets which preset that is default for scanning. Pass None if there
+    #     is no default. """
+    #     for i in range(self.presetsList.count()):
+    #         self.presetsList.setItemText(i, self.presetsList.itemData(i))
+    #
+    #     nameIndex = self.presetsList.findData(name)
+    #     if nameIndex > -1:
+    #         self.presetsList.setItemText(nameIndex, f'{name} [scan default]')
+    #
+    # def setScanDefaultPresetActive(self, active):
+    #     """ Sets whether the preset that is default for scanning is active. """
+    #     self.presetScanDefaultAction.setText(
+    #         'Make selected default for scanning' if not active else 'Unset default for scanning'
+    #     )
+    #
+    # def addPreset(self, name):
+    #     """ Adds a preset to the preset list. """
+    #     self.presetsList.addItem(name, name)
+    #     self.presetsList.model().sort(0)
+    #
+    # def removePreset(self, name):
+    #     """ Removes a preset from the preset list. """
+    #     nameIndex = self.presetsList.findData(name)
+    #     if nameIndex > -1:
+    #         self.presetsList.removeItem(nameIndex)
 
     def eventFilter(self, source, event):
         if source is self.lasersGridContainer and event.type() == QtCore.QEvent.Resize:

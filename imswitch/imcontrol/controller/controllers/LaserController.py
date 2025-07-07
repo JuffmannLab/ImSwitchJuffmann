@@ -30,11 +30,11 @@ class LaserController(ImConWidgetController):
             self.setSharedAttr(lName, _valueAttr, self._widget.getValue(lName))
 
         # Load presets
-        for laserPresetName in self._setupInfo.laserPresets:
-            self._widget.addPreset(laserPresetName)
-
-        self._widget.setCurrentPreset(None)  # Unselect
-        self._widget.setScanDefaultPreset(self._setupInfo.defaultLaserPresetForScan)
+        # for laserPresetName in self._setupInfo.laserPresets:
+        #     self._widget.addPreset(laserPresetName)
+        #
+        # self._widget.setCurrentPreset(None)  # Unselect
+        # self._widget.setScanDefaultPreset(self._setupInfo.defaultLaserPresetForScan)
 
         # Connect CommunicationChannel signals
         self._commChannel.sharedAttrs.sigAttributeSet.connect(self.attrChanged)

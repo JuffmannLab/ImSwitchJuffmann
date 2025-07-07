@@ -9,7 +9,7 @@ class LaserManager(ABC):
 
     @abstractmethod
     def __init__(self, laserInfo, name: str, isBinary: bool, valueUnits: str,
-                 valueDecimals: int, isModulated: bool = False) -> None:
+                 valueDecimals: int, isModulated: bool = True) -> None:
         """
         Args:
             laserInfo: See setup file documentation.
