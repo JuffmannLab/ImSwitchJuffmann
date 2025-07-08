@@ -83,7 +83,7 @@ class LaserWidget(Widget):
         #
         # self.layout.addLayout(self.presetsBox, 1, 0)
 
-    def addLaser(self, laserName, valueUnits, valueDecimals, wavelength, valueRange=None,
+    def addLaser(self, laserName, valueUnits, valueDecimals, wavelength, wavelengthRanges, valueRange=None,
                  valueRangeStep=1, frequencyRange=(0, 0, 0)):
         """ Adds a laser module widget. valueRange is either a tuple
         (min, max), or None (if the laser can only be turned on/off).
@@ -94,7 +94,7 @@ class LaserWidget(Widget):
             valueUnits=valueUnits, valueDecimals=valueDecimals, valueRange=valueRange,
             tickInterval=5, singleStep=valueRangeStep,
             initialPower=valueRange[0] if valueRange is not None else 0,
-            frequencyRange=frequencyRange
+            frequencyRange=frequencyRange, wavelengthRanges=wavelengthRanges
         )
         control.sigEnableChanged.connect(
             lambda enabled: self.sigEnableChanged.emit(laserName, enabled)
@@ -238,28 +238,54 @@ class LaserModule(QtWidgets.QWidget):
     sigDutyCycleChanged = QtCore.Signal(int)   # (duty cycle)
 
     def __init__(self, valueUnits, valueDecimals, valueRange, tickInterval, singleStep,
-                 initialPower, frequencyRange, *args, **kwargs):
+                 initialPower, frequencyRange, wavelengthRanges, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.valueDecimals = valueDecimals
 
         isBinary = valueRange is None
         isModulated = all(num > 0 for num in frequencyRange)
-
+        isTunable = not all(r.min == r.max for r in wavelengthRanges)
         # Graphical elements
-        self.setPointLabel = QtWidgets.QLabel(f'Setpoint [{valueUnits}]')
-        self.setPointLabel.setAlignment(QtCore.Qt.AlignCenter)
+        #Power
+        self.setPointLabel = QtWidgets.QLabel(f'Laser power:')
+        self.setPointLabel.setAlignment(QtCore.Qt.AlignLeft)
         self.setPointEdit = QtWidgets.QLineEdit(str(initialPower))
         self.setPointEdit.setFixedWidth(50)
-        self.setPointEdit.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.setPointEdit.setAlignment(QtCore.Qt.AlignLeft)
+
+        self.setPointUnits = QtWidgets.QComboBox()
+        self.setPointUnits.addItems(["W", "mW"])
+        self.setPointUnits.setFixedWidth(50)
+
+        #Reprate
+        self.repRateLabel = QtWidgets.QLabel(f'Repetition rate:')
+        self.repRateLabel.setAlignment(QtCore.Qt.AlignLeft)
+        self.repRateEdit = QtWidgets.QLineEdit("0")
+        self.repRateEdit.setFixedWidth(50)
+        self.repRateEdit.setAlignment(QtCore.Qt.AlignLeft)
+
+        self.repRateUnits = QtWidgets.QComboBox()
+        self.repRateUnits.addItems(["MHz", "GHz", "Hz"])
+        self.repRateUnits.setFixedWidth(50)
+
+        #Pulsing
+        self.pulsingLabel = QtWidgets.QLabel("Pulsing:")
+        self.pulsingOff = QtWidgets.QRadioButton("Off")
+        self.pulsingOn = QtWidgets.QRadioButton("On")
+
+        #Wavelength
+        self.wavelengthLabel = QtWidgets.QLabel("Wavelength:")
+
+
 
         self.minpower = QtWidgets.QLabel()
         self.minpower.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.maxpower = QtWidgets.QLabel()
         self.maxpower.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
-        self.slider = guitools.FloatSlider(QtCore.Qt.Horizontal, self, allowScrollChanges=False,
-                                           decimals=valueDecimals)
-        self.slider.setFocusPolicy(QtCore.Qt.NoFocus)
+        #self.slider = guitools.FloatSlider(QtCore.Qt.Horizontal, self, allowScrollChanges=False,
+        #                                   decimals=valueDecimals)
+        #self.slider.setFocusPolicy(QtCore.Qt.NoFocus)
 
         if not isBinary:
             valueRangeMin, valueRangeMax = valueRange
@@ -267,23 +293,37 @@ class LaserModule(QtWidgets.QWidget):
             self.minpower.setText(str(valueRangeMin))
             self.maxpower.setText(str(valueRangeMax))
 
-            self.slider.setMinimum(valueRangeMin)
-            self.slider.setMaximum(valueRangeMax)
-            self.slider.setTickInterval(tickInterval)
-            self.slider.setSingleStep(singleStep)
-            self.slider.setValue(0)
+            # self.slider.setMinimum(valueRangeMin)
+            # self.slider.setMaximum(valueRangeMax)
+            # self.slider.setTickInterval(tickInterval)
+            # self.slider.setSingleStep(singleStep)
+            # self.slider.setValue(0)
 
         powerFrame = QtWidgets.QFrame(self)
         self.powerGrid = QtWidgets.QGridLayout()
         powerFrame.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Plain)
         powerFrame.setLayout(self.powerGrid)
 
-        self.powerGrid.addWidget(self.setPointLabel, 0, 0, 2, 1)
-        self.powerGrid.addWidget(self.setPointEdit, 0, 1, 2, 1)
-        self.powerGrid.addWidget(self.minpower, 0, 2, 2, 1)
-        self.powerGrid.addWidget(self.slider, 0, 3, 2, 1)
-        self.powerGrid.addWidget(self.maxpower, 0, 4, 2, 1)
-        
+        self.powerGrid.addWidget(self.setPointLabel, 0, 0)
+        self.powerGrid.addWidget(self.setPointEdit, 0, 1)
+        self.powerGrid.addWidget(self.setPointUnits, 0, 2)
+        #self.powerGrid.addWidget(self.minpower, 0, 2, 1, 1)
+        #self.powerGrid.addWidget(self.slider, 0, 3, 2, 1)
+        #self.powerGrid.addWidget(self.maxpower, 0, 4, 1, 1)
+
+        self.powerGrid.addWidget(self.repRateLabel, 1, 0)
+        self.powerGrid.addWidget(self.repRateEdit, 1, 1)
+        self.powerGrid.addWidget(self.repRateUnits, 1, 2)
+
+        self.powerGrid.addWidget(self.pulsingLabel, 2, 0)
+        self.powerGrid.addWidget(self.pulsingOff, 2, 1)
+        self.powerGrid.addWidget(self.pulsingOn, 2, 2)
+
+        self.powerGrid.setColumnStretch(0, 0)  # Label column: no stretch
+        self.powerGrid.setColumnStretch(1, 0)  # Edit box: no stretch
+        self.powerGrid.setColumnStretch(2, 0)  # Units: no stretch
+        self.powerGrid.setColumnStretch(3, 1)
+
         if isModulated:
             freqRangeMin, freqRangeMax, initialFrequency = frequencyRange
             # laser modulation widgets
@@ -357,9 +397,9 @@ class LaserModule(QtWidgets.QWidget):
 
         # Connect signals
         self.enableButton.toggled.connect(self.sigEnableChanged)
-        self.slider.valueChanged.connect(
-            lambda value: self.sigValueChanged.emit(value)
-        )
+        # self.slider.valueChanged.connect(
+        #     lambda value: self.sigValueChanged.emit(value)
+        # )
         self.setPointEdit.returnPressed.connect(
             lambda: self.sigValueChanged.emit(self.getValue())
         )
@@ -409,13 +449,13 @@ class LaserModule(QtWidgets.QWidget):
     def setEditable(self, editable):
         """ Sets whether the laser's values can be edited by the user. """
         self.setPointEdit.setEnabled(editable)
-        self.slider.setEnabled(editable)
+        #self.slider.setEnabled(editable)
         self.enableButton.setEnabled(editable)
 
     def setValue(self, value):
         """ Sets the value of the laser, in the units that the laser uses. """
         self.setPointEdit.setText(f'%.{self.valueDecimals}f' % value)
-        self.slider.setValue(value)
+        #self.slider.setValue(value)
     
     def setModulationFrequency(self, value):
         """ Sets the laser modulation frequency. """

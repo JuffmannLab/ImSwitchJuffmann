@@ -45,6 +45,10 @@ class DetectorInfo(DeviceInfo):
     forFocusLock: bool = False
     """ Whether the detector is used for focus lock. """
 
+@dataclass(frozen=True)
+class wavelengthRange:
+    min: int
+    max: int
 
 @dataclass(frozen=True)
 class LaserInfo(DeviceInfo):
@@ -59,6 +63,9 @@ class LaserInfo(DeviceInfo):
     wavelength: Union[int, float]
     """ Laser wavelength in nanometres. """
 
+    wavelengthRanges: List[wavelengthRange]
+    """ Ranges in which the laser can operate. If laser is used at a fixed wavelength, use the same value for min and max"""
+
     freqRangeMin: Optional[int] = 0
     """ Minimum value of frequency modulation. Don't fill if laser doesn't support it. """
 
@@ -69,8 +76,7 @@ class LaserInfo(DeviceInfo):
     """ Initial value of frequency modulation. Don't fill if laser doesn't support it. """
 
     valueRangeStep: float = 1.0
-    """ The default step size of the value range that the laser can be set to.
-    """
+    """ The default step size of the value range that the laser can be set to. """
 
 
 
