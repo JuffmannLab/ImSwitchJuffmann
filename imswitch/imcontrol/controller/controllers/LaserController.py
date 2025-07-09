@@ -18,7 +18,8 @@ class LaserController(ImConWidgetController):
         # Set up lasers
         for lName, lManager in self._master.lasersManager:
             self._widget.addLaser(
-                lName, lManager.valueUnits, lManager.valueDecimals, lManager.wavelength, lManager.wavelengthRanges,
+                lName, lManager.valueUnits, lManager.valueDecimals, lManager.color, lManager.wavelengthRanges,
+                lManager.pulsing, lManager.repRate,
                 (lManager.valueRangeMin, lManager.valueRangeMax) if not lManager.isBinary else None,
                 lManager.valueRangeStep if lManager.valueRangeStep is not None else None,
                 (lManager.freqRangeMin, lManager.freqRangeMax, lManager.freqRangeInit) if lManager.isModulated else (0, 0, 0)
@@ -49,6 +50,10 @@ class LaserController(ImConWidgetController):
         self._widget.sigModEnabledChanged.connect(self.toggleModulation)
         self._widget.sigFreqChanged.connect(self.frequencyChanged)
         self._widget.sigDutyCycleChanged.connect(self.dutyCycleChanged)
+
+        self._widget.sigRangeChanged.connect(self.wavelengthRangeChanged)
+        self._widget.sigWavelengthValueChanged.connect(self.wavelengthValueChanged)
+        self._widget.sigWavelengthSliderChanged.connect(self.wavelengthValueChanged)
 
         self._widget.sigPresetSelected.connect(self.presetSelected)
         self._widget.sigLoadPresetClicked.connect(self.loadPreset)
@@ -98,6 +103,17 @@ class LaserController(ImConWidgetController):
         self._widget.setScanDefaultPresetActive(
             self._setupInfo.defaultLaserPresetForScan == presetName
         )
+
+    def wavelengthRangeChanged(self, laserName, index):
+        #self._master.lasersManager[laserName].placeholder()
+        self._widget.updateWavelengthRange(laserName, index)
+
+    def wavelengthValueChanged(self, laserName, value):
+        currentRange = self._widget.getCurrentRange(laserName)
+        if value >= currentRange.min and value <= currentRange.max:
+            self._widget.setWavelengthValue(laserName, value)
+        else:
+            self._widget.displayInvalidWavelength(laserName)
 
     def loadPreset(self):
         """ Handles what happens when the user requests the selected preset to

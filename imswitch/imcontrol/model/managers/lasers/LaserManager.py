@@ -24,7 +24,10 @@ class LaserManager(ABC):
         self._laserInfo = laserInfo
         self.__name = name
         self.__isBinary = isBinary
-        self.__wavelength = laserInfo.wavelength
+        self.__color = laserInfo.color
+        self.__wavelengthRanges = laserInfo.wavelengthRanges
+        self.__pulsing = laserInfo.pulsing
+        self.__repRate = laserInfo.repRate
         self.__valueRangeMin = laserInfo.valueRangeMin
         self.__valueRangeMax = laserInfo.valueRangeMax
         self.__valueRangeStep = laserInfo.valueRangeStep
@@ -52,9 +55,20 @@ class LaserManager(ABC):
         return self.__isBinary
 
     @property
-    def wavelength(self) -> int:
-        """ The wavelength of the laser. """
-        return self.__wavelength
+    def color(self) -> int:
+        return self.__color
+
+    @property
+    def wavelengthRanges(self):
+        return self.__wavelengthRanges
+
+    @property
+    def pulsing(self) -> bool:
+        return self.__pulsing
+
+    @property
+    def repRate(self) -> float:
+        return self.__repRate
 
     @property
     def valueRangeMin(self) -> float:

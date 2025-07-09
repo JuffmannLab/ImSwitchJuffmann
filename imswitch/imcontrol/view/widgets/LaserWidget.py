@@ -1,4 +1,4 @@
-from qtpy import QtCore, QtWidgets
+from qtpy import QtCore, QtWidgets, QtGui
 
 from imswitch.imcommon.view.guitools import colorutils
 from imswitch.imcontrol.view import guitools
@@ -14,6 +14,10 @@ class LaserWidget(Widget):
     sigModEnabledChanged = QtCore.Signal(str, bool) # (laserName, modulationEnabled)
     sigFreqChanged = QtCore.Signal(str, int)        # (laserName, frequency)
     sigDutyCycleChanged = QtCore.Signal(str, int)   # (laserName, dutyCycle)
+
+    sigRangeChanged = QtCore.Signal(str, int)  # (wavelength range index)
+    sigWavelengthValueChanged = QtCore.Signal(str, int)  # (wavelength value)
+    sigWavelengthSliderChanged = QtCore.Signal(str, int)  # (wavelength slider)
 
     sigPresetSelected = QtCore.Signal(str)  # (presetName)
     sigLoadPresetClicked = QtCore.Signal()
@@ -83,7 +87,7 @@ class LaserWidget(Widget):
         #
         # self.layout.addLayout(self.presetsBox, 1, 0)
 
-    def addLaser(self, laserName, valueUnits, valueDecimals, wavelength, wavelengthRanges, valueRange=None,
+    def addLaser(self, laserName, valueUnits, valueDecimals, color, wavelengthRanges, pulsing, repRate, valueRange=None,
                  valueRangeStep=1, frequencyRange=(0, 0, 0)):
         """ Adds a laser module widget. valueRange is either a tuple
         (min, max), or None (if the laser can only be turned on/off).
@@ -92,6 +96,7 @@ class LaserWidget(Widget):
 
         control = LaserModule(
             valueUnits=valueUnits, valueDecimals=valueDecimals, valueRange=valueRange,
+            pulsing=pulsing, repRate=repRate,
             tickInterval=5, singleStep=valueRangeStep,
             initialPower=valueRange[0] if valueRange is not None else 0,
             frequencyRange=frequencyRange, wavelengthRanges=wavelengthRanges
@@ -114,11 +119,23 @@ class LaserWidget(Widget):
                 lambda dutyCycle: self.sigDutyCycleChanged.emit(laserName, dutyCycle)
             )
 
+        if not all(r.min == r.max for r in wavelengthRanges):
+            control.sigRangeChanged.connect(
+                lambda index: self.sigRangeChanged.emit(laserName, index)
+            )
+            control.sigWavelengthValueChanged.connect(
+                lambda value: self.sigWavelengthValueChanged.emit(laserName, value)
+            )
+            control.sigWavelengthSliderChanged.connect(
+                lambda value: self.sigWavelengthSliderChanged.emit(laserName, value)
+            )
+
+
         nameLabel = QtWidgets.QLabel(laserName)
-        color = colorutils.wavelengthToHex(wavelength)
+        GUIcolor = colorutils.wavelengthToHex(color)
         nameLabel.setStyleSheet(
             f'font-size: 16px; font-weight: bold; padding: 0 6px 0 12px;'
-            f'border-left: 4px solid {color}'
+            f'border-left: 4px solid {GUIcolor}'
         )
 
         self.lasersGrid.addWidget(nameLabel, len(self.laserModules), 0)
@@ -164,6 +181,18 @@ class LaserWidget(Widget):
     def setModulationDutyCycle(self, laserName, value):
         """ Sets the modulation duty cycle of the specified laser. """
         self.laserModules[laserName].setModulationDutyCycle(value)
+
+    def updateWavelengthRange(self, laserName, index):
+        self.laserModules[laserName].updateWavelengthRange(index)
+
+    def setWavelengthValue(self, laserName, value):
+        self.laserModules[laserName].setWavelengthValue(value)
+
+    def getCurrentRange(self, laserName):
+        return self.laserModules[laserName].getCurrentRange()
+
+    def displayInvalidWavelength(self, laserName):
+        self.laserModules[laserName].displayInvalidWavelength()
 
     # def getCurrentPreset(self):
     #     """ Returns the name of the currently selected preset. """
@@ -237,11 +266,15 @@ class LaserModule(QtWidgets.QWidget):
     sigFreqChanged = QtCore.Signal(int)        # (frequency)
     sigDutyCycleChanged = QtCore.Signal(int)   # (duty cycle)
 
-    def __init__(self, valueUnits, valueDecimals, valueRange, tickInterval, singleStep,
+    sigRangeChanged = QtCore.Signal(int)            # (wavelength range index)
+    sigWavelengthValueChanged = QtCore.Signal(int)  # (wavelength value)
+    sigWavelengthSliderChanged = QtCore.Signal(int) # (wavelength slider)
+
+    def __init__(self, valueUnits, valueDecimals, valueRange, pulsing, repRate, tickInterval, singleStep,
                  initialPower, frequencyRange, wavelengthRanges, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.valueDecimals = valueDecimals
-
+        self.wavelengthRanges = wavelengthRanges
         isBinary = valueRange is None
         isModulated = all(num > 0 for num in frequencyRange)
         isTunable = not all(r.min == r.max for r in wavelengthRanges)
@@ -260,7 +293,7 @@ class LaserModule(QtWidgets.QWidget):
         #Reprate
         self.repRateLabel = QtWidgets.QLabel(f'Repetition rate:')
         self.repRateLabel.setAlignment(QtCore.Qt.AlignLeft)
-        self.repRateEdit = QtWidgets.QLineEdit("0")
+        self.repRateEdit = QtWidgets.QLineEdit(str(repRate))
         self.repRateEdit.setFixedWidth(50)
         self.repRateEdit.setAlignment(QtCore.Qt.AlignLeft)
 
@@ -272,10 +305,8 @@ class LaserModule(QtWidgets.QWidget):
         self.pulsingLabel = QtWidgets.QLabel("Pulsing:")
         self.pulsingOff = QtWidgets.QRadioButton("Off")
         self.pulsingOn = QtWidgets.QRadioButton("On")
-
-        #Wavelength
-        self.wavelengthLabel = QtWidgets.QLabel("Wavelength:")
-
+        self.pulsingOff.setChecked(not pulsing)
+        self.pulsingOn.setChecked(pulsing)
 
 
         self.minpower = QtWidgets.QLabel()
@@ -323,6 +354,50 @@ class LaserModule(QtWidgets.QWidget):
         self.powerGrid.setColumnStretch(1, 0)  # Edit box: no stretch
         self.powerGrid.setColumnStretch(2, 0)  # Units: no stretch
         self.powerGrid.setColumnStretch(3, 1)
+
+        if isTunable:
+            self.wavelengthGroup = QtWidgets.QGroupBox("Wavelength selection")
+            self.wavelengthLayout = QtWidgets.QGridLayout()
+            self.wavelengthGroup.setLayout(self.wavelengthLayout)
+
+            self.rangeSelector = QtWidgets.QComboBox()
+            for r in wavelengthRanges:
+                self.rangeSelector.addItem(f"{r.min} - {r.max} nm")
+
+            self.wavelengthEdit = QtWidgets.QLineEdit()
+            self.wavelengthEdit.setFixedWidth(50)
+            self.invalidValueLabel = QtWidgets.QLabel("")
+            self.invalidValueLabel.setStyleSheet("color: red;")
+
+            self.wavelengthSlider = guitools.FloatSlider(QtCore.Qt.Horizontal, self, allowScrollChanges=False, decimals=0)
+            self.wavelengthSlider.setFocusPolicy(QtCore.Qt.NoFocus)
+            self.wavelengthSlider.setFixedWidth(200)
+            self.wavelengthSlider.setTickInterval(1)
+            self.wavelengthSlider.setSingleStep(1)
+            self.minWavelength = QtWidgets.QLabel()
+            self.maxWavelength = QtWidgets.QLabel()
+
+
+
+
+            #Set the range to the first one passed.
+            self.updateWavelengthRange(0)
+
+            self.wavelengthLayout.addWidget(QtWidgets.QLabel("Range:"), 0, 0)
+            self.wavelengthLayout.addWidget(self.rangeSelector, 0, 1, 1, 2)
+            self.wavelengthLayout.addWidget(QtWidgets.QLabel("Value:"), 1, 0)
+            self.wavelengthLayout.addWidget(self.wavelengthEdit, 1, 1)
+            self.wavelengthLayout.addWidget(self.invalidValueLabel, 1, 2)
+            self.wavelengthLayout.addWidget(self.minWavelength, 2, 0, 1, 1)
+            self.wavelengthLayout.addWidget(self.wavelengthSlider, 2, 1, 1, 3)
+            self.wavelengthLayout.addWidget(self.maxWavelength, 2, 5, 1, 1)
+
+            self.powerGrid.addWidget(self.wavelengthGroup, 5, 0, 1, 3)
+        else:
+            self.wavelengthLabel = QtWidgets.QLabel(f"Wavelength:")
+            self.wavelengthValue = QtWidgets.QLabel(f"{wavelengthRanges[0].min} nm")
+            self.powerGrid.addWidget(self.wavelengthLabel, 3, 0)
+            self.powerGrid.addWidget(self.wavelengthValue, 3, 1)
 
         if isModulated:
             freqRangeMin, freqRangeMax, initialFrequency = frequencyRange
@@ -419,6 +494,17 @@ class LaserModule(QtWidgets.QWidget):
                 lambda: self.sigDutyCycleChanged.emit(self.getDutyCycle())
             )
 
+        if isTunable:
+            self.rangeSelector.currentIndexChanged.connect(
+                lambda value: self.sigRangeChanged.emit(value)
+            )
+            self.wavelengthEdit.editingFinished.connect(
+                lambda: self.sigWavelengthValueChanged.emit(int(self.wavelengthEdit.text()))
+            )
+            self.wavelengthSlider.valueChanged.connect(
+                lambda value: self.sigWavelengthSliderChanged.emit(value)
+            )
+
     def isActive(self):
         """ Returns whether the laser is powered on. """
         return self.enableButton.isChecked()
@@ -466,6 +552,30 @@ class LaserModule(QtWidgets.QWidget):
         """ Sets the laser modulation duty cycle. """
         self.modulationDutyCycleEdit.setText(f"{value}")
         self.modulationDutyCycleSlider.setValue(value)
+
+    def updateWavelengthRange(self, index):
+        wlrange = self.wavelengthRanges[index]
+        self.wavelengthSlider.setMinimum(wlrange.min)
+        self.wavelengthSlider.setMaximum(wlrange.max)
+        self.minWavelength.setText(str(wlrange.min))
+        self.maxWavelength.setText(str(wlrange.max))
+        midval = (wlrange.min + wlrange.max) / 2
+        self.wavelengthSlider.setValue(midval)
+        self.wavelengthEdit.setText(str(midval))
+
+    def setWavelengthValue(self, value):
+        self.wavelengthSlider.setValue(value)
+        self.wavelengthEdit.setText(str(value))
+        self.invalidValueLabel.setText("")
+
+    def getCurrentRange(self):
+        idx = self.rangeSelector.currentIndex()
+        return self.wavelengthRanges[idx]
+
+    def displayInvalidWavelength(self):
+        self.invalidValueLabel.setText("Select a value within specified range.")
+
+
 
 
 # Copyright (C) 2017 Federico Barabas 2020-2021 ImSwitch developers
