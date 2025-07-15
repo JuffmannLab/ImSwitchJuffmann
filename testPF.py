@@ -18,5 +18,11 @@ from pylablib.devices import PhotonFocus
 cam = PhotonFocus.PhotonFocusBitFlowCamera(bitflow_idx = 0, pfcam_port = 0, )
 
 cam.open()
-print(cam.get_roi_limits())
+cam.start_acquisition()
+for i in range(10):
+    frame = cam.snap()
+    plt.imshow(frame)
+    plt.show()
+cam.stop_acquisition()
 cam.close()
+

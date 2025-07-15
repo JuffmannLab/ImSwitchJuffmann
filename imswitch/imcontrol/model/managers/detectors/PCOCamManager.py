@@ -47,7 +47,7 @@ class PCOCamManager(DetectorManager):
                                                              options=['Off',
                                                                       'On'],
                                                             editable=True),
-            'Buffer Frames': DetectorNumberParameter(group='Acquisition', value = self._camera.nframes,
+            'Buffer Frames': DetectorNumberParameter(group='Acquisition', value = self._camera.nframes, valueUnits='arb.u.',
                                                      editable=True)
             }
         
