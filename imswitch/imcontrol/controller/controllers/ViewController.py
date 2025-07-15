@@ -7,23 +7,67 @@ class ViewController(ImConWidgetController):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._acqHandle = None
+        self._lvacqHandle = None
+        self._dvacqHandle = None
 
-        self._widget.setViewToolsEnabled(False)
+        self._widget.setViewToolsEnabled(False, 'LV')
 
         # Connect ViewWidget signals
         self._widget.sigGridToggled.connect(self.gridToggle)
         self._widget.sigCrosshairToggled.connect(self.crosshairToggle)
         self._widget.sigLiveviewToggled.connect(self.liveview)
+        self._widget.sigDifferentialviewToggled.connect(self.differentialview)
+        self._widget.sigSliderValueChanged.connect(self.sliderValue)
 
     def liveview(self, enabled):
         """ Start liveview and activate detector acquisition. """
-        if enabled and self._acqHandle is None:
-            self._acqHandle = self._master.detectorsManager.startAcquisition(liveView=True)
-            self._widget.setViewToolsEnabled(True)
-        elif not enabled and self._acqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._acqHandle, liveView=True)
-            self._acqHandle = None
+        if enabled and self._lvacqHandle is None:
+            self._lvacqHandle = self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
+                condition = lambda c: c.forAcquisition
+            )
+            print(f"LV ACQ HANDLE: {self._lvacqHandle}")
+            if self._dvacqHandle is not None:
+                self._master.detectorsManager.execOnAll(
+                    lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
+                    condition = lambda c: c.forDifferential
+                )
+        elif not enabled and self._lvacqHandle is not None:
+            self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
+                condition = lambda c: c.forAcquisition
+            )
+            self._lvacqHandle = None
+
+    def differentialview(self, enabled):
+        """Start differential view, activate detector acquisition and calculate the differential image"""
+        if enabled and self._dvacqHandle is None:
+            self._dvacqHandle = self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, differentialView=True),
+                condition = lambda c: c.forDifferential
+            )
+            if self._lvacqHandle is not None:
+                self._master.detectorsManager.execOnAll(
+                    lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
+                    condition = lambda c: c.forDifferential
+                )
+
+        elif not enabled and self._dvacqHandle is not None:
+            self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
+                condition = lambda c: c.forDifferential
+            )
+            self._dvacqHandle = None
+            
+            self._lvacqHandle = self._master.detectorsManager.execOnAll(
+                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
+                condition = lambda c: c.forDifferential
+            )
+            
+
+
+    def sliderValue(self, batch_size):
+        self._master.detectorsManager.adjustBatchSize(batch_size)
 
     def gridToggle(self, enabled):
         """ Connect with grid toggle from Image Widget through communication channel. """
@@ -34,8 +78,14 @@ class ViewController(ImConWidgetController):
         self._commChannel.sigCrosshairToggled.emit(enabled)
 
     def closeEvent(self):
-        if self._acqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._acqHandle, liveView=True)
+        """ Stops both live view and differential view acquisitions if active. """
+        if self._lvacqHandle is not None:
+            self._master.detectorsManager.stopAcquisition(self._lvacqHandle, liveView=True)
+            self._lvacqHandle = None
+
+        if self._dvacqHandle is not None:
+            self._master.detectorsManager.stopAcquisition(self._dvacqHandle, differentialView=True)
+            self._dvacqHandle = None
 
     def get_image(self, detectorName):
         if detectorName is None:
@@ -47,6 +97,10 @@ class ViewController(ImConWidgetController):
     def setLiveViewActive(self, active: bool) -> None:
         """ Sets whether the LiveView is active and updating. """
         self._widget.setLiveViewActive(active)
+
+    @APIExport(runOnUIThread=True)
+    def setDifferentialViewActive(self, active: bool) -> None:
+        self._widget.setDifferentialViewActive(active)
 
     @APIExport(runOnUIThread=True)
     def setLiveViewGridVisible(self, visible: bool) -> None:

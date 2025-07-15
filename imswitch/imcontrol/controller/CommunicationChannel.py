@@ -87,7 +87,10 @@ class CommunicationChannel(SignalInterface):
     sigSaveFocus = Signal()
 
     sigSetExposure = Signal(float)
+    
     sigSetSpeed = Signal(float)
+
+    sigSetBatchSize = Signal(int)
 
     @property
     def sharedAttrs(self):

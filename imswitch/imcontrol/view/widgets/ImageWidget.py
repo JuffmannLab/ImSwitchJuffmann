@@ -17,6 +17,7 @@ class ImageWidget(QtWidgets.QWidget):
             self.napariViewer
         )
         self.NapariShiftWidget = naparitools.NapariShiftWidget.addToViewer(self.napariViewer)
+        self.NapariColorbarWidget = naparitools.NapariColorbarWidget.addToViewer(self.napariViewer)
         self.imgLayers = {}
 
         self.viewCtrlLayout = QtWidgets.QVBoxLayout()

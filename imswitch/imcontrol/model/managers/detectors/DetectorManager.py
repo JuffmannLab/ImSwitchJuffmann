@@ -104,7 +104,8 @@ class DetectorManager(SignalInterface):
 
         self.__forAcquisition = detectorInfo.forAcquisition
         self.__forFocusLock = detectorInfo.forFocusLock
-        if not detectorInfo.forAcquisition and not detectorInfo.forFocusLock:
+        self.__forDifferential = detectorInfo.forDifferential
+        if not detectorInfo.forAcquisition and not detectorInfo.forFocusLock and not detectorInfo.forDifferential:
             raise ValueError('At least one of forAcquisition and forFocusLock must be set in'
                              ' DetectorInfo.')
 
@@ -120,7 +121,14 @@ class DetectorManager(SignalInterface):
             if self.__image is not None:
                 self.sigImageUpdated.emit(self.__image, init)
                 self.__logger.warning('No Image taken')
-
+    
+    def updateDifferentialView(self, enable):
+        """ Switch between live view and differential view. """
+        if enable:
+            print(f"Switching to differential view for {self.__name}")
+        else:
+            print(f"Switching to live view for {self.__name}")
+            
     def setParameter(self, name: str, value: Any) -> Dict[str, DetectorParameter]:
         """ Sets a parameter value and returns the updated list of parameters.
         If the parameter doesn't exist, i.e. the parameters field doesn't
@@ -206,6 +214,11 @@ class DetectorManager(SignalInterface):
     def forFocusLock(self) -> bool:
         """ Whether the detector is used for focus lock. """
         return self.__forFocusLock
+    
+    @property
+    def forDifferential(self) -> bool:
+        """ Wether the detector is used for differential Imaging """
+        return self.__forDifferential
 
     @property
     @abstractmethod

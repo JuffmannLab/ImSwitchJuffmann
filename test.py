@@ -1,30 +1,26 @@
-#This is a file for testing things out in the ImSwitch environment.
-#This is a file for testing things out in the ImSwitch environment.
+import napari
+import numpy as np
+import matplotlib.pyplot as plt
 
-import pylablib
+def add_handler(detector, liveView=False):
 
-pylablib.par['devices/dlls/pco_sc2']='C:\Program Files\PCO Digital Camera Toolbox\pco.camware'
+    test_main_handler = {}
+    handler = np.random.randint(2**31)
 
-from pylablib.devices import PCO
+    if detector not in test_main_handler:
+        test_main_handler[detector] = set()
 
-cam = PCO.SC2.PCOSC2Camera()
-cam.open()
+    test_main_handler[detector].add(handler)
 
-print(cam.is_opened())
-print(cam.get_device_info())
-print(cam.get_capabilities())
-print(cam.get_internal_buffer_status())
-print(cam.get_frame_timings())
-print(cam.get_detector_size())
-print(cam.get_roi())
-print(cam.requires_symmetric_roi())
-print(cam.get_roi_limits())
-#print(cam.get_acquisition_parameters())
-print(cam.get_settings())
-cam.set_exposure(5*0.001)
-print(cam.get_settings()['exposure'])
-print(float(cam.get_frame_period()))
+    return test_main_handler
 
+my_dict = {'Cam1': 564784558
+           }
+print(my_dict)
+def reading_dict(dict):
+    handles = [value if isinstance(value, set) else {value} for value in dict.values()]
+    values = [next(iter(value_set)) for value_set in handles]
+    for value in values:
+        print(value)
 
-
-cam.close()
+reading_dict(my_dict)
