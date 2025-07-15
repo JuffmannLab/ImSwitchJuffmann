@@ -347,10 +347,11 @@ class DVWorker(Worker):
         batch_frames = []
         
         for _ in range(self._batch_size):
-            chunk = detector.getChunk()
+            chunk = detector.getLatestFrame()
             if chunk is None or not isinstance(chunk, np.ndarray):
+                self.__logger.warning('No DV Image taken')
                 return
-            batch_frames.append(chunk.squeeze(0))
+            batch_frames.append(chunk)
 
         if len(batch_frames) == 0:
             return
