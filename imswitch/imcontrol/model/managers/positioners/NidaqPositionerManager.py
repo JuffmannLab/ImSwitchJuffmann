@@ -33,6 +33,9 @@ class NidaqPositionerManager(PositionerManager):
                                      voltage=position / self._conversionFactor,
                                      min_val=self._minVolt,
                                      max_val=self._maxVolt)
+    def get_abs(self):
+        reply = self._position[self.axes[0]]
+        return reply
 
 
 # Copyright (C) 2020-2021 ImSwitch developers

@@ -152,12 +152,14 @@ class CameraGXIPY:
             # start data acquisition
             self.camera.stream_on()
             self.is_streaming = True
+            print('streaming on')
 
     def stop_live(self):
         if self.is_streaming:
             # start data acquisition
             self.camera.stream_off()
             self.is_streaming = False
+            print('streaming off')
 
     def suspend_live(self):
         if self.is_streaming:
@@ -236,6 +238,11 @@ class CameraGXIPY:
         # get frame and save
         # only return fresh frames
         # print(self.lastFrameId, self.frameNumber)
+        if not self.is_streaming:
+            # start data acquisition
+            self.camera.stream_on()
+            self.is_streaming = True
+            print('started streaming how in the heck should this thing get an image otherwise')
         cTime = time.time()
         while(self.lastFrameId > self.frameNumber and self.frame is None):
             time.sleep(.01) # wait for fresh frame
@@ -247,6 +254,8 @@ class CameraGXIPY:
             self.frame = self.frame/self.flatfieldImage
         else:
             raw_image = self.camera.data_stream[0].get_image()
+            if raw_image is None:
+                print("Getting image failed!!!!!!!!!!!!!!!!!!!!")
             self.frame = raw_image.get_numpy_array()
 
         self.lastFrameId = self.frameNumber

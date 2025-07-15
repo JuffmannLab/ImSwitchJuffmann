@@ -28,10 +28,10 @@ def main():
     cam.TriggerMode.set(gx.GxSwitchEntry.OFF)
 
     # set exposure
-    cam.ExposureTime.set(10000)
+    cam.ExposureTime.set(50)
 
     # set gain
-    cam.Gain.set(10.0)
+    cam.Gain.set(0)
 
     # start data acquisition
     cam.stream_on()
