@@ -126,7 +126,8 @@ class PhotonFocusManager(DetectorManager):
         return [1, 1, 1]
 
     def crop(self, hpos, vpos, hsize, vsize):
-        """Crop the camera frame to the specified ROI"""
+        pass
+        """Crop the camera frame to the specified ROI
         # Stop acquisition if running
         was_running = self._running
         if was_running:
@@ -152,6 +153,7 @@ class PhotonFocusManager(DetectorManager):
             # Restart acquisition if it was running
             if was_running:
                 self.startAcquisition()
+        """
     
     def _performSafeCameraAction(self, function):
         """ This method is used to change those camera properties that need
