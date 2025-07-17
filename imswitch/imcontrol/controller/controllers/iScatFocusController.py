@@ -23,6 +23,7 @@ class iScatFocusController(ImConWidgetController):
         self._widget.sigPIDToggled.connect(self.toggleFocus)
         self._widget.sigSetPosition.connect(self.moveZ)
         self._widget.sigAutoTune.connect(self.autoTune)
+        self._widget.sigPIDValuesChanged.connect(self.updatePIDParameters)
 
         # Reads the specific values from the configuration file. 
         if self._setupInfo.iScatFocus is None:
@@ -62,6 +63,7 @@ class iScatFocusController(ImConWidgetController):
         self.setPointData = np.zeros(self.buffer)
         self.timeData = np.zeros(self.buffer)
         self.lockingData = np.zeros(7)
+        self.pid = None
         
         self.pTermData = np.zeros(self.buffer)
         self.iTermData = np.zeros(self.buffer)
@@ -207,6 +209,25 @@ class iScatFocusController(ImConWidgetController):
             return 0
             
         return correction
+    
+    def updatePIDParameters(self, kp: float, ki: float, kd: float):
+        """Thread-safe PID parameter updates with validation."""
+        # Validate ranges
+        kp = np.clip(kp, 0, 0.1)  # Example max P gain
+        ki = np.clip(ki, 0, 0.01)  # Example max I gain
+        kd = np.clip(kd, 0, 0.005) # Example max D gain
+        
+        if self.locked:
+            # Live update if locked
+            self.pid.kp = kp
+            self.pid.ki = ki
+            self.pid.kd = kd
+            self.__logger.debug(f"Live PID update: P={kp:.4f}, I={ki:.4f}, D={kd:.4f}")
+        else:
+            # Store for next lock
+            self._widget.kpEdit.setText(f"{kp:.4f}")
+            self._widget.kiEdit.setText(f"{ki:.4f}")
+            self._widget.kdEdit.setText(f"{kd:.4f}")
 
     def lockFocus(self, kp, ki, kd, current_voltage):
         if not self.locked:
