@@ -1,106 +1,133 @@
 import numpy as np
 import pyqtgraph as pg
-from qtpy import QtWidgets
-
+from qtpy import QtWidgets, QtCore, QtGui
 from imswitch.imcontrol.view import guitools as guitools
 from .basewidgets import Widget
 
-
 class iScatFocusWidget(Widget):
-    """ Widget containing focus lock interface. """
+    """ Widget containing focus lock interface with PID controls. """
+    sigPIDToggled = QtCore.Signal(bool)  # Lock/unlock
+    sigPIDValuesChanged = QtCore.Signal(float, float, float)  # kp, ki, kd
+    sigSetPosition = QtCore.Signal(float)  # Target position (V)
+    sigAutoTune = QtCore.Signal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Focus lock
-        self.kpEdit = QtWidgets.QLineEdit('5')
-        self.kpLabel = QtWidgets.QLabel('kp')
-        self.kiEdit = QtWidgets.QLineEdit('0.1')
-        self.kiLabel = QtWidgets.QLabel('ki')
-        self.kdEdit = QtWidgets.QLineEdit('0.01')
-        self.kdLabel = QtWidgets.QLabel('kd')
+        # PID Control Section
+        self.pidControlGroup = QtWidgets.QGroupBox("PID Control")
+        
+        # PID Parameters
+        self.kpEdit = QtWidgets.QLineEdit('0.02')
+        self.kpEdit.setValidator(QtGui.QDoubleValidator())
+        self.kpLabel = QtWidgets.QLabel('Proportional (V/px):')
+        
+        self.kiEdit = QtWidgets.QLineEdit('0.002')
+        self.kiEdit.setValidator(QtGui.QDoubleValidator())
+        self.kiLabel = QtWidgets.QLabel('Integral (V/px·s):')
+        
+        self.kdEdit = QtWidgets.QLineEdit('0.0005')
+        self.kdEdit.setValidator(QtGui.QDoubleValidator())
+        self.kdLabel = QtWidgets.QLabel('Derivative (V/(px/s)):')
 
+        # Control Buttons
         self.lockButton = guitools.BetterPushButton('Lock')
         self.lockButton.setCheckable(True)
-        self.lockButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
-                                      QtWidgets.QSizePolicy.Expanding)
+        self.autoTuneButton = guitools.BetterPushButton('Auto-tune')
 
-        self.zStackBox = QtWidgets.QCheckBox('Z-stack')
+        # Position Control
+        self.positionGroup = QtWidgets.QGroupBox("Position Control")
+        self.positionEdit = QtWidgets.QLineEdit('0.0')
+        self.positionEdit.setValidator(QtGui.QDoubleValidator(-10, 10, 3))
+        self.positionSetButton = guitools.BetterPushButton('Set (V)')
 
-        self.zStepFromEdit = QtWidgets.QLineEdit('0.001')
-        self.zStepFromLabel = QtWidgets.QLabel('Min step (V)')
-        self.zStepToEdit = QtWidgets.QLineEdit('1')
-        self.zStepToLabel = QtWidgets.QLabel('Max step (V)')
+        # Diagnostics Display
+        self.diagGroup = QtWidgets.QGroupBox("Diagnostics")
+        self.pidTermsGraph = pg.GraphicsLayoutWidget()
+        self.pidPlot = self.pidTermsGraph.addPlot(title="PID Terms")
+        self.pTermCurve = self.pidPlot.plot(pen='r', name='P')
+        self.iTermCurve = self.pidPlot.plot(pen='g', name='I')
+        self.dTermCurve = self.pidPlot.plot(pen='b', name='D')
+        self.pidPlot.addLegend()
 
-        self.camDialogButton = guitools.BetterPushButton('Camera Dialog')
+        # Focus Position Plot
+        self.focusPlotGraph = pg.GraphicsLayoutWidget()
+        self.focusPlot = self.focusPlotGraph.addPlot(title="Beam Position")
+        self.focusPlot.setLabels(left=('Position', 'px'), bottom=('Time', 's'))
+        self.focusCurve = self.focusPlot.plot(pen='y')
+        self.setpointLine = pg.InfiniteLine(angle=0, pen='r')
+
+        # Camera View
+        self.camView = pg.GraphicsLayoutWidget()
+        self.camImg = pg.ImageItem()
+        self.camViewBox = self.camView.addViewBox()
+        self.camViewBox.addItem(self.camImg)
+        self.camViewBox.setAspectLocked(True)
+
+        # Layout
+        self.setLayout(QtWidgets.QGridLayout())
         
-        self.autoTuneBotton = guitools.BetterPushButton('Auto-tune')
+        # PID Control Layout
+        pidLayout = QtWidgets.QGridLayout()
+        pidLayout.addWidget(self.kpLabel, 0, 0)
+        pidLayout.addWidget(self.kpEdit, 0, 1)
+        pidLayout.addWidget(self.kiLabel, 1, 0)
+        pidLayout.addWidget(self.kiEdit, 1, 1)
+        pidLayout.addWidget(self.kdLabel, 2, 0)
+        pidLayout.addWidget(self.kdEdit, 2, 1)
+        pidLayout.addWidget(self.lockButton, 0, 2, 2, 1)
+        pidLayout.addWidget(self.autoTuneButton, 2, 2)
+        self.pidControlGroup.setLayout(pidLayout)
 
-        # Piezo absolute positioning
-        self.positionLabel = QtWidgets.QLabel(
-            'Position (V)')  # Potentially disregard this and only use in the positioning widget?
-        self.positionEdit = QtWidgets.QLineEdit('0')
-        self.positionSetButton = guitools.BetterPushButton('Set')
+        # Position Control Layout
+        posLayout = QtWidgets.QHBoxLayout()
+        posLayout.addWidget(self.positionEdit)
+        posLayout.addWidget(self.positionSetButton)
+        self.positionGroup.setLayout(posLayout)
 
-        # Focus lock calibration
-        self.calibFromLabel = QtWidgets.QLabel('From (V)')
-        self.calibFromEdit = QtWidgets.QLineEdit('-2')
-        self.calibToLabel = QtWidgets.QLabel('To (V)')
-        self.calibToEdit = QtWidgets.QLineEdit('+2')
-        self.focusCalibButton = guitools.BetterPushButton('Calib')
-        self.focusCalibButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
-                                            QtWidgets.QSizePolicy.Expanding)
-        self.calibCurveButton = guitools.BetterPushButton('See calib')
-        self.calibrationDisplay = QtWidgets.QLineEdit(
-            'Previous calib: none')  # Edit this from the controller with calibration values
-        self.calibrationDisplay.setReadOnly(True)
-        # CREATE CALIBRATION CURVE WINDOW AND FOCUS CALIBRATION GRAPH SOMEHOW
+        # Diagnostics Layout
+        diagLayout = QtWidgets.QVBoxLayout()
+        diagLayout.addWidget(self.pidTermsGraph)
+        self.diagGroup.setLayout(diagLayout)
 
-        # Focus lock graph
-        self.focusLockGraph = pg.GraphicsLayoutWidget()
-        self.focusLockGraph.setAntialiasing(True)
-        self.focusPlot = self.focusLockGraph.addPlot(row=1, col=0)
-        self.focusPlot.setLabels(bottom=('Time', 's'), left=('Laser position', 'px'))
-        self.focusPlot.showGrid(x=True, y=True)
-        # update this (self.focusPlotCurve.setData(X,Y)) with update(focusSignal) function
-        self.focusPlotCurve = self.focusPlot.plot(pen='y')
+        # Main Layout
+        self.layout().addWidget(self.pidControlGroup, 0, 0, 1, 2)
+        self.layout().addWidget(self.positionGroup, 1, 0)
+        self.layout().addWidget(self.diagGroup, 2, 0)
+        self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
+        self.layout().addWidget(self.camView, 2, 2)
 
-        # Webcam graph
-        self.webcamGraph = pg.GraphicsLayoutWidget()
-        self.camImg = pg.ImageItem(border='w')
-        self.camImg.setImage(np.zeros((100, 100)))
-        self.vb = self.webcamGraph.addViewBox(invertY=True, invertX=False)
-        self.vb.setAspectLocked(True)
-        self.vb.addItem(self.camImg)
+        # Connect signals
+        self.lockButton.toggled.connect(self.sigPIDToggled)
+        self.positionSetButton.clicked.connect(
+            lambda: self.sigSetPosition.emit(float(self.positionEdit.text())))
+        self.autoTuneButton.clicked.connect(self.sigAutoTune)
+        
+        # Update PID values when edited
+        for edit in (self.kpEdit, self.kiEdit, self.kdEdit):
+            edit.editingFinished.connect(self.emitPIDValues)
 
-        # PROCESS DATA THREAD - ADD SOMEWHERE ELSE, NOT HERE, AS IT HAS NO GRAPHICAL ELEMENTS!
+    def emitPIDValues(self):
+        """Emit current PID values"""
+        try:
+            kp = float(self.kpEdit.text())
+            ki = float(self.kiEdit.text())
+            kd = float(self.kdEdit.text())
+            self.sigPIDValuesChanged.emit(kp, ki, kd)
+        except ValueError:
+            pass
 
-        # GUI layout below
-        grid = QtWidgets.QGridLayout()
-        self.setLayout(grid)
-        grid.addWidget(self.focusLockGraph, 0, 0, 1, 9)
-        grid.addWidget(self.webcamGraph, 0, 9, 4, 1)
-        grid.addWidget(self.focusCalibButton, 1, 2, 2, 1)
-        grid.addWidget(self.calibrationDisplay, 3, 0, 1, 2)
-        grid.addWidget(self.kpLabel, 1, 3)
-        grid.addWidget(self.kpEdit, 1, 4)
-        grid.addWidget(self.kiLabel, 2, 3)
-        grid.addWidget(self.kiEdit, 2, 4)
-        grid.addWidget(self.kdLabel, 3, 3)
-        grid.addWidget(self.kdEdit, 3, 4)
-        grid.addWidget(self.lockButton, 1, 5, 2, 1)
-        grid.addWidget(self.zStackBox, 4, 2)
-        grid.addWidget(self.zStepFromLabel, 3, 4)
-        grid.addWidget(self.zStepFromEdit, 4, 4)
-        grid.addWidget(self.zStepToLabel, 3, 5)
-        grid.addWidget(self.zStepToEdit, 4, 5)
-        # grid.addWidget(self.focusDataBox, 4, 0, 1, 2)
-        grid.addWidget(self.calibFromLabel, 1, 0)
-        grid.addWidget(self.calibFromEdit, 1, 1)
-        grid.addWidget(self.calibToLabel, 2, 0)
-        grid.addWidget(self.calibToEdit, 2, 1)
-        grid.addWidget(self.autoTuneBotton, 3, 2)
-        grid.addWidget(self.positionLabel, 1, 6)
-        grid.addWidget(self.positionEdit, 1, 7)
-        grid.addWidget(self.positionSetButton, 2, 6, 1, 2)
-        grid.addWidget(self.camDialogButton, 3, 6, 1, 2)
+    def updatePIDDisplay(self, timeData, pData, iData, dData):
+        """Update PID terms plot"""
+        self.pTermCurve.setData(timeData, pData)
+        self.iTermCurve.setData(timeData, iData)
+        self.dTermCurve.setData(timeData, dData)
+
+    def updateFocusPlot(self, timeData, positionData, setpoint):
+        """Update focus position plot"""
+        self.focusCurve.setData(timeData, positionData)
+        self.setpointLine.setValue(setpoint)
+
+    def updateCameraImage(self, img):
+        """Update camera display"""
+        self.camImg.setImage(img)

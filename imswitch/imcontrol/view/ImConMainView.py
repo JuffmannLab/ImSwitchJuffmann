@@ -56,6 +56,7 @@ class ImConMainView(QtWidgets.QMainWindow):
         rightDockInfos = {
             'Autofocus': _DockInfo(name='Autofocus', yPosition=0),
             'FocusLock': _DockInfo(name='Focus Lock', yPosition=0),
+            'iScatFocus': _DockInfo(name='iScat Focus', yPosition=0),
             'Laser': _DockInfo(name='Laser Control', yPosition=0),
             'EtSTED': _DockInfo(name='EtSTED', yPosition=0),
             'Positioner': _DockInfo(name='Positioner', yPosition=1),
@@ -71,6 +72,7 @@ class ImConMainView(QtWidgets.QMainWindow):
             'Watcher': _DockInfo(name='File Watcher', yPosition=3),
             'Tiling': _DockInfo(name='Tiling', yPosition=3),
             'DifferentialView': _DockInfo(name='Differential View', yPosition=3)
+            
         }
         leftDockInfos = {
             'Settings': _DockInfo(name='Detector Settings', yPosition=0),
