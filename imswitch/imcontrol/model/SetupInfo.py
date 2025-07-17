@@ -152,6 +152,29 @@ class FocusLockInfo:
 
     frameCroph: int
     """ Height of frame crop. """
+    
+@dataclass(frozen=True)
+class iScatFocusInfo:
+    camera: str
+    """ Detector name. """
+
+    positioner: str
+    """ Positioner name. """
+
+    updateFreq: int
+    """ Update frequency, in milliseconds. """
+
+    frameCropx: int
+    """ Starting X position of frame crop. """
+
+    frameCropy: int
+    """ Starting Y position of frame crop. """
+
+    frameCropw: int
+    """ Width of frame crop. """
+
+    frameCroph: int
+    """ Height of frame crop. """
 
 @dataclass(frozen=True)
 class AutofocusInfo:
