@@ -14,11 +14,15 @@ from ..basecontrollers import ImConWidgetController
 
 class iScatFocusController(ImConWidgetController):
     """Linked to iScatFocusWidget."""
+    
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+        self._widget.sigPIDToggled.connect(self.toggleFocus)
+        self._widget.sigSetPosition.connect(self.moveZ)
+        self._widget.sigAutoTune.connect(self.autoTune)
 
         # Reads the specific values from the configuration file. 
         if self._setupInfo.iScatFocus is None:
@@ -39,13 +43,8 @@ class iScatFocusController(ImConWidgetController):
         self._widget.kdEdit.textChanged.connect(self.unlockFocus)
 
         self._widget.lockButton.clicked.connect(self.toggleFocus)
-        self._widget.camDialogButton.clicked.connect(self.cameraDialog)
         self._widget.positionSetButton.clicked.connect(self.moveZ)
-        self._widget.focusCalibButton.clicked.connect(self.focusCalibrationStart)
-        self._widget.calibCurveButton.clicked.connect(self.showCalibrationCurve)
         self._widget.autoTuneButton.clicked.connect(lambda: self.autoTune(step_size=0.5))
-
-        self._widget.zStackBox.stateChanged.connect(self.zStackVarChange)
 
         # Set the initial values
         self.setPointSignal = 0
@@ -58,11 +57,15 @@ class iScatFocusController(ImConWidgetController):
         self.lockPosition = 0
         self.currentPosition = 0
         self.lastZ = 0
-        self.buffer = 40
+        self.buffer = 50
         self.currPoint = 0
         self.setPointData = np.zeros(self.buffer)
         self.timeData = np.zeros(self.buffer)
         self.lockingData = np.zeros(7)
+        
+        self.pTermData = np.zeros(self.buffer)
+        self.iTermData = np.zeros(self.buffer)
+        self.dTermData = np.zeros(self.buffer)
         
         # PID diagnostics
         self.p_term_data = np.zeros(self.buffer)
@@ -86,21 +89,38 @@ class iScatFocusController(ImConWidgetController):
             super().__del__()
 
     def unlockFocus(self):
+        """Release focus lock and reset controller state."""
         if self.locked:
             self.locked = False
+            if hasattr(self, 'pid'):
+                self.pid.reset()
             self._widget.lockButton.setChecked(False)
-            self._widget.focusPlot.removeItem(self._widget.focusLockGraph.lineLock)
+            self._widget.setpointLine.hide()  # Hide rather than remove
+            self.__logger.debug("Focus lock released")
 
     def toggleFocus(self):
+        """Toggle focus lock state with proper PID initialization."""
         if self._widget.lockButton.isChecked():
-            absz = self._master.positionersManager[self.positioner].get_abs()
-            self.lockFocus(float(self._widget.kpEdit.text()),
-                           float(self._widget.kiEdit.text()),
-                           absz)
-            self._widget.lockButton.setText('Unlock')
+            try:
+                # Get current position and PID parameters
+                current_voltage = self._master.positionersManager[self.positioner].get_abs()
+                kp = float(self._widget.kpEdit.text())
+                ki = float(self._widget.kiEdit.text())
+                kd = float(self._widget.kdEdit.text()) 
+                
+                # Initialize PID lock
+                self.lockFocus(kp, ki, kd, current_voltage)
+                self._widget.lockButton.setText('Unlock')
+                self.__logger.info(f"Focus locked at {current_voltage:.3f} V "
+                                f"with PID: P={kp:.4f}, I={ki:.4f}, D={kd:.4f}")
+                
+            except ValueError as e:
+                self._widget.lockButton.setChecked(False)
+                self.__logger.error(f"Invalid PID parameters: {str(e)}")
         else:
             self.unlockFocus()
             self._widget.lockButton.setText('Lock')
+            self.__logger.info("Focus unlocked")
 
     def cameraDialog(self):
         self._master.detectorsManager[self.camera].openPropertiesDialog()
@@ -113,32 +133,14 @@ class iScatFocusController(ImConWidgetController):
         self._master.positionersManager[self.positioner].setPosition(target_voltage, 0)
         self.__logger.debug(f'Move Z-piezo to {target_voltage} V')
 
-    def focusCalibrationStart(self):
-        self.__logger.debug('Start focus calibration thread and calibrate')
-
-    def showCalibrationCurve(self):
-        self.__logger.debug('Show calibration curve')
-
-    def zStackVarChange(self):
-        if self.zStackVar:
-            self.zStackVar = False
-        else:
-            self.zStackVar = True
-
-    def twoFociVarChange(self):
-        if self.twoFociVar:
-            self.twoFociVar = False
-        else:
-            self.twoFociVar = True
-
     # Update focus lock
     def update(self):
         # 1 Grab camera frame
         img = self.__processDataThread.grabCameraFrame()
         # 2 Pass camera frame and get back focusSignalPosition from ProcessDataThread
-        self.setPointSignal = self.__processDataThread.update(self.twoFociVar)
-        # 3 Update PI with the new setPointSignal and get back the distance to move, send to
-        # update the PI control, and then send the move-distance to the z-piezo
+        self.setPointSignal = self.__processDataThread.update()
+        # 3 Update PID with the new setPointSignal and get back the distance to move, send to
+        # update the PID control, and then send the move-distance to the z-piezo
         if self.locked:
             voltage_adjustment = self.updatePID()
             self._updateDiagnostics()
@@ -151,10 +153,29 @@ class iScatFocusController(ImConWidgetController):
         self.updateSetPointData()
         self._widget.camImg.setImage(img)
         if self.currPoint < self.buffer:
-            self._widget.focusPlotCurve.setData(self.timeData[1:self.currPoint],
-                                               self.setPointData[1:self.currPoint])
+            self._widget.updateFocusPlot(
+                self.timeData[1:self.currPoint],
+                self.setPointData[1:self.currPoint],
+                self.setPointSignal
+            )
+            self._widget.updatePIDDisplay(
+                self.timeData[1:self.currPoint],
+                self.pTermData[1:self.currPoint],
+                self.iTermData[1:self.currPoint],
+                self.dTermData[1:self.currPoint]
+            )
         else:
-            self._widget.focusPlotCurve.setData(self.timeData, self.setPointData)
+            self._widget.updateFocusPlot(
+                self.timeData,
+                self.setPointData,
+                self.setPointSignal
+            )
+            self._widget.updatePIDDisplay(
+                self.timeData,
+                self.pTermData,
+                self.iTermData,
+                self.dTermData
+            )
 
     def updateSetPointData(self):
         if self.currPoint < self.buffer:
@@ -210,6 +231,13 @@ class iScatFocusController(ImConWidgetController):
             self._widget.p_term_curve.setData(x_data, self.p_term_data[:self.currPoint])
             self._widget.i_term_curve.setData(x_data, self.i_term_data[:self.currPoint])
             self._widget.d_term_curve.setData(x_data, self.d_term_data[:self.currPoint])
+            
+    def clearPlots(self):
+        """Clear all plot data"""
+        self.focusCurve.clear()
+        self.pTermCurve.clear()
+        self.iTermCurve.clear()
+        self.dTermCurve.clear()
             
     def autoTune(self, step_size=0.5, settle_threshold=0.01):
         """Automated tuning routine"""
@@ -286,43 +314,6 @@ class ProcessDataThread(Thread):
         
         return x_fit_center
 
-
-class FocusCalibThread(Thread):
-    def __init__(self, focusWidget, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.z = focusWidget.z
-        self.focusWidget = focusWidget  # mainwidget será FocusLockWidget
-        self.um = Q_(1, 'micrometer')
-
-    def run(self):
-        self.signalData = []
-        self.positionData = []
-        self.start = float(self.focusWidget.CalibFromEdit.text())
-        self.end = float(self.focusWidget.CalibToEdit.text())
-        self.scan_list = np.round(np.linspace(self.start, self.end, 20), 2)
-        for x in self.scan_list:
-            self.z.move_absZ(x * self.um)
-            time.sleep(0.5)
-            self.focusCalibSignal = \
-                self.focusWidget.processDataThread.focusSignal
-            self.signalData.append(self.focusCalibSignal)
-            self.positionData.append(self.z.absZ.magnitude)
-
-        self.poly = np.polyfit(self.positionData, self.signalData, 1)
-        self.calibrationResult = np.around(self.poly, 4)
-        self.export()
-
-    def export(self):
-        np.savetxt('calibration.txt', self.calibrationResult)
-        cal = self.poly[0]
-        calText = '1 px --> {} nm'.format(np.round(1000 / cal, 1))
-        self.focusWidget.calibrationDisplay.setText(calText)
-        d = [self.positionData, self.calibrationResult[::-1]]
-        self.savedCalibData = [self.positionData,
-                               self.signalData,
-                               np.polynomial.polynomial.polyval(d[0], d[1])]
-        np.savetxt('calibrationcurves.txt', self.savedCalibData)
 
 
 class PID:

@@ -307,6 +307,10 @@ class SetupInfo:
     """ Focus lock settings. Required to be defined to use focus lock
     functionality. """
     
+    iScatFocus: Optional[FocusLockInfo] = field(default_factory=lambda: None)
+    """ Focus lock settings. Required to be defined to use focus lock
+    functionality. """
+    
     autofocus: Optional[AutofocusInfo] = field(default_factory=lambda: None)
     """ Autofocus  settings. Required to be defined to use autofocus 
     functionality. """
