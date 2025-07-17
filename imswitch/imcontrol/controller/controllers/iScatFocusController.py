@@ -24,6 +24,7 @@ class iScatFocusController(ImConWidgetController):
         self._widget.sigSetPosition.connect(self.moveZ)
         self._widget.sigAutoTune.connect(self.autoTune)
         self._widget.sigPIDValuesChanged.connect(self.updatePIDParameters)
+        self._widget.sigCalibrate.connect(self.runCalibration)
 
         # Reads the specific values from the configuration file. 
         if self._setupInfo.iScatFocus is None:
@@ -47,12 +48,15 @@ class iScatFocusController(ImConWidgetController):
         self._widget.positionSetButton.clicked.connect(self.moveZ)
         self._widget.autoTuneButton.clicked.connect(lambda: self.autoTune(step_size=0.5))
 
+        # Calibration storage
+        self.volts_per_px = None  # Calibration slope (V/px)
+        self.px_per_volt = None   # Inverse calibration (px/V)
+        self.zero_offset_px = None # Position at 0V
+
         # Set the initial values
         self.setPointSignal = 0
         self.locked = False
         self.aboutToLock = False
-        self.zStackVar = False
-        self.twoFociVar = False
         self.noStepVar = True
         self.focusTime = 1000 / self.updateFreq  # time between focus signal updates in ms
         self.lockPosition = 0
@@ -89,6 +93,47 @@ class iScatFocusController(ImConWidgetController):
         self.__processDataThread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
+
+    def runCalibration(self, from_V: float, to_V: float, steps: int):
+        """Perform voltage-to-pixel calibration"""
+        try:
+            voltages = np.linspace(from_V, to_V, steps)
+            positions = []
+            
+            self.__logger.info(f"Starting calibration from {from_V}V to {to_V}V")
+            
+            for v in voltages:
+                # Move to voltage
+                self._master.positionersManager[self.positioner].setPosition(v, 0)
+                time.sleep(0.5)  # Settling time
+                
+                # Capture position
+                img = self.__processDataThread.grabCameraFrame()
+                pos_px = self.__processDataThread.analyzeFrame(img)
+                positions.append(pos_px)
+                self.__logger.debug(f"Voltage {v:.2f}V -> {pos_px:.1f} px")
+            
+            # Linear fit (positions = a*voltage + b)
+            coeffs = np.polyfit(voltages, positions, 1)
+            self.volts_per_px = coeffs[0]  # V/px
+            self.px_per_volt = 1/coeffs[0]  # px/V
+            self.zero_offset_px = coeffs[1]  # px at 0V
+            
+            # Update UI
+            self._widget.updateCalibrationResult(coeffs[0], coeffs[1])
+            self.__logger.info(
+                f"Calibration complete: {self.volts_per_px:.3f} V/px | "
+                f"Zero at {self.zero_offset_px:.1f} px"
+            )
+            
+            # Update PID setpoint if locked
+            if self.locked:
+                current_V = self._master.positionersManager[self.positioner].get_abs()
+                self.pid.setpoint = self.zero_offset_px + current_V * self.px_per_volt
+            
+        except Exception as e:
+            self.__logger.error(f"Calibration failed: {str(e)}")
+
 
     def unlockFocus(self):
         """Release focus lock and reset controller state."""
@@ -299,42 +344,82 @@ class iScatFocusController(ImConWidgetController):
 
 class ProcessDataThread(Thread):
     def __init__(self, controller, *args, **kwargs):
-        self._controller = controller
         super().__init__(*args, **kwargs)
+        self._controller = controller
+        self._last_valid_position = 0  # Fallback position
+        self._fit_fail_count = 0
+        self._max_fit_fails = 3  # Allow 3 consecutive failures before fallback
 
     def grabCameraFrame(self):
-        detectorManager = self._controller._master.detectorsManager[self._controller.camera]
-        self.latestimg = detectorManager.getLatestFrame()
-        self.latestimg = np.swapaxes(self.latestimg, 0, 1)
-        return self.latestimg
+        """Grab frame with error handling"""
+        try:
+            detector = self._controller._master.detectorsManager[self._controller.camera]
+            img = detector.getLatestFrame()
+            return np.swapaxes(img, 0, 1) if img is not None else None
+        except Exception as e:
+            self._controller._logger.error(f"Frame grab failed: {str(e)}")
+            return None
+
+    def analyzeFrame(self, img):
+        """Main analysis method with calibration support"""
+        if img is None:
+            return self._last_valid_position
+
+        try:
+            # Gaussian filter with dynamic sigma based on image size
+            sigma = min(img.shape) * 0.02  # ~2% of image size
+            img_filtered = ndi.gaussian_filter(img, sigma=sigma)
+            
+            # Find brightest region
+            coords = peak_local_max(img_filtered, num_peaks=1, min_distance=20)
+            if len(coords) == 0:
+                return self._last_valid_position
+                
+            y, x = coords[0]
+            return self._fitSubpixelPosition(img_filtered, x, y)
+            
+        except Exception as e:
+            self._controller._logger.warning(f"Analysis error: {str(e)}")
+            return self._last_valid_position
+
+    def _fitSubpixelPosition(self, img, approx_x, approx_y):
+        """Robust subpixel fitting with fallback"""
+
+        try:
+            # Horizontal line profile
+            line_profile = img[approx_y, max(0,approx_x-50):approx_x+50]
+            x = np.arange(len(line_profile))
+            
+            # Gaussian fit
+            popt, _ = curve_fit(
+                self.gaussian_1d,
+                x, line_profile,
+                p0=[line_profile.max(), 50, 10, line_profile.min()],
+                bounds=([0, 0, 1, 0], [np.inf, 100, 100, np.inf]))
+            
+            self._fit_fail_count = 0
+            fitted_x = max(0, approx_x-50) + popt[1]
+            self._last_valid_position = fitted_x
+            return fitted_x
+        
+        except Exception as e:
+            self._fit_fail_count += 1
+            if self._fit_fail_count >= self._max_fit_fails:
+                # Fallback to center of mass
+                com = ndi.center_of_mass(img[max(0,approx_y-30):approx_y+30, 
+                                           max(0,approx_x-30):approx_x+30])
+                self._last_valid_position = approx_x - 30 + com[1]
+                return self._last_valid_position
+            return self._last_valid_position
 
     def gaussian_1d(self, x, a, x0, sigma, offset):
+        """1D Gaussian model for fitting"""
         return a * np.exp(-((x - x0) ** 2) / (2 * sigma ** 2)) + offset
 
     def update(self):
-        # Apply Gaussian filter
-        imagearraygf = ndi.filters.gaussian_filter(self.latestimg, 7)
-        
-        # Find approximate center (Y-axis)
-        centercoords = np.where(imagearraygf == np.array(imagearraygf.max()))
-        y_center = centercoords[0][0]
-        x_center = centercoords[1][0]
-        
-        # Extract horizontal line profile through brightest point
-        line_profile = imagearraygf[y_center, :]
-        x_data = np.arange(len(line_profile))
-        
-        try:
-            # Fit 1D Gaussian to horizontal profile
-            popt, _ = curve_fit(self.gaussian_1d, x_data, line_profile,
-                               p0=[line_profile.max(), x_center, 10, line_profile.min()])
-            x_fit_center = popt[1]  # This is our X-position measurement
-        except:
-            # Fallback to center of mass if fit fails
-            x_fit_center = np.sum(x_data * line_profile) / np.sum(line_profile)
-        
-        return x_fit_center
-
+        """Interface-compatible update method"""
+        img = self.grabCameraFrame()
+        return self.analyzeFrame(img)
 
 
 class PID:
@@ -351,6 +436,7 @@ class PID:
         self._integral = 0
         self._last_derivative = 0
         self._output = 0
+        self.volts_per_px = None
         
         # Anti-windup limits
         self.integral_min = -10  # Minimum output voltage
@@ -359,8 +445,17 @@ class PID:
         # Low-pass filter for derivative term
         self.derivative_alpha = 0.2  # Smoothing factor (0.1-0.5)
 
-    def update(self, current_value):
-        error = self.setpoint - current_value
+    def setCalibration(self, volts_per_px):
+        """Update calibration values"""
+        self.volts_per_px = volts_per_px
+
+    def update(self, current_px):
+        # Convert error to "effective volts"
+        error_px = self.setpoint - current_px
+        if self.volts_per_px:
+            error = error_px * self.volts_per_px
+        else:
+            error = error_px  # Fallback (assumes 1:1)
         
         # Proportional term
         p_term = self.kp * error

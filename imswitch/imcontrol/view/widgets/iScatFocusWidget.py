@@ -41,6 +41,35 @@ class iScatFocusWidget(Widget):
         self.positionEdit.setValidator(QtGui.QDoubleValidator(-10, 10, 3))
         self.positionSetButton = guitools.BetterPushButton('Set (V)')
 
+        # Calibration UI Elements
+        self.calibGroup = QtWidgets.QGroupBox("Calibration")
+        self.calibFromLabel = QtWidgets.QLabel("Start (V):")
+        self.calibFromEdit = QtWidgets.QLineEdit("-2")
+        self.calibFromEdit.setValidator(QtGui.QDoubleValidator(-10, 10, 3))
+        
+        self.calibToLabel = QtWidgets.QLabel("End (V):")
+        self.calibToEdit = QtWidgets.QLineEdit("2")
+        self.calibToEdit.setValidator(QtGui.QDoubleValidator(-10, 10, 3))
+        
+        self.calibStepsLabel = QtWidgets.QLabel("Steps:")
+        self.calibStepsEdit = QtWidgets.QLineEdit("50")
+        self.calibStepsEdit.setValidator(QtGui.QIntValidator(2, 50))
+        
+        self.calibButton = guitools.BetterPushButton("Run Calibration")
+        self.calibResultLabel = QtWidgets.QLabel("Calibration: Not performed")
+        
+        # Calibration Layout
+        calibLayout = QtWidgets.QGridLayout()
+        calibLayout.addWidget(self.calibFromLabel, 0, 0)
+        calibLayout.addWidget(self.calibFromEdit, 0, 1)
+        calibLayout.addWidget(self.calibToLabel, 1, 0)
+        calibLayout.addWidget(self.calibToEdit, 1, 1)
+        calibLayout.addWidget(self.calibStepsLabel, 2, 0)
+        calibLayout.addWidget(self.calibStepsEdit, 2, 1)
+        calibLayout.addWidget(self.calibButton, 3, 0, 1, 2)
+        calibLayout.addWidget(self.calibResultLabel, 4, 0, 1, 2)
+        self.calibGroup.setLayout(calibLayout)
+
         # Diagnostics Display
         self.diagGroup = QtWidgets.QGroupBox("Diagnostics")
         self.pidTermsGraph = pg.GraphicsLayoutWidget()
@@ -96,16 +125,31 @@ class iScatFocusWidget(Widget):
         self.layout().addWidget(self.diagGroup, 2, 0)
         self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
         self.layout().addWidget(self.camView, 2, 2)
+        self.layout().addWidget(self.calibGroup, 3, 0, 1, 2)
 
         # Connect signals
         self.lockButton.toggled.connect(self.sigPIDToggled)
         self.positionSetButton.clicked.connect(
             lambda: self.sigSetPosition.emit(float(self.positionEdit.text())))
         self.autoTuneButton.clicked.connect(self.sigAutoTune)
+        self.sigCalibrate = QtCore.Signal(float, float, int)  # from_V, to_V, steps
+        self.calibButton.clicked.connect(
+            lambda: self.sigCalibrate.emit(
+                float(self.calibFromEdit.text()),
+                float(self.calibToEdit.text()),
+                int(self.calibStepsEdit.text())
+            )
+        )
         
         # Update PID values when edited
         for edit in (self.kpEdit, self.kiEdit, self.kdEdit):
             edit.editingFinished.connect(self.emitPIDValues)
+
+    def updateCalibrationResult(self, slope, intercept):
+        """Update calibration display"""
+        text = (f"Calibration: {slope:.3f} V/px | {1/slope:.3f} px/V | "
+                f"Zero at {intercept:.2f} px")
+        self.calibResultLabel.setText(text)
 
     def emitPIDValues(self):
         """Emit current PID values"""
