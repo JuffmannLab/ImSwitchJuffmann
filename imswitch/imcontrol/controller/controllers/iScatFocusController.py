@@ -95,45 +95,65 @@ class iScatFocusController(ImConWidgetController):
             super().__del__()
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
-        """Perform voltage-to-pixel calibration"""
+
         try:
-            voltages = np.linspace(from_V, to_V, steps)
+            # 1. Prepare measurement points
+            test_voltages = np.linspace(from_V, to_V, steps)
             positions = []
             
-            self.__logger.info(f"Starting calibration from {from_V}V to {to_V}V")
+            # 2. Store initial position
+            initial_V = self._master.positionersManager[self.positioner].get_abs()
             
-            for v in voltages:
-                # Move to voltage
+            # 3. Collect data
+            for v in test_voltages:
+                # Move and wait for stabilization
                 self._master.positionersManager[self.positioner].setPosition(v, 0)
-                time.sleep(0.5)  # Settling time
+                time.sleep(1.0)  # Increased settling time
                 
-                # Capture position
-                img = self.__processDataThread.grabCameraFrame()
-                pos_px = self.__processDataThread.analyzeFrame(img)
-                positions.append(pos_px)
-                self.__logger.debug(f"Voltage {v:.2f}V -> {pos_px:.1f} px")
+                # Capture multiple samples
+                sample_pos = []
+                for _ in range(5):  # Take 5 samples per voltage
+                    img = self.__processDataThread.grabCameraFrame()
+                    pos = self.__processDataThread.getBeamPosition(img)
+                    if pos is not None:
+                        sample_pos.append(pos)
+                    time.sleep(0.1)
+                
+                if not sample_pos:
+                    raise ValueError(f"No valid positions at {v}V")
+                    
+                median_pos = np.median(sample_pos)
+                positions.append(median_pos)
+                self.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px")
             
-            # Linear fit (positions = a*voltage + b)
-            coeffs = np.polyfit(voltages, positions, 1)
-            self.volts_per_px = coeffs[0]  # V/px
-            self.px_per_volt = 1/coeffs[0]  # px/V
-            self.zero_offset_px = coeffs[1]  # px at 0V
-            
-            # Update UI
-            self._widget.updateCalibrationResult(coeffs[0], coeffs[1])
-            self.__logger.info(
-                f"Calibration complete: {self.volts_per_px:.3f} V/px | "
-                f"Zero at {self.zero_offset_px:.1f} px"
+            # 4. Robust linear regression
+            coeffs, residuals, _, _ = np.linalg.lstsq(
+                np.vstack([test_voltages, np.ones(len(test_voltages))]).T,
+                positions,
+                rcond=None
             )
             
-            # Update PID setpoint if locked
-            if self.locked:
-                current_V = self._master.positionersManager[self.positioner].get_abs()
-                self.pid.setpoint = self.zero_offset_px + current_V * self.px_per_volt
+            # 5. Validate results
+            px_per_volt = coeffs[0]
+            if abs(px_per_volt) < 1:  # Unrealistically small ratio
+                raise ValueError(f"Implausible calibration: {px_per_volt:.2f} px/V")
             
+            # 6. Store and update
+            self.px_per_volt = px_per_volt
+            self.volts_per_px = 1/px_per_volt
+            self.zero_offset_px = coeffs[1]
+            
+            # 7. Restore original position
+            self._master.positionersManager[self.positioner].setPosition(initial_V, 0)
+            
+            # 8. Update UI
+            self._widget.updateCalibrationResult(
+                slope=self.volts_per_px,
+                intercept=self.zero_offset_px
+            )
+        
         except Exception as e:
             self.__logger.error(f"Calibration failed: {str(e)}")
-
 
     def unlockFocus(self):
         """Release focus lock and reset controller state."""
@@ -360,6 +380,40 @@ class ProcessDataThread(Thread):
             self._controller._logger.error(f"Frame grab failed: {str(e)}")
             return None
 
+    def getBeamPosition(self, img=None):
+        """More robust position detection with full-frame analysis"""
+        if img is None:
+            img = self.grabCameraFrame()
+            if img is None:
+                return None
+        
+        try:
+            # 1. Apply adaptive Gaussian filter
+            sigma = max(img.shape) * 0.01  # Dynamic smoothing
+            filtered = ndi.gaussian_filter(img, sigma=sigma)
+            
+            # 2. Find brightest region (avoid edge artifacts)
+            center = np.array(filtered.shape) // 2
+            roi_size = min(filtered.shape) // 3
+            roi = filtered[
+                center[0]-roi_size:center[0]+roi_size,
+                center[1]-roi_size:center[1]+roi_size
+            ]
+            
+            # 3. Subpixel fitting with error bounds
+            com = ndi.center_of_mass(roi)
+            global_com = (center - roi_size + np.array(com))[::-1]  # (x,y)
+            
+            # 4. Validate position
+            if not np.all(np.isfinite(global_com)):
+                raise ValueError("Invalid position detected")
+                
+            return global_com[0]  # Return x position
+        
+        except Exception as e:
+            self._controller._logger.error(f"Position detection failed: {str(e)}")
+            return None
+        
     def analyzeFrame(self, img):
         """Main analysis method with calibration support"""
         if img is None:

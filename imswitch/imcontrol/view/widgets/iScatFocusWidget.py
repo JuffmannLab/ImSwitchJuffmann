@@ -145,21 +145,25 @@ class iScatFocusWidget(Widget):
         for edit in (self.kpEdit, self.kiEdit, self.kdEdit):
             edit.editingFinished.connect(self.emitPIDValues)
 
+    # In iScatFocusWidget:
     def updateCalibrationResult(self, slope, intercept):
-        """Update calibration display"""
-        text = (f"Calibration: {slope:.3f} V/px | {1/slope:.3f} px/V | "
-                f"Zero at {intercept:.2f} px")
+        """More informative display"""
+        px_per_volt = 1/slope
+        text = (f"Calibration: {px_per_volt:.1f} px/V | "
+                f"{slope:.3f} V/px\n"
+                f"Zero at: {intercept:.1f} px | "
+                f"Range: {self.calibFromEdit.text()} to {self.calibToEdit.text()}V")
+        
+        # Color coding for plausibility
+        if abs(px_per_volt) < 2:  # Unrealistically small
+            color = "red"
+        elif abs(px_per_volt) > 100:  # Unrealistically large
+            color = "orange"
+        else:
+            color = "green"
+        
         self.calibResultLabel.setText(text)
-
-    def emitPIDValues(self):
-        """Emit current PID values"""
-        try:
-            kp = float(self.kpEdit.text())
-            ki = float(self.kiEdit.text())
-            kd = float(self.kdEdit.text())
-            self.sigPIDValuesChanged.emit(kp, ki, kd)
-        except ValueError:
-            pass
+        self.calibResultLabel.setStyleSheet(f"color: {color};")
 
     def updatePIDDisplay(self, timeData, pData, iData, dData):
         """Update PID terms plot"""
