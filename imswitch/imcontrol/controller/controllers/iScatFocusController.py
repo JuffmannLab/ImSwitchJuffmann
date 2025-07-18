@@ -231,12 +231,6 @@ class iScatFocusController(ImConWidgetController):
                 self.setPointData,
                 self.setPointSignal
             )
-            self._widget.updatePIDDisplay(
-                self.timeData,
-                self.pTermData,
-                self.iTermData,
-                self.dTermData
-            )
 
     def updateSetPointData(self):
         if self.currPoint < self.buffer:

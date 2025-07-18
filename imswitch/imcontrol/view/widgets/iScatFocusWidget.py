@@ -10,6 +10,7 @@ class iScatFocusWidget(Widget):
     sigPIDValuesChanged = QtCore.Signal(float, float, float)  # kp, ki, kd
     sigSetPosition = QtCore.Signal(float)  # Target position (V)
     sigAutoTune = QtCore.Signal()
+    sigCalibrate = QtCore.Signal(float, float, int)  # from_V, to_V, steps
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -109,14 +110,13 @@ class iScatFocusWidget(Widget):
         self.layout().addWidget(self.positionGroup, 1, 0)
         self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
         self.layout().addWidget(self.camView, 2, 2)
-        self.layout().addWidget(self.calibGroup, 3, 0, 1, 2)
+        self.layout().addWidget(self.calibGroup, 2, 0, 1, 2)
 
         # Connect signals
         self.lockButton.toggled.connect(self.sigPIDToggled)
         self.positionSetButton.clicked.connect(
             lambda: self.sigSetPosition.emit(float(self.positionEdit.text())))
         self.autoTuneButton.clicked.connect(self.sigAutoTune)
-        self.sigCalibrate = QtCore.Signal(float, float, int)  # from_V, to_V, steps
         self.calibButton.clicked.connect(
             lambda: self.sigCalibrate.emit(
                 float(self.calibFromEdit.text()),
