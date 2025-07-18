@@ -72,11 +72,6 @@ class iScatFocusController(ImConWidgetController):
         self.pTermData = np.zeros(self.buffer)
         self.iTermData = np.zeros(self.buffer)
         self.dTermData = np.zeros(self.buffer)
-        
-        # PID diagnostics
-        self.p_term_data = np.zeros(self.buffer)
-        self.i_term_data = np.zeros(self.buffer)
-        self.d_term_data = np.zeros(self.buffer)
 
         # Starts acquisition. I don't know if this can cause problems if, the camera of interest is also used for acquisition
         self._master.detectorsManager[self.camera].startAcquisition()
@@ -95,64 +90,97 @@ class iScatFocusController(ImConWidgetController):
             super().__del__()
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
-
         try:
-            # 1. Prepare measurement points
+            # 1. Prepare measurement points with hysteresis compensation
             test_voltages = np.linspace(from_V, to_V, steps)
-            positions = []
+            test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
             
             # 2. Store initial position
             initial_V = self._master.positionersManager[self.positioner].get_abs()
+            positions = []
             
-            # 3. Collect data
-            for v in test_voltages:
-                self._master.positionersManager[self.positioner].setPosition(v, 0)
-                time.sleep(1.0)
+            # 3. Enhanced measurement collection
+            for i, v in enumerate(test_voltages):
+                # Move with overshoot compensation
+                if i > 0:
+                    overshoot = 0.1 * (v - test_voltages[i-1])
+                    self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
+                    time.sleep(0.1)
                 
-                # Capture multiple samples
+                # Final precise positioning
+                self._master.positionersManager[self.positioner].setPosition(v, 0)
+                
+                # Dynamic settling time based on step size
+                step_size = abs(v - test_voltages[i-1]) if i > 0 else 0
+                settle_time = max(0.5, step_size * 0.5)  # 0.5s + 0.5s per volt
+                time.sleep(settle_time)
+                
+                # Capture multiple samples with validation
                 sample_pos = []
-                for _ in range(10):  # Take 10 samples per voltage step
+                for _ in range(10):
                     img = self.__processDataThread.grabCameraFrame()
                     pos = self.__processDataThread.getBeamPosition(img)
                     if pos is not None:
                         sample_pos.append(pos)
-                    time.sleep(0.1)
+                    time.sleep(0.05)
                 
-                if not sample_pos:
-                    raise ValueError(f"No valid positions at {v}V")
+                if len(sample_pos) < 5:
+                    raise ValueError(f"Insufficient valid positions at {v}V")
                     
-                median_pos = np.median(sample_pos)
+                # Use median and IQR filtering
+                q75, q25 = np.percentile(sample_pos, [75, 25])
+                iqr = q75 - q25
+                valid_pos = [p for p in sample_pos if (q25 - 1.5*iqr) < p < (q75 + 1.5*iqr)]
+                median_pos = np.median(valid_pos)
                 positions.append(median_pos)
-                self.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px")
+                
+                self.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px (n={len(valid_pos)})")
             
-            # 4. Robust linear regression
-            coeffs, residuals, _, _ = np.linalg.lstsq(
-                np.vstack([test_voltages, np.ones(len(test_voltages))]).T,
-                positions,
-                rcond=None
-            )
+            # 4. Split forward and backward measurements
+            n = len(test_voltages)//2
+            forward_voltages = test_voltages[:n]
+            forward_positions = positions[:n]
+            backward_voltages = test_voltages[n:]
+            backward_positions = positions[n:]
             
-            # 5. Validate results
-            px_per_volt = coeffs[0]
-            if abs(px_per_volt) < 1:  # Unrealistically small ratio
+            # 5. Two-way linear regression
+            def fit_line(voltages, positions):
+                A = np.vstack([voltages, np.ones(len(voltages))]).T
+                return np.linalg.lstsq(A, positions, rcond=None)[0]
+            
+            m_forward, b_forward = fit_line(forward_voltages, forward_positions)
+            m_backward, b_backward = fit_line(backward_voltages, backward_positions)
+            
+            # 6. Use average of both directions
+            px_per_volt = (m_forward + m_backward) / 2
+            zero_offset = (b_forward + b_backward) / 2
+            
+            # 7. Validate results
+            if abs(px_per_volt) < 1:
                 raise ValueError(f"Implausible calibration: {px_per_volt:.2f} px/V")
             
-            # 6. Store and update
+            # 8. Store and update
             self.px_per_volt = px_per_volt
             self.volts_per_px = 1/px_per_volt
-            self.zero_offset_px = coeffs[1]
+            self.zero_offset_px = zero_offset
             
-            # 7. Restore original position
+            # 9. Restore original position
             self._master.positionersManager[self.positioner].setPosition(initial_V, 0)
             
-            # 8. Update UI
+            # 10. Update UI with both forward and backward results
             self._widget.updateCalibrationResult(
                 slope=self.volts_per_px,
-                intercept=self.zero_offset_px
+                intercept=self.zero_offset_px,
+                forward_slope=1/m_forward,
+                backward_slope=1/m_backward
             )
-        
+            
+            self.__logger.info(f"Calibration complete: {px_per_volt:.2f} px/V, "
+                            f"Zero at {zero_offset:.2f} px")
+            
         except Exception as e:
             self.__logger.error(f"Calibration failed: {str(e)}")
+            raise
 
     def unlockFocus(self):
         """Release focus lock and reset controller state."""
@@ -209,7 +237,6 @@ class iScatFocusController(ImConWidgetController):
         # update the PID control, and then send the move-distance to the z-piezo
         if self.locked:
             voltage_adjustment = self.updatePID()
-            self._updateDiagnostics()
             if abs(voltage_adjustment) > 0.001:  # 2mV threshold
                 new_voltage = self.currentPosition + voltage_adjustment
                 # Clamp to -10V to +10V range
@@ -248,12 +275,6 @@ class iScatFocusController(ImConWidgetController):
         # Get PID correction
         correction = self.pid.update(self.setPointSignal)
         
-        # Record terms for diagnostics
-        if self.currPoint < self.buffer:
-            self.p_term_data[self.currPoint] = self.pid.kp * self.pid._last_error
-            self.i_term_data[self.currPoint] = self.pid.ki * self.pid._integral
-            self.d_term_data[self.currPoint] = self.pid.kd * self.pid._last_derivative
-        
         # Safety checks
         if abs(correction) > 1.0:  # 1V max correction
             self.__logger.warning("Large correction detected! Unlocking for safety.")
@@ -288,22 +309,7 @@ class iScatFocusController(ImConWidgetController):
                           kp=kp, ki=ki, kd=kd)
             self.lockPosition = current_voltage
             self.locked = True
-            self._initDiagnosticsPlot()
-            
-    def _initDiagnosticsPlot(self):
-        """Initialize PID terms visualization"""
-        self._widget.pidPlot.clear()
-        self._widget.p_term_curve = self._widget.pidPlot.plot(pen='r', name='P')
-        self._widget.i_term_curve = self._widget.pidPlot.plot(pen='g', name='I')
-        self._widget.d_term_curve = self._widget.pidPlot.plot(pen='b', name='D')
     
-    def _updateDiagnostics(self):
-        """Update PID terms visualization"""
-        if self.currPoint > 1:
-            x_data = self.timeData[:self.currPoint]
-            self._widget.p_term_curve.setData(x_data, self.p_term_data[:self.currPoint])
-            self._widget.i_term_curve.setData(x_data, self.i_term_data[:self.currPoint])
-            self._widget.d_term_curve.setData(x_data, self.d_term_data[:self.currPoint])
             
     def clearPlots(self):
         """Clear all plot data"""
@@ -368,38 +374,47 @@ class ProcessDataThread(Thread):
             return None
 
     def getBeamPosition(self, img=None):
-        """More robust position detection with full-frame analysis"""
+        """More robust position detection with dynamic ROI"""
         if img is None:
             img = self.grabCameraFrame()
             if img is None:
-                return None
+                return self._last_valid_position
         
         try:
-            # 1. Apply adaptive Gaussian filter
-            sigma = max(img.shape) * 0.01  # Dynamic smoothing
-            filtered = ndi.gaussian_filter(img, sigma=sigma)
+            # Dynamic ROI based on last valid position
+            if np.isfinite(self._last_valid_position):
+                x_center = int(self._last_valid_position)
+                roi_width = min(100, img.shape[1]//3)
+                x_start = max(0, x_center - roi_width//2)
+                x_end = min(img.shape[1], x_center + roi_width//2)
+                roi = img[:, x_start:x_end]
+            else:
+                roi = img
             
-            # 2. Find brightest region (avoid edge artifacts)
-            center = np.array(filtered.shape) // 2
-            roi_size = min(filtered.shape) // 3
-            roi = filtered[
-                center[0]-roi_size:center[0]+roi_size,
-                center[1]-roi_size:center[1]+roi_size
-            ]
+            # Adaptive thresholding
+            threshold = np.percentile(roi, 95)  # Use top 5% pixels
+            mask = roi > threshold
             
-            # 3. Subpixel fitting with error bounds
-            com = ndi.center_of_mass(roi)
-            global_com = (center - roi_size + np.array(com))[::-1]  # (x,y)
-            
-            # 4. Validate position
-            if not np.all(np.isfinite(global_com)):
-                raise ValueError("Invalid position detected")
+            # Check if we have enough signal
+            if np.sum(mask) < 10:
+                return self._last_valid_position
                 
-            return global_com[0]  # Return x position
-        
+            # Weighted center of mass
+            y, x = ndi.center_of_mass(roi * mask)
+            global_x = x + x_start if 'x_start' in locals() else x
+            
+            # Validate position
+            if not 0 <= global_x < img.shape[1]:
+                return self._last_valid_position
+                
+            # Low-pass filter to reduce jumps
+            filtered_x = 0.8 * global_x + 0.2 * self._last_valid_position
+            self._last_valid_position = filtered_x
+            return filtered_x
+            
         except Exception as e:
-            self._controller._logger.error(f"Position detection failed: {str(e)}")
-            return None
+            self.__logger.warning(f"Position detection error: {str(e)}")
+            return self._last_valid_position
         
     def analyzeFrame(self, img):
         """Main analysis method with calibration support"""
@@ -508,91 +523,191 @@ class KalmanFilter:
         
         return self.state[0], self.state[1]  # Return position and velocity
 
+import numpy as np
+
 class PID:
-    """Discrete PID controller with Kalman filtering."""
+    """Enhanced discrete PID controller with Kalman filtering and stability monitoring."""
     def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0):
+        # Gains
         self.kp = kp          # Proportional gain (V/px)
         self.ki = ki          # Integral gain (V/(px·s))
         self.kd = kd          # Derivative gain (V/(px/s))
+        
+        # Control parameters
         self.setpoint = setpoint  # Target position (px)
         self.dt = dt          # Time step (s)
+        self.volts_per_px = None  # Calibration factor
         
-        self._last_error = 0
+        # State variables
         self._integral = 0
-        self._last_derivative = 0
+        self._last_error = 0
+        self._last_derivative = 0 
         self._output = 0
-        self.volts_per_px = None
         
-        # Anti-windup limits
-        self.integral_min = -10  # Minimum output voltage
-        self.integral_max = 10   # Maximum output voltage
+        # Anti-windup and limits
+        self.integral_min = -5  # Conservative limits
+        self.integral_max = 5
+        self.output_min = -10
+        self.output_max = 10
         
-        # Low-pass filter for derivative term
-        self.derivative_alpha = 0.2  # Smoothing factor (0.1-0.5)
-        
-        # Kalman filter (initialized on first measurement)
+        # Kalman filter setup
         self.kf = None
         self.last_position = 0
         self.last_velocity = 0
+        
+        # Stability monitoring
+        self.error_history = []
+        self.stability_counter = 0
+        self.max_unstable_count = 10
+        self.stable_threshold = 1.0  # px RMS error for stability
+        
+        # Dynamic control parameters
+        self.derivative_alpha = 0.3  # Smoothing factor for derivative
+        self.error_scaling = 1.0     # Dynamic error scaling
 
     def setCalibration(self, volts_per_px):
-        """Update calibration values"""
+        """Update calibration values with validation"""
+        if abs(volts_per_px) < 1e-6:  # Avoid division by zero
+            raise ValueError("Calibration factor too small")
         self.volts_per_px = volts_per_px
 
     def update(self, current_px):
-        # Initialize Kalman filter on first measurement
+        """
+        Update controller with new measurement.
+        Returns control output in volts.
+        """
+        # Initialize Kalman filter if needed
         if self.kf is None:
-            self.kf = KalmanFilter(current_px, 0, self.dt)
-            self.last_position = current_px
+            self._init_kalman(current_px)
         
-        # Kalman filter predict step
-        predicted_pos = self.kf.predict()
+        # Get filtered position and velocity estimates
+        filtered_pos, filtered_vel = self._update_kalman(current_px)
         
-        # Kalman filter update step
+        # Calculate error with dynamic scaling
+        error_px, error = self._calculate_error(filtered_pos)
+        
+        # Calculate PID terms
+        p_term, i_term, d_term = self._calculate_terms(error, filtered_vel)
+        
+        # Combine terms with output limiting
+        self._output = self._limit_output(p_term + i_term + d_term)
+        
+        # Monitor stability
+        self._check_stability(error_px)
+        
+        return self._output
+
+    def _init_kalman(self, current_px):
+        """Initialize Kalman filter with reasonable defaults"""
+        self.kf = KalmanFilter(
+            initial_pos=current_px,
+            initial_vel=0,
+            dt=self.dt,
+            process_noise=0.1,  # Adjust based on your system dynamics
+            measurement_noise=1.0  # Should match your measurement variance
+        )
+        self.last_position = current_px
+        self.last_velocity = 0
+
+    def _update_kalman(self, current_px):
+        """Update Kalman filter and return filtered estimates"""
+        self.kf.predict()
         filtered_pos, filtered_vel = self.kf.update(current_px)
-        
-        # Store filtered values
         self.last_position = filtered_pos
         self.last_velocity = filtered_vel
-        
-        # Convert error to "effective volts" using filtered position
+        return filtered_pos, filtered_vel
+
+    def _calculate_error(self, filtered_pos):
+        """Calculate error with dynamic scaling"""
         error_px = self.setpoint - filtered_pos
-        if self.volts_per_px:
-            error = error_px * self.volts_per_px
-        else:
-            error = error_px  # Fallback (assumes 1:1)
         
+        # Dynamic error scaling - reduces aggression for large errors
+        self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
+        
+        if self.volts_per_px:
+            error = error_px * self.error_scaling * self.volts_per_px
+        else:
+            error = error_px * self.error_scaling
+            
+        return error_px, error
+
+    def _calculate_terms(self, error, filtered_vel):
+        """Calculate PID terms with anti-windup and filtering"""
         # Proportional term
         p_term = self.kp * error
         
-        # Integral term (with anti-windup)
-        self._integral += error * self.dt
+        # Integral term with conditional integration and anti-windup
+        if abs(error) < 5:  # Only integrate when close to target
+            self._integral += error * self.dt
+        else:
+            self._integral *= 0.95  # Leaky integration
+        
         self._integral = np.clip(self._integral, self.integral_min, self.integral_max)
         i_term = self.ki * self._integral
         
-        # Use filtered velocity for derivative term (better than finite difference)
+        # Derivative term using filtered velocity
         if self.volts_per_px:
             d_term = self.kd * (-filtered_vel * self.volts_per_px)
         else:
             d_term = self.kd * (-filtered_vel)
+            
+        # Apply low-pass filtering to derivative term
+        d_term = self.derivative_alpha * d_term + (1 - self.derivative_alpha) * self._last_derivative
+        self._last_derivative = d_term
         
-        # Store error for next iteration
-        self._last_error = error
+        return p_term, i_term, d_term
+
+    def _limit_output(self, output):
+        """Apply output limits with anti-windup compensation"""
+        limited_output = np.clip(output, self.output_min, self.output_max)
         
-        # Sum all terms
-        self._output = p_term + i_term + d_term
-        return self._output
-    
+        # Anti-windup: only integrate if not saturating
+        if output != limited_output:
+            self._integral -= (output - limited_output) * self.dt
+            
+        return limited_output
+
+    def _check_stability(self, error_px):
+        """Monitor stability and detect oscillations"""
+        self.error_history.append(abs(error_px))
+        if len(self.error_history) > 100:
+            self.error_history.pop(0)
+            
+        if len(self.error_history) == 100:
+            rms_error = np.sqrt(np.mean(np.array(self.error_history)**2))
+            if rms_error > self.stable_threshold:
+                self.stability_counter += 1
+                if self.stability_counter > self.max_unstable_count:
+                    raise RuntimeError("PID controller unstable - needs retuning")
+            else:
+                self.stability_counter = 0
+
     def reset(self):
-        """Reset controller state"""
+        """Reset controller state while preserving calibration"""
         self._integral = 0
         self._last_error = 0
         self._last_derivative = 0
+        self.error_history = []
+        self.stability_counter = 0
+        
         if self.kf is not None:
-            self.kf = KalmanFilter(self.last_position, self.last_velocity, self.dt)
+            self.kf = KalmanFilter(
+                self.last_position,
+                self.last_velocity,
+                self.dt
+            )
 
     def restart(self):
         self.started = False
+
+    @property
+    def terms(self):
+        """Return current PID terms for monitoring"""
+        return {
+            'p': self.kp * self._last_error,
+            'i': self.ki * self._integral,
+            'd': self._last_derivative
+        }
 
     @property
     def started(self):
