@@ -106,13 +106,12 @@ class iScatFocusController(ImConWidgetController):
             
             # 3. Collect data
             for v in test_voltages:
-                # Move and wait for stabilization
                 self._master.positionersManager[self.positioner].setPosition(v, 0)
-                time.sleep(1.0)  # Increased settling time
+                time.sleep(1.0)
                 
                 # Capture multiple samples
                 sample_pos = []
-                for _ in range(5):  # Take 5 samples per voltage
+                for _ in range(10):  # Take 10 samples per voltage step
                     img = self.__processDataThread.grabCameraFrame()
                     pos = self.__processDataThread.getBeamPosition(img)
                     if pos is not None:
@@ -464,8 +463,53 @@ class ProcessDataThread(Thread):
         return self.analyzeFrame(img)
 
 
+class KalmanFilter:
+    """Simple 1D Kalman filter for position and velocity estimation."""
+    def __init__(self, initial_pos, initial_vel, dt=0.001, process_noise=0.1, measurement_noise=1.0):
+        # State vector: [position, velocity]
+        self.state = np.array([initial_pos, initial_vel])
+        
+        # State transition matrix
+        self.F = np.array([[1, dt],
+                          [0,  1]])
+        
+        # Process noise covariance
+        self.Q = np.array([[dt**3/3, dt**2/2],
+                          [dt**2/2,      dt]]) * process_noise
+        
+        # Measurement matrix (we only measure position)
+        self.H = np.array([[1, 0]])
+        
+        # Measurement noise
+        self.R = np.array([[measurement_noise]])
+        
+        # Covariance matrix
+        self.P = np.eye(2) * 100  # Large initial uncertainty
+
+    def predict(self):
+        # Predict state
+        self.state = self.F @ self.state
+        # Predict covariance
+        self.P = self.F @ self.P @ self.F.T + self.Q
+        return self.state[0]  # Return predicted position
+
+    def update(self, measurement):
+        # Kalman gain
+        S = self.H @ self.P @ self.H.T + self.R
+        K = self.P @ self.H.T @ np.linalg.inv(S)
+        
+        # Update state
+        y = measurement - self.H @ self.state
+        self.state = self.state + K @ y
+        
+        # Update covariance
+        I = np.eye(2)
+        self.P = (I - K @ self.H) @ self.P
+        
+        return self.state[0], self.state[1]  # Return position and velocity
+
 class PID:
-    """Discrete PID controller with anti-windup and filtering."""
+    """Discrete PID controller with Kalman filtering."""
     def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0):
         self.kp = kp          # Proportional gain (V/px)
         self.ki = ki          # Integral gain (V/(px·s))
@@ -485,14 +529,34 @@ class PID:
         
         # Low-pass filter for derivative term
         self.derivative_alpha = 0.2  # Smoothing factor (0.1-0.5)
+        
+        # Kalman filter (initialized on first measurement)
+        self.kf = None
+        self.last_position = 0
+        self.last_velocity = 0
 
     def setCalibration(self, volts_per_px):
         """Update calibration values"""
         self.volts_per_px = volts_per_px
 
     def update(self, current_px):
-        # Convert error to "effective volts"
-        error_px = self.setpoint - current_px
+        # Initialize Kalman filter on first measurement
+        if self.kf is None:
+            self.kf = KalmanFilter(current_px, 0, self.dt)
+            self.last_position = current_px
+        
+        # Kalman filter predict step
+        predicted_pos = self.kf.predict()
+        
+        # Kalman filter update step
+        filtered_pos, filtered_vel = self.kf.update(current_px)
+        
+        # Store filtered values
+        self.last_position = filtered_pos
+        self.last_velocity = filtered_vel
+        
+        # Convert error to "effective volts" using filtered position
+        error_px = self.setpoint - filtered_pos
         if self.volts_per_px:
             error = error_px * self.volts_per_px
         else:
@@ -506,11 +570,11 @@ class PID:
         self._integral = np.clip(self._integral, self.integral_min, self.integral_max)
         i_term = self.ki * self._integral
         
-        # Filtered derivative term
-        raw_derivative = (error - self._last_error) / self.dt
-        self._last_derivative = (self.derivative_alpha * raw_derivative + 
-                               (1 - self.derivative_alpha) * self._last_derivative)
-        d_term = self.kd * self._last_derivative
+        # Use filtered velocity for derivative term (better than finite difference)
+        if self.volts_per_px:
+            d_term = self.kd * (-filtered_vel * self.volts_per_px)
+        else:
+            d_term = self.kd * (-filtered_vel)
         
         # Store error for next iteration
         self._last_error = error
@@ -524,6 +588,8 @@ class PID:
         self._integral = 0
         self._last_error = 0
         self._last_derivative = 0
+        if self.kf is not None:
+            self.kf = KalmanFilter(self.last_position, self.last_velocity, self.dt)
 
     def restart(self):
         self.started = False
