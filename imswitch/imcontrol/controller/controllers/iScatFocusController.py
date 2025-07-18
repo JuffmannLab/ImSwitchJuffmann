@@ -211,7 +211,7 @@ class iScatFocusController(ImConWidgetController):
         if self.locked:
             voltage_adjustment = self.updatePID()
             self._updateDiagnostics()
-            if abs(voltage_adjustment) > 0.002:  # 2mV threshold
+            if abs(voltage_adjustment) > 0.001:  # 2mV threshold
                 new_voltage = self.currentPosition + voltage_adjustment
                 # Clamp to -10V to +10V range
                 new_voltage = max(-10, min(10, new_voltage))
@@ -224,12 +224,6 @@ class iScatFocusController(ImConWidgetController):
                 self.timeData[1:self.currPoint],
                 self.setPointData[1:self.currPoint],
                 self.setPointSignal
-            )
-            self._widget.updatePIDDisplay(
-                self.timeData[1:self.currPoint],
-                self.pTermData[1:self.currPoint],
-                self.iTermData[1:self.currPoint],
-                self.dTermData[1:self.currPoint]
             )
         else:
             self._widget.updateFocusPlot(
@@ -277,10 +271,10 @@ class iScatFocusController(ImConWidgetController):
     
     def updatePIDParameters(self, kp: float, ki: float, kd: float):
         """Thread-safe PID parameter updates with validation."""
-        # Validate ranges
-        kp = np.clip(kp, 0, 0.1)  # Example max P gain
-        ki = np.clip(ki, 0, 0.01)  # Example max I gain
-        kd = np.clip(kd, 0, 0.005) # Example max D gain
+
+        kp = np.clip(kp, 0.00000, 1)  # Example max P gain
+        ki = np.clip(ki, 0.00000, 0.1)  # Example max I gain
+        kd = np.clip(kd, 0.00000, 0.1) # Example max D gain
         
         if self.locked:
             # Live update if locked
@@ -485,7 +479,6 @@ class PID:
         self.setpoint = setpoint  # Target position (px)
         self.dt = dt          # Time step (s)
         
-        # State variables
         self._last_error = 0
         self._integral = 0
         self._last_derivative = 0

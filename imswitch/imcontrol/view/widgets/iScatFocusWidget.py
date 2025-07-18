@@ -10,7 +10,6 @@ class iScatFocusWidget(Widget):
     sigPIDValuesChanged = QtCore.Signal(float, float, float)  # kp, ki, kd
     sigSetPosition = QtCore.Signal(float)  # Target position (V)
     sigAutoTune = QtCore.Signal()
-    sigCalibrate = QtCore.Signal(float, float, int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -18,16 +17,15 @@ class iScatFocusWidget(Widget):
         # PID Control Section
         self.pidControlGroup = QtWidgets.QGroupBox("PID Control")
         
-        # PID Parameters
-        self.kpEdit = QtWidgets.QLineEdit('0.02')
+        self.kpEdit = QtWidgets.QLineEdit('0.015')
         self.kpEdit.setValidator(QtGui.QDoubleValidator())
         self.kpLabel = QtWidgets.QLabel('Proportional (V/px):')
         
-        self.kiEdit = QtWidgets.QLineEdit('0.002')
+        self.kiEdit = QtWidgets.QLineEdit('0.0005')
         self.kiEdit.setValidator(QtGui.QDoubleValidator())
         self.kiLabel = QtWidgets.QLabel('Integral (V/px·s):')
         
-        self.kdEdit = QtWidgets.QLineEdit('0.0005')
+        self.kdEdit = QtWidgets.QLineEdit('0.01')
         self.kdEdit.setValidator(QtGui.QDoubleValidator())
         self.kdLabel = QtWidgets.QLabel('Derivative (V/(px/s)):')
 
@@ -71,15 +69,6 @@ class iScatFocusWidget(Widget):
         calibLayout.addWidget(self.calibResultLabel, 4, 0, 1, 2)
         self.calibGroup.setLayout(calibLayout)
 
-        # Diagnostics Display
-        self.diagGroup = QtWidgets.QGroupBox("Diagnostics")
-        self.pidTermsGraph = pg.GraphicsLayoutWidget()
-        self.pidPlot = self.pidTermsGraph.addPlot(title="PID Terms")
-        self.pTermCurve = self.pidPlot.plot(pen='r', name='P')
-        self.iTermCurve = self.pidPlot.plot(pen='g', name='I')
-        self.dTermCurve = self.pidPlot.plot(pen='b', name='D')
-        self.pidPlot.addLegend()
-
         # Focus Position Plot
         self.focusPlotGraph = pg.GraphicsLayoutWidget()
         self.focusPlot = self.focusPlotGraph.addPlot(title="Beam Position")
@@ -115,15 +104,9 @@ class iScatFocusWidget(Widget):
         posLayout.addWidget(self.positionSetButton)
         self.positionGroup.setLayout(posLayout)
 
-        # Diagnostics Layout
-        diagLayout = QtWidgets.QVBoxLayout()
-        diagLayout.addWidget(self.pidTermsGraph)
-        self.diagGroup.setLayout(diagLayout)
-
         # Main Layout
         self.layout().addWidget(self.pidControlGroup, 0, 0, 1, 2)
         self.layout().addWidget(self.positionGroup, 1, 0)
-        self.layout().addWidget(self.diagGroup, 2, 0)
         self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
         self.layout().addWidget(self.camView, 2, 2)
         self.layout().addWidget(self.calibGroup, 3, 0, 1, 2)
@@ -133,6 +116,7 @@ class iScatFocusWidget(Widget):
         self.positionSetButton.clicked.connect(
             lambda: self.sigSetPosition.emit(float(self.positionEdit.text())))
         self.autoTuneButton.clicked.connect(self.sigAutoTune)
+        self.sigCalibrate = QtCore.Signal(float, float, int)  # from_V, to_V, steps
         self.calibButton.clicked.connect(
             lambda: self.sigCalibrate.emit(
                 float(self.calibFromEdit.text()),
@@ -145,7 +129,6 @@ class iScatFocusWidget(Widget):
         for edit in (self.kpEdit, self.kiEdit, self.kdEdit):
             edit.editingFinished.connect(self.emitPIDValues)
 
-    # In iScatFocusWidget:
     def updateCalibrationResult(self, slope, intercept):
         """More informative display"""
         px_per_volt = 1/slope
@@ -165,11 +148,15 @@ class iScatFocusWidget(Widget):
         self.calibResultLabel.setText(text)
         self.calibResultLabel.setStyleSheet(f"color: {color};")
 
-    def updatePIDDisplay(self, timeData, pData, iData, dData):
-        """Update PID terms plot"""
-        self.pTermCurve.setData(timeData, pData)
-        self.iTermCurve.setData(timeData, iData)
-        self.dTermCurve.setData(timeData, dData)
+    def emitPIDValues(self):
+        """Emit current PID values"""
+        try:
+            kp = float(self.kpEdit.text())
+            ki = float(self.kiEdit.text())
+            kd = float(self.kdEdit.text())
+            self.sigPIDValuesChanged.emit(kp, ki, kd)
+        except ValueError:
+            pass
 
     def updateFocusPlot(self, timeData, positionData, setpoint):
         """Update focus position plot"""
