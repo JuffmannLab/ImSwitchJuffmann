@@ -20,6 +20,7 @@ class iScatFocusController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+        # Connect signals to widget
         self._widget.sigPIDToggled.connect(self.toggleFocus)
         self._widget.sigSetPosition.connect(self.moveZ)
         self._widget.sigAutoTune.connect(self.autoTune)
@@ -58,7 +59,7 @@ class iScatFocusController(ImConWidgetController):
         self.locked = False
         self.aboutToLock = False
         self.noStepVar = True
-        self.focusTime = 1000 / self.updateFreq  # time between focus signal updates in ms
+        self.focusTime = 1000 / self.updateFreq  # Time between focus signal updates in ms
         self.lockPosition = 0
         self.currentPosition = 0
         self.lastZ = 0
@@ -76,6 +77,7 @@ class iScatFocusController(ImConWidgetController):
         # Starts acquisition. I don't know if this can cause problems if, the camera of interest is also used for acquisition
         self._master.detectorsManager[self.camera].startAcquisition()
         self.__processDataThread = ProcessDataThread(self)
+        self.__calibratationThread = CalibrationThread(self)
 
         self.timer = Timer()
         self.timer.timeout.connect(self.update)
@@ -86,101 +88,24 @@ class iScatFocusController(ImConWidgetController):
     def __del__(self):
         self.__processDataThread.quit()
         self.__processDataThread.wait()
+        self.__calibratationThread.quit()
+        self.__calibratationThread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
 
+
     def runCalibration(self, from_V: float, to_V: float, steps: int):
-        try:
-            # 1. Prepare measurement points with hysteresis compensation
-            test_voltages = np.linspace(from_V, to_V, steps)
-            test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
-            
-            # 2. Store initial position
-            initial_V = self._master.positionersManager[self.positioner].get_abs()
-            positions = []
-            
-            # 3. Enhanced measurement collection
-            for i, v in enumerate(test_voltages):
-                # Move with overshoot compensation
-                if i > 0:
-                    overshoot = 0.1 * (v - test_voltages[i-1])
-                    self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
-                    time.sleep(0.1)
-                
-                # Final precise positioning
-                self._master.positionersManager[self.positioner].setPosition(v, 0)
-                
-                # Dynamic settling time based on step size
-                step_size = abs(v - test_voltages[i-1]) if i > 0 else 0
-                settle_time = max(0.5, step_size * 0.5)  # 0.5s + 0.5s per volt
-                time.sleep(settle_time)
-                
-                # Capture multiple samples with validation
-                sample_pos = []
-                for _ in range(10):
-                    img = self.__processDataThread.grabCameraFrame()
-                    pos = self.__processDataThread.getBeamPosition(img)
-                    if pos is not None:
-                        sample_pos.append(pos)
-                    time.sleep(0.05)
-                
-                if len(sample_pos) < 5:
-                    raise ValueError(f"Insufficient valid positions at {v}V")
-                    
-                # Use median and IQR filtering
-                q75, q25 = np.percentile(sample_pos, [75, 25])
-                iqr = q75 - q25
-                valid_pos = [p for p in sample_pos if (q25 - 1.5*iqr) < p < (q75 + 1.5*iqr)]
-                median_pos = np.median(valid_pos)
-                positions.append(median_pos)
-                
-                self.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px (n={len(valid_pos)})")
-            
-            # 4. Split forward and backward measurements
-            n = len(test_voltages)//2
-            forward_voltages = test_voltages[:n]
-            forward_positions = positions[:n]
-            backward_voltages = test_voltages[n:]
-            backward_positions = positions[n:]
-            
-            # 5. Two-way linear regression
-            def fit_line(voltages, positions):
-                A = np.vstack([voltages, np.ones(len(voltages))]).T
-                return np.linalg.lstsq(A, positions, rcond=None)[0]
-            
-            m_forward, b_forward = fit_line(forward_voltages, forward_positions)
-            m_backward, b_backward = fit_line(backward_voltages, backward_positions)
-            
-            # 6. Use average of both directions
-            px_per_volt = (m_forward + m_backward) / 2
-            zero_offset = (b_forward + b_backward) / 2
-            
-            # 7. Validate results
-            if abs(px_per_volt) < 1:
-                raise ValueError(f"Implausible calibration: {px_per_volt:.2f} px/V")
-            
-            # 8. Store and update
-            self.px_per_volt = px_per_volt
-            self.volts_per_px = 1/px_per_volt
-            self.zero_offset_px = zero_offset
-            
-            # 9. Restore original position
-            self._master.positionersManager[self.positioner].setPosition(initial_V, 0)
-            
-            # 10. Update UI with both forward and backward results
-            self._widget.updateCalibrationResult(
-                slope=self.volts_per_px,
-                intercept=self.zero_offset_px,
-                forward_slope=1/m_forward,
-                backward_slope=1/m_backward
-            )
-            
-            self.__logger.info(f"Calibration complete: {px_per_volt:.2f} px/V, "
-                            f"Zero at {zero_offset:.2f} px")
-            
-        except Exception as e:
-            self.__logger.error(f"Calibration failed: {str(e)}")
-            raise
+        """Function to calibrate the Fockus Lock. It adjusts the piezo position 
+        within an intervall in positive and negative direction. It then calculates the 
+        conversion factor and the hysteresis."""
+
+        self.__calibratationThread.from_V = from_V
+        self.__calibratationThread.to_V = to_V
+        self.__calibratationThread.steps = steps
+
+        self.__calibratationThread.run()
+
+        
 
     def unlockFocus(self):
         """Release focus lock and reset controller state."""
@@ -215,10 +140,6 @@ class iScatFocusController(ImConWidgetController):
             self.unlockFocus()
             self._widget.lockButton.setText('Lock')
             self.__logger.info("Focus unlocked")
-
-    def cameraDialog(self):
-        self._master.detectorsManager[self.camera].openPropertiesDialog()
-        self.__logger.debug('Open camera settings dialog')
 
     def moveZ(self):
         target_voltage = float(self._widget.positionEdit.text())
@@ -477,6 +398,109 @@ class ProcessDataThread(Thread):
         img = self.grabCameraFrame()
         return self.analyzeFrame(img)
 
+class CalibrationThread(Thread):
+    def __init__(self, controller, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.from_V = -2
+        self.to_V = 2
+        self._controller = controller
+        self.steps = 50
+
+    def run(self):
+        try:
+            # 1. Prepare measurement points with hysteresis compensation
+            test_voltages = np.linspace(self.from_V, self.to_V, self.steps)
+            test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
+            
+            # 2. Store initial position
+            initial_V = self._controller._master.positionersManager[self._controller.positioner].get_abs()
+            positions = []
+            
+            # 3. Enhanced measurement collection
+            for i, v in enumerate(test_voltages):
+                # Move with overshoot compensation
+                if i > 0:
+                    overshoot = 0.1 * (v - test_voltages[i-1])
+                    self._controller._master.positionersManager[self._controller.positioner].setPosition(v + overshoot, 0)
+                    time.sleep(0.1)
+                
+                # Final precise positioning
+                self._controller._master.positionersManager[self.positioner].setPosition(v, 0)
+                
+                # Dynamic settling time based on step size
+                step_size = abs(v - test_voltages[i-1]) if i > 0 else 0
+                settle_time = max(0.5, step_size * 0.5)  # 0.5s + 0.5s per volt
+                time.sleep(settle_time)
+                
+                # Capture multiple samples with validation
+                sample_pos = []
+                for _ in range(10):
+                    img = self._controller.__processDataThread.grabCameraFrame()
+                    pos = self._controller.__processDataThread.getBeamPosition(img)
+                    if pos is not None:
+                        sample_pos.append(pos)
+                    time.sleep(0.05)
+                
+                if len(sample_pos) < 5:
+                    raise ValueError(f"Insufficient valid positions at {v}V")
+                    
+                # Use median and IQR filtering
+                q75, q25 = np.percentile(sample_pos, [75, 25])
+                iqr = q75 - q25
+                valid_pos = [p for p in sample_pos if (q25 - 1.5*iqr) < p < (q75 + 1.5*iqr)]
+                median_pos = np.median(valid_pos)
+                positions.append(median_pos)
+                
+                self._controller.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px (n={len(valid_pos)})")
+            
+            # 4. Split forward and backward measurements
+            n = len(test_voltages)//2
+            forward_voltages = test_voltages[:n]
+            forward_positions = positions[:n]
+            backward_voltages = test_voltages[n:]
+            backward_positions = positions[n:]
+            
+            # 5. Two-way linear regression
+            def fit_line(voltages, positions):
+                A = np.vstack([voltages, np.ones(len(voltages))]).T
+                return np.linalg.lstsq(A, positions, rcond=None)[0]
+            
+            m_forward, b_forward = fit_line(forward_voltages, forward_positions)
+            m_backward, b_backward = fit_line(backward_voltages, backward_positions)
+            
+            # 6. Use average of both directions
+            px_per_volt = (m_forward + m_backward) / 2
+            zero_offset = (b_forward + b_backward) / 2
+            
+            # 7. Validate results
+            if abs(px_per_volt) < 1:
+                raise ValueError(f"Implausible calibration: {px_per_volt:.2f} px/V")
+            
+            # 8. Store and update
+            self.px_per_volt = px_per_volt
+            self.volts_per_px = 1/px_per_volt
+            self.zero_offset_px = zero_offset
+            
+            # 9. Restore original position
+            self._controller._master.positionersManager[self._controller.positioner].setPosition(initial_V, 0)
+            
+            # 10. Update UI with both forward and backward results
+            self._controller._widget.updateCalibrationResult(
+                slope=self.volts_per_px,
+                intercept=self.zero_offset_px,
+                forward_slope=1/m_forward,
+                backward_slope=1/m_backward
+            )
+            
+            self._controller.__logger.info(f"Calibration complete: {px_per_volt:.2f} px/V, "
+                            f"Zero at {zero_offset:.2f} px")
+            
+        except Exception as e:
+            self._controller.__logger.error(f"Calibration failed: {str(e)}")
+            raise
+
+
 
 class KalmanFilter:
     """Simple 1D Kalman filter for position and velocity estimation."""
@@ -529,13 +553,15 @@ class PID:
     """Enhanced discrete PID controller with Kalman filtering and stability monitoring."""
     def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0):
         # Gains
-        self.kp = kp          # Proportional gain (V/px)
-        self.ki = ki          # Integral gain (V/(px·s))
-        self.kd = kd          # Derivative gain (V/(px/s))
+        self._kp = kp          # Proportional gain (V/px)
+        self._ki = ki          # Integral gain (V/(px·s))
+        self._kd = kd          # Derivative gain (V/(px/s))
+
+        self._started = False
         
         # Control parameters
-        self.setpoint = setpoint  # Target position (px)
-        self.dt = dt          # Time step (s)
+        self._setpoint = setpoint  # Target position (px)
+        self._dt = dt          # Time step (s)
         self.volts_per_px = None  # Calibration factor
         
         # State variables
@@ -551,7 +577,7 @@ class PID:
         self.output_max = 10
         
         # Kalman filter setup
-        self.kf = None
+        self._kf = None
         self.last_position = 0
         self.last_velocity = 0
         
@@ -577,7 +603,7 @@ class PID:
         Returns control output in volts.
         """
         # Initialize Kalman filter if needed
-        if self.kf is None:
+        if self._kf is None:
             self._init_kalman(current_px)
         
         # Get filtered position and velocity estimates
@@ -599,10 +625,10 @@ class PID:
 
     def _init_kalman(self, current_px):
         """Initialize Kalman filter with reasonable defaults"""
-        self.kf = KalmanFilter(
+        self._kf = KalmanFilter(
             initial_pos=current_px,
             initial_vel=0,
-            dt=self.dt,
+            dt=self._dt,
             process_noise=0.1,  # Adjust based on your system dynamics
             measurement_noise=1.0  # Should match your measurement variance
         )
@@ -611,15 +637,15 @@ class PID:
 
     def _update_kalman(self, current_px):
         """Update Kalman filter and return filtered estimates"""
-        self.kf.predict()
-        filtered_pos, filtered_vel = self.kf.update(current_px)
+        self._kf.predict()
+        filtered_pos, filtered_vel = self._kf.update(current_px)
         self.last_position = filtered_pos
         self.last_velocity = filtered_vel
         return filtered_pos, filtered_vel
 
     def _calculate_error(self, filtered_pos):
         """Calculate error with dynamic scaling"""
-        error_px = self.setpoint - filtered_pos
+        error_px = self._setpoint - filtered_pos
         
         # Dynamic error scaling - reduces aggression for large errors
         self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
@@ -634,22 +660,22 @@ class PID:
     def _calculate_terms(self, error, filtered_vel):
         """Calculate PID terms with anti-windup and filtering"""
         # Proportional term
-        p_term = self.kp * error
+        p_term = self._kp * error
         
         # Integral term with conditional integration and anti-windup
         if abs(error) < 5:  # Only integrate when close to target
-            self._integral += error * self.dt
+            self._integral += error * self._dt
         else:
             self._integral *= 0.95  # Leaky integration
         
         self._integral = np.clip(self._integral, self.integral_min, self.integral_max)
-        i_term = self.ki * self._integral
+        i_term = self._ki * self._integral
         
         # Derivative term using filtered velocity
         if self.volts_per_px:
-            d_term = self.kd * (-filtered_vel * self.volts_per_px)
+            d_term = self._kd * (-filtered_vel * self.volts_per_px)
         else:
-            d_term = self.kd * (-filtered_vel)
+            d_term = self._kd * (-filtered_vel)
             
         # Apply low-pass filtering to derivative term
         d_term = self.derivative_alpha * d_term + (1 - self.derivative_alpha) * self._last_derivative
@@ -663,7 +689,7 @@ class PID:
         
         # Anti-windup: only integrate if not saturating
         if output != limited_output:
-            self._integral -= (output - limited_output) * self.dt
+            self._integral -= (output - limited_output) * self._dt
             
         return limited_output
 
@@ -690,22 +716,22 @@ class PID:
         self.error_history = []
         self.stability_counter = 0
         
-        if self.kf is not None:
-            self.kf = KalmanFilter(
+        if self._kf is not None:
+            self._kf = KalmanFilter(
                 self.last_position,
                 self.last_velocity,
-                self.dt
+                self._dt
             )
 
     def restart(self):
-        self.started = False
+        self._started = False
 
     @property
     def terms(self):
         """Return current PID terms for monitoring"""
         return {
-            'p': self.kp * self._last_error,
-            'i': self.ki * self._integral,
+            'p': self._kp * self._last_error,
+            'i': self._ki * self._integral,
             'd': self._last_derivative
         }
 
@@ -748,3 +774,11 @@ class PID:
     @kd.setter
     def kd(self, value):
         self._kd = value
+    
+    @property
+    def kf(self):
+        return self._kf
+    
+    @kf.setter
+    def kf(self, value):
+        self._kf = value
