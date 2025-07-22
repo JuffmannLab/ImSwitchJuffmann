@@ -529,13 +529,15 @@ class PID:
     """Enhanced discrete PID controller with Kalman filtering and stability monitoring."""
     def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0):
         # Gains
-        self.kp = kp          # Proportional gain (V/px)
-        self.ki = ki          # Integral gain (V/(px·s))
-        self.kd = kd          # Derivative gain (V/(px/s))
+        self._kp = kp          # Proportional gain (V/px)
+        self._ki = ki          # Integral gain (V/(px·s))
+        self._kd = kd          # Derivative gain (V/(px/s))
+
+        self._started = False
         
         # Control parameters
-        self.setpoint = setpoint  # Target position (px)
-        self.dt = dt          # Time step (s)
+        self._setpoint = setpoint  # Target position (px)
+        self._dt = dt          # Time step (s)
         self.volts_per_px = None  # Calibration factor
         
         # State variables
@@ -551,7 +553,7 @@ class PID:
         self.output_max = 10
         
         # Kalman filter setup
-        self.kf = None
+        self._kf = None
         self.last_position = 0
         self.last_velocity = 0
         
@@ -577,7 +579,7 @@ class PID:
         Returns control output in volts.
         """
         # Initialize Kalman filter if needed
-        if self.kf is None:
+        if self._kf is None:
             self._init_kalman(current_px)
         
         # Get filtered position and velocity estimates
@@ -599,10 +601,10 @@ class PID:
 
     def _init_kalman(self, current_px):
         """Initialize Kalman filter with reasonable defaults"""
-        self.kf = KalmanFilter(
+        self._kf = KalmanFilter(
             initial_pos=current_px,
             initial_vel=0,
-            dt=self.dt,
+            dt=self._dt,
             process_noise=0.1,  # Adjust based on your system dynamics
             measurement_noise=1.0  # Should match your measurement variance
         )
@@ -611,15 +613,15 @@ class PID:
 
     def _update_kalman(self, current_px):
         """Update Kalman filter and return filtered estimates"""
-        self.kf.predict()
-        filtered_pos, filtered_vel = self.kf.update(current_px)
+        self._kf.predict()
+        filtered_pos, filtered_vel = self._kf.update(current_px)
         self.last_position = filtered_pos
         self.last_velocity = filtered_vel
         return filtered_pos, filtered_vel
 
     def _calculate_error(self, filtered_pos):
         """Calculate error with dynamic scaling"""
-        error_px = self.setpoint - filtered_pos
+        error_px = self._setpoint - filtered_pos
         
         # Dynamic error scaling - reduces aggression for large errors
         self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
@@ -634,22 +636,22 @@ class PID:
     def _calculate_terms(self, error, filtered_vel):
         """Calculate PID terms with anti-windup and filtering"""
         # Proportional term
-        p_term = self.kp * error
+        p_term = self._kp * error
         
         # Integral term with conditional integration and anti-windup
         if abs(error) < 5:  # Only integrate when close to target
-            self._integral += error * self.dt
+            self._integral += error * self._dt
         else:
             self._integral *= 0.95  # Leaky integration
         
         self._integral = np.clip(self._integral, self.integral_min, self.integral_max)
-        i_term = self.ki * self._integral
+        i_term = self._ki * self._integral
         
         # Derivative term using filtered velocity
         if self.volts_per_px:
-            d_term = self.kd * (-filtered_vel * self.volts_per_px)
+            d_term = self._kd * (-filtered_vel * self.volts_per_px)
         else:
-            d_term = self.kd * (-filtered_vel)
+            d_term = self._kd * (-filtered_vel)
             
         # Apply low-pass filtering to derivative term
         d_term = self.derivative_alpha * d_term + (1 - self.derivative_alpha) * self._last_derivative
@@ -663,7 +665,7 @@ class PID:
         
         # Anti-windup: only integrate if not saturating
         if output != limited_output:
-            self._integral -= (output - limited_output) * self.dt
+            self._integral -= (output - limited_output) * self._dt
             
         return limited_output
 
@@ -690,22 +692,22 @@ class PID:
         self.error_history = []
         self.stability_counter = 0
         
-        if self.kf is not None:
-            self.kf = KalmanFilter(
+        if self._kf is not None:
+            self._kf = KalmanFilter(
                 self.last_position,
                 self.last_velocity,
-                self.dt
+                self._dt
             )
 
     def restart(self):
-        self.started = False
+        self._started = False
 
     @property
     def terms(self):
         """Return current PID terms for monitoring"""
         return {
-            'p': self.kp * self._last_error,
-            'i': self.ki * self._integral,
+            'p': self._kp * self._last_error,
+            'i': self._ki * self._integral,
             'd': self._last_derivative
         }
 
@@ -748,3 +750,11 @@ class PID:
     @kd.setter
     def kd(self, value):
         self._kd = value
+    
+    @property
+    def kf(self):
+        return self._kf
+    
+    @kf.setter
+    def kf(self, value):
+        self._kf = value
