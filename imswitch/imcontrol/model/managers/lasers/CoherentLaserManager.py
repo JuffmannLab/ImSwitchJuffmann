@@ -1,6 +1,11 @@
 from .LaserManager import LaserManager
 from imswitch.imcontrol.model.interfaces import LantzLaser
 from imswitch.imcommon.model import initLogger
+import telnetlib
+
+HOST = "192.168.0.5"
+PORT = 23
+SHELL_PROMPT = b'Monaco>'
 
 class CoherentLaserManager(LaserManager):
     def __init__(self, laserInfo, name, isBinary=False, valueUnits="", valueDecimals=0,
@@ -23,7 +28,19 @@ class CoherentLaserManager(LaserManager):
         self._laser.enabled = enabled
 
     def setValue(self, power):
-        power = int(power)
+        command = f"RL={power}"
+        response = self.sendCommand(command)
 
     def finalize(self):
         self._laser.finalize()
+
+    def sendCommand(self, command: str):
+        response = ""
+        with telnetlib.Telnet(HOST, PORT) as tn:
+            output = tn.read_until(SHELL_PROMPT).decode('ascii')
+            tn.write(command.encode('ascii') + b'\r\n')
+            setresponse = tn.read_until(SHELL_PROMPT).decode('ascii')
+            if setresponse " \r\nMonaco>":
+
+            tn.close()
+        return response

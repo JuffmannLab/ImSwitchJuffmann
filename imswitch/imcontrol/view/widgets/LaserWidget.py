@@ -260,7 +260,7 @@ class LaserModule(QtWidgets.QWidget):
     """ Module from LaserWidget to handle a single laser. """
 
     sigEnableChanged = QtCore.Signal(bool)  # (enabled)
-    sigValueChanged = QtCore.Signal(float)  # (value)
+    sigValueChanged = QtCore.Signal(float)  # (RF Level value)
 
     sigModEnabledChanged = QtCore.Signal(bool) # (modulation enabled)
     sigFreqChanged = QtCore.Signal(int)        # (frequency)
@@ -280,15 +280,12 @@ class LaserModule(QtWidgets.QWidget):
         isTunable = not all(r.min == r.max for r in wavelengthRanges)
         # Graphical elements
         #Power
-        self.setPointLabel = QtWidgets.QLabel(f'Laser power:')
+        self.setPointLabel = QtWidgets.QLabel(f'RF Level (%):')
         self.setPointLabel.setAlignment(QtCore.Qt.AlignLeft)
-        self.setPointEdit = QtWidgets.QLineEdit(str(initialPower))
+        self.setPointEdit = QtWidgets.QSpinBox()
         self.setPointEdit.setFixedWidth(50)
         self.setPointEdit.setAlignment(QtCore.Qt.AlignLeft)
-
-        self.setPointUnits = QtWidgets.QComboBox()
-        self.setPointUnits.addItems(["W", "mW"])
-        self.setPointUnits.setFixedWidth(50)
+        self.setPointEdit.setRange(1, 100)
 
         #Reprate
         self.repRateLabel = QtWidgets.QLabel(f'Repetition rate:')
@@ -337,7 +334,6 @@ class LaserModule(QtWidgets.QWidget):
 
         self.powerGrid.addWidget(self.setPointLabel, 0, 0)
         self.powerGrid.addWidget(self.setPointEdit, 0, 1)
-        self.powerGrid.addWidget(self.setPointUnits, 0, 2)
         #self.powerGrid.addWidget(self.minpower, 0, 2, 1, 1)
         #self.powerGrid.addWidget(self.slider, 0, 3, 2, 1)
         #self.powerGrid.addWidget(self.maxpower, 0, 4, 1, 1)
@@ -475,8 +471,8 @@ class LaserModule(QtWidgets.QWidget):
         # self.slider.valueChanged.connect(
         #     lambda value: self.sigValueChanged.emit(value)
         # )
-        self.setPointEdit.returnPressed.connect(
-            lambda: self.sigValueChanged.emit(self.getValue())
+        self.setPointEdit.valueChanged.connect(
+            lambda value: self.sigValueChanged.emit(value)
         )
 
         if isModulated:
@@ -512,7 +508,7 @@ class LaserModule(QtWidgets.QWidget):
     def getValue(self):
         """ Returns the value of the laser, in the units that the laser
         uses. """
-        return float(self.setPointEdit.text())
+        return float(self.setPointEdit.value())
     
     def getFrequency(self):
         """ Returns the selected frequency of the laser.
@@ -540,7 +536,7 @@ class LaserModule(QtWidgets.QWidget):
 
     def setValue(self, value):
         """ Sets the value of the laser, in the units that the laser uses. """
-        self.setPointEdit.setText(f'%.{self.valueDecimals}f' % value)
+        self.setPointEdit.setValue(value)
         #self.slider.setValue(value)
     
     def setModulationFrequency(self, value):

@@ -14,7 +14,7 @@ if __name__ == "__main__":
     buffer = connection.read_until(SHELL_PROMPT, timeout=5).decode('ascii')
     print(buffer)
 
-    connection.write("?TSTLS".encode('ascii')+b'\r\n')
+    connection.write("RL=50".encode('ascii')+b'\r\n')
     IP = connection.read_until(SHELL_PROMPT, timeout=5).decode('ascii')
     print(IP)
     connection.close()
