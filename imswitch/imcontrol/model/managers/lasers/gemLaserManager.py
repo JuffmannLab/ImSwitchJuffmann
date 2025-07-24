@@ -7,8 +7,8 @@ class gemLaserManager(LaserManager):
     """Laser Manager for a gem Laser which is controlled via Serial Port
     """
 
-    def __init__(self, laserInfo, name):
-        super().__init__(laserInfo, name, isBinary = False, valueUnits = 'mW', valueDecimals = 1, isModulated = False)
+    def __init__(self, laserInfo, name, **lowLevelManagers):
+        super().__init__(laserInfo, name, isBinary = False, valueUnits = 'mW', valueDecimals = 0, isModulated = False)
 
         self.__logger = initLogger(self, instanceName=name)
 
@@ -24,11 +24,15 @@ class gemLaserManager(LaserManager):
             self.ser.readline()
 
             self.ser.write(b'ON\r\n')
+            self.__logger.info("LASER IS TURNED ON")
+            self.__logger.info(self.ser.readline())
         else:
             self.ser.write(b'\r\n')
             self.ser.readline()
 
             self.ser.write(b'OFF\r\n')
+            self.__logger.info("LASER IS TURNED OFF")
+            self.__logger.info(self.ser.readline())
 
     def setValue(self, power):
         self.ser.write(b'\r\n')
@@ -36,6 +40,8 @@ class gemLaserManager(LaserManager):
 
         power_str = f'POWER={power}\r\n'.encode("utf-8")
         self.ser.write(power_str)
+        self.__logger.info(f"LASER IS SET TO {power}")
+        self.__logger.info(self.ser.readline())
 
     def finalize(self):
         try:
