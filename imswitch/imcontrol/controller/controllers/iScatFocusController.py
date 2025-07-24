@@ -20,6 +20,7 @@ class iScatFocusController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+        # Connect widget signals
         self._widget.sigPIDToggled.connect(self.toggleFocus)
         self._widget.sigSetPosition.connect(self.moveZ)
         self._widget.sigAutoTune.connect(self.autoTune)
@@ -39,7 +40,7 @@ class iScatFocusController(ImConWidgetController):
                           self._setupInfo.iScatFocus.frameCroph)
         self._master.detectorsManager[self.camera].crop(*self.cropFrame)
 
-        # Connect FocusLockWidget buttons
+        # Connect widget buttons
         self._widget.kpEdit.textChanged.connect(self.unlockFocus)
         self._widget.kiEdit.textChanged.connect(self.unlockFocus)
         self._widget.kdEdit.textChanged.connect(self.unlockFocus)
@@ -49,9 +50,9 @@ class iScatFocusController(ImConWidgetController):
         self._widget.autoTuneButton.clicked.connect(lambda: self.autoTune(step_size=0.5))
 
         # Calibration storage
-        self.volts_per_px = None  # Calibration slope (V/px)
-        self.px_per_volt = None   # Inverse calibration (px/V)
-        self.zero_offset_px = None # Position at 0V
+        self.volts_per_px = None
+        self.px_per_volt = None  
+        self.zero_offset_px = None 
 
         # Set the initial values
         self.setPointSignal = 0
@@ -82,7 +83,6 @@ class iScatFocusController(ImConWidgetController):
         self.timer.start(int(self.focusTime))
         self.startTime = perf_counter()
     
-    # Following functions are just for controlling and setting different parameters
     def __del__(self):
         self.__processDataThread.quit()
         self.__processDataThread.wait()
@@ -90,16 +90,21 @@ class iScatFocusController(ImConWidgetController):
             super().__del__()
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
+        """Function for calibration. It checks the response on the camera while
+        adjusting the piezo within an intervall. This is used to find the conversion
+        factor of Voltage to Pixel. It also attempts to correct for hysteresis."""
+        # This thing unfortunately freezes the GUI for the time it is running. 
+        # To Do: Put it in its own worker
         try:
-            # 1. Prepare measurement points with hysteresis compensation
+            # Prepare measurement points with hysteresis compensation
             test_voltages = np.linspace(from_V, to_V, steps)
             test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
             
-            # 2. Store initial position
+            # Initial position
             initial_V = self._master.positionersManager[self.positioner].get_abs()
             positions = []
             
-            # 3. Enhanced measurement collection
+            # Measurement collection
             for i, v in enumerate(test_voltages):
                 # Move with overshoot compensation
                 if i > 0:
@@ -107,7 +112,7 @@ class iScatFocusController(ImConWidgetController):
                     self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
                     time.sleep(0.1)
                 
-                # Final precise positioning
+                # Final positioning
                 self._master.positionersManager[self.positioner].setPosition(v, 0)
                 
                 # Dynamic settling time based on step size
@@ -115,7 +120,7 @@ class iScatFocusController(ImConWidgetController):
                 settle_time = max(0.5, step_size * 0.5)  # 0.5s + 0.5s per volt
                 time.sleep(settle_time)
                 
-                # Capture multiple samples with validation
+                # Capture multiple frames per px position
                 sample_pos = []
                 for _ in range(10):
                     img = self.__processDataThread.grabCameraFrame()
@@ -136,14 +141,14 @@ class iScatFocusController(ImConWidgetController):
                 
                 self.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px (n={len(valid_pos)})")
             
-            # 4. Split forward and backward measurements
+            # Split forward and backward measurements
             n = len(test_voltages)//2
             forward_voltages = test_voltages[:n]
             forward_positions = positions[:n]
             backward_voltages = test_voltages[n:]
             backward_positions = positions[n:]
             
-            # 5. Two-way linear regression
+            # Two-way linear regression
             def fit_line(voltages, positions):
                 A = np.vstack([voltages, np.ones(len(voltages))]).T
                 return np.linalg.lstsq(A, positions, rcond=None)[0]
@@ -151,23 +156,21 @@ class iScatFocusController(ImConWidgetController):
             m_forward, b_forward = fit_line(forward_voltages, forward_positions)
             m_backward, b_backward = fit_line(backward_voltages, backward_positions)
             
-            # 6. Use average of both directions
+            # Average of both directions
             px_per_volt = (m_forward + m_backward) / 2
             zero_offset = (b_forward + b_backward) / 2
             
-            # 7. Validate results
+            # Check if values make sense for our setup (optional)
             if abs(px_per_volt) < 1:
                 raise ValueError(f"Implausible calibration: {px_per_volt:.2f} px/V")
             
-            # 8. Store and update
             self.px_per_volt = px_per_volt
             self.volts_per_px = 1/px_per_volt
             self.zero_offset_px = zero_offset
-            
-            # 9. Restore original position
+    
             self._master.positionersManager[self.positioner].setPosition(initial_V, 0)
             
-            # 10. Update UI with both forward and backward results
+            # Update GUI
             self._widget.updateCalibrationResult(
                 slope=self.volts_per_px,
                 intercept=self.zero_offset_px,
@@ -217,18 +220,20 @@ class iScatFocusController(ImConWidgetController):
             self.__logger.info("Focus unlocked")
 
     def cameraDialog(self):
+        """Opens a window with camera settings (not implemented)."""
         self._master.detectorsManager[self.camera].openPropertiesDialog()
         self.__logger.debug('Open camera settings dialog')
 
     def moveZ(self):
         target_voltage = float(self._widget.positionEdit.text())
-        # Ensure voltage stays within -10 to +10V range
+        # -10 to +10V range
         target_voltage = max(-10, min(10, target_voltage))
         self._master.positionersManager[self.positioner].setPosition(target_voltage, 0)
         self.__logger.debug(f'Move Z-piezo to {target_voltage} V')
 
     # Update focus lock
     def update(self):
+        """Updating function (taken and modified from focusLockController)."""
         # 1 Grab camera frame
         img = self.__processDataThread.grabCameraFrame()
         # 2 Pass camera frame and get back focusSignalPosition from ProcessDataThread
@@ -259,6 +264,7 @@ class iScatFocusController(ImConWidgetController):
             )
 
     def updateSetPointData(self):
+        """Update the setpoint data (Taken from focusLockController)."""
         if self.currPoint < self.buffer:
             self.setPointData[self.currPoint] = self.setPointSignal
             self.timeData[self.currPoint] = perf_counter() - self.startTime
@@ -270,12 +276,13 @@ class iScatFocusController(ImConWidgetController):
         self.currPoint += 1
 
     def updatePID(self):
+        """Update function of PID controller"""
         self.currentPosition = self._master.positionersManager[self.positioner].get_abs()
         
         # Get PID correction
         correction = self.pid.update(self.setPointSignal)
         
-        # Safety checks
+        # Safety check, such that the piezo does not ram our sample stage
         if abs(correction) > 1.0:  # 1V max correction
             self.__logger.warning("Large correction detected! Unlocking for safety.")
             self.unlockFocus()
@@ -319,13 +326,11 @@ class iScatFocusController(ImConWidgetController):
         self.dTermCurve.clear()
             
     def autoTune(self, step_size=0.5, settle_threshold=0.01):
-        """Automated tuning routine"""
+        """Automated tuning routine (Not working yet!)"""
         self.__logger.info("Starting auto-tuning...")
         
-        # 1. Disable controller
         self.unlockFocus()
         
-        # 2. Find system response
         test_voltages = [-step_size, 0, step_size]
         positions = []
         for v in test_voltages:
@@ -337,17 +342,15 @@ class iScatFocusController(ImConWidgetController):
         response_slope = (positions[2] - positions[0]) / (2 * step_size)  # px/V
         
         # 3. Ziegler-Nichols tuning (conservative)
-        ku = 1.0 / abs(response_slope)  # Ultimate gain estimate
-        pu = 0.5  # Estimated oscillation period (s) - adjust based on observations
+        ku = 1.0 / abs(response_slope)
+        pu = 0.5 
         
-        # PID coefficients (Pessen Integral Rule)
         kp = 0.7 * ku
         ki = 1.75 * ku / pu
         kd = 0.21 * ku * pu
         
         self.__logger.info(f"Suggested parameters: kp={kp:.4f}, ki={ki:.4f}, kd={kd:.4f}")
         
-        # Apply to GUI
         self._widget.kpEdit.setText(f"{kp:.4f}")
         self._widget.kiEdit.setText(f"{ki:.4f}")
         self._widget.kdEdit.setText(f"{kd:.4f}")
@@ -395,7 +398,6 @@ class ProcessDataThread(Thread):
             threshold = np.percentile(roi, 95)  # Use top 5% pixels
             mask = roi > threshold
             
-            # Check if we have enough signal
             if np.sum(mask) < 10:
                 return self._last_valid_position
                 
@@ -416,7 +418,7 @@ class ProcessDataThread(Thread):
             self.__logger.warning(f"Position detection error: {str(e)}")
             return self._last_valid_position
         
-    def analyzeFrame(self, img):
+    def _analyzeFrame(self, img):
         """Main analysis method with calibration support"""
         if img is None:
             return self._last_valid_position
@@ -448,7 +450,7 @@ class ProcessDataThread(Thread):
             
             # Gaussian fit
             popt, _ = curve_fit(
-                self.gaussian_1d,
+                self._gaussian_1d,
                 x, line_profile,
                 p0=[line_profile.max(), 50, 10, line_profile.min()],
                 bounds=([0, 0, 1, 0], [np.inf, 100, 100, np.inf]))
@@ -468,19 +470,20 @@ class ProcessDataThread(Thread):
                 return self._last_valid_position
             return self._last_valid_position
 
-    def gaussian_1d(self, x, a, x0, sigma, offset):
+    def _gaussian_1d(self, x, a, x0, sigma, offset):
         """1D Gaussian model for fitting"""
         return a * np.exp(-((x - x0) ** 2) / (2 * sigma ** 2)) + offset
 
     def update(self):
         """Interface-compatible update method"""
         img = self.grabCameraFrame()
-        return self.analyzeFrame(img)
+        return self._analyzeFrame(img)
 
 
 class KalmanFilter:
     """Simple 1D Kalman filter for position and velocity estimation."""
     def __init__(self, initial_pos, initial_vel, dt=0.001, process_noise=0.1, measurement_noise=1.0):
+        
         # State vector: [position, velocity]
         self.state = np.array([initial_pos, initial_vel])
         
@@ -523,8 +526,6 @@ class KalmanFilter:
         
         return self.state[0], self.state[1]  # Return position and velocity
 
-import numpy as np
-
 class PID:
     """Enhanced discrete PID controller with Kalman filtering and stability monitoring."""
     def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0):
@@ -547,7 +548,7 @@ class PID:
         self._output = 0
         
         # Anti-windup and limits
-        self.integral_min = -5  # Conservative limits
+        self.integral_min = -5  
         self.integral_max = 5
         self.output_min = -10
         self.output_max = 10
@@ -561,11 +562,11 @@ class PID:
         self.error_history = []
         self.stability_counter = 0
         self.max_unstable_count = 10
-        self.stable_threshold = 1.0  # px RMS error for stability
+        self.stable_threshold = 1.0  
         
         # Dynamic control parameters
-        self.derivative_alpha = 0.3  # Smoothing factor for derivative
-        self.error_scaling = 1.0     # Dynamic error scaling
+        self.derivative_alpha = 0.3  
+        self.error_scaling = 1.0     
 
     def setCalibration(self, volts_per_px):
         """Update calibration values with validation"""
@@ -605,8 +606,8 @@ class PID:
             initial_pos=current_px,
             initial_vel=0,
             dt=self._dt,
-            process_noise=0.1,  # Adjust based on your system dynamics
-            measurement_noise=1.0  # Should match your measurement variance
+            process_noise=0.1,  
+            measurement_noise=1.0  
         )
         self.last_position = current_px
         self.last_velocity = 0
