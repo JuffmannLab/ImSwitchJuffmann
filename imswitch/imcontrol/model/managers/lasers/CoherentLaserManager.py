@@ -6,41 +6,49 @@ import telnetlib
 HOST = "192.168.0.5"
 PORT = 23
 SHELL_PROMPT = b'Monaco>'
+CONTROL_SEQ = "Error"
 
 class CoherentLaserManager(LaserManager):
     def __init__(self, laserInfo, name, isBinary=False, valueUnits="", valueDecimals=0,
                  **_lowLevelManagers):
         self.__logger = initLogger(self, instanceName=name)
 
-        ports = laserInfo.managerProperties['digitalPorts']
-
-        # Init laser
-
-        self._laser = LantzLaser('cobolt.cobolt0601.Cobolt0601_f2', ports)
-        self._numLasers = len(ports)
-        self.__logger.info(f'Initialized laser, model: {self._laser.idn}')
+        p = 1 if laserInfo.pulsing else 0
+        self.sendCommand(f"SET={laserInfo.repRate}")
+        self.sendCommand("PM=2")
+        self.sendCommand(f"PC={p}")
 
         super().__init__(laserInfo, name, isBinary=isBinary, valueUnits=valueUnits,
                          valueDecimals=valueDecimals)
 
 
     def setEnabled(self, enabled):
-        self._laser.enabled = enabled
+        s = 1 if enabled else 0
+        command = f"S={s}"
+        response = self.sendCommand(command)
 
     def setValue(self, power):
         command = f"RL={power}"
         response = self.sendCommand(command)
 
+    def setReprate(self, reprate, reprateUnits):
+        command = f"SET={reprate}"
+        response = self.sendCommand(command)
+
     def finalize(self):
-        self._laser.finalize()
+        pass
 
     def sendCommand(self, command: str):
-        response = ""
         with telnetlib.Telnet(HOST, PORT) as tn:
             output = tn.read_until(SHELL_PROMPT).decode('ascii')
-            tn.write(command.encode('ascii') + b'\r\n')
-            setresponse = tn.read_until(SHELL_PROMPT).decode('ascii')
-            if setresponse " \r\nMonaco>":
+            if "Monaco>" not in output:
+                self.__logger.error("Failed to connect to Monaco laser")
+                tn.close()
+                return None
 
+            tn.write(command.encode('ascii') + b'\r\n')
+            response = tn.read_until(SHELL_PROMPT).decode('ascii')
+            if CONTROL_SEQ in response:
+                self.__logger.error(f'Command failed, Monaco returns: {response}')
             tn.close()
-        return response
+            return response

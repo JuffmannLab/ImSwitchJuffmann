@@ -46,6 +46,7 @@ class LaserController(ImConWidgetController):
         # Connect LaserWidget signals
         self._widget.sigEnableChanged.connect(self.toggleLaser)
         self._widget.sigValueChanged.connect(self.valueChanged)
+        self._widget.sigRepRateChanged.connect(self.repRateChanged)
 
         self._widget.sigModEnabledChanged.connect(self.toggleModulation)
         self._widget.sigFreqChanged.connect(self.frequencyChanged)
@@ -76,7 +77,12 @@ class LaserController(ImConWidgetController):
         self._master.lasersManager[laserName].setValue(magnitude)
         self._widget.setValue(laserName, magnitude)
         self.setSharedAttr(laserName, _valueAttr, magnitude)
-    
+
+    def repRateChanged(self, laserName, repRate):
+        """ Change laser rep rate. """
+        reprateUnits = self._widget.getRepRateUnits(laserName)
+        self._master.lasersManager[laserName].setReprate(repRate, reprateUnits)
+
     def toggleModulation(self, laserName, enabled):
         """ Enable or disable laser modulation (on/off). """
         self._master.lasersManager[laserName].setModulationEnabled(enabled)

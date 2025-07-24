@@ -10,6 +10,7 @@ class LaserWidget(Widget):
 
     sigEnableChanged = QtCore.Signal(str, bool)  # (laserName, enabled)
     sigValueChanged = QtCore.Signal(str, float)  # (laserName, value)
+    sigRepRateChanged = QtCore.Signal(str, float) #(laserName, reprate)
     
     sigModEnabledChanged = QtCore.Signal(str, bool) # (laserName, modulationEnabled)
     sigFreqChanged = QtCore.Signal(str, int)        # (laserName, frequency)
@@ -108,6 +109,10 @@ class LaserWidget(Widget):
             lambda value: self.sigValueChanged.emit(laserName, value)
         )
 
+        control.sigRepRateChanged.connect(
+            lambda reprate: self.sigRepRateChanged.emit(laserName, reprate)
+        )
+
         if all(num > 0 for num in frequencyRange):
             control.sigModEnabledChanged.connect(
                 lambda enabled: self.sigModEnabledChanged.emit(laserName, enabled)
@@ -194,6 +199,9 @@ class LaserWidget(Widget):
     def displayInvalidWavelength(self, laserName):
         self.laserModules[laserName].displayInvalidWavelength()
 
+    def getRepRateUnits(self, laserName):
+        return self.laserModules[laserName].getRepRateUnits()
+
     # def getCurrentPreset(self):
     #     """ Returns the name of the currently selected preset. """
     #     return self.presetsList.currentData()
@@ -259,8 +267,9 @@ class LaserWidget(Widget):
 class LaserModule(QtWidgets.QWidget):
     """ Module from LaserWidget to handle a single laser. """
 
-    sigEnableChanged = QtCore.Signal(bool)  # (enabled)
+    sigEnableChanged = QtCore.Signal(bool)  # (enable laser)
     sigValueChanged = QtCore.Signal(float)  # (RF Level value)
+    sigRepRateChanged = QtCore.Signal(float) # (reprate value)
 
     sigModEnabledChanged = QtCore.Signal(bool) # (modulation enabled)
     sigFreqChanged = QtCore.Signal(int)        # (frequency)
@@ -295,7 +304,7 @@ class LaserModule(QtWidgets.QWidget):
         self.repRateEdit.setAlignment(QtCore.Qt.AlignLeft)
 
         self.repRateUnits = QtWidgets.QComboBox()
-        self.repRateUnits.addItems(["MHz", "GHz", "Hz"])
+        self.repRateUnits.addItems(["MHz", "GHz", "kHz"])
         self.repRateUnits.setFixedWidth(50)
 
         #Pulsing
@@ -475,6 +484,10 @@ class LaserModule(QtWidgets.QWidget):
             lambda value: self.sigValueChanged.emit(value)
         )
 
+        self.repRateEdit.editingFinished.connect(
+            lambda : self.sigRepRateChanged.emit(float(self.repRateEdit.text()))
+        )
+
         if isModulated:
             self.modulationEnable.toggled.connect(self.sigModEnabledChanged)
             self.modulationFrequencySlider.valueChanged.connect(
@@ -520,6 +533,9 @@ class LaserModule(QtWidgets.QWidget):
         """
         return int(self.modulationDutyCycleEdit.text())
 
+    def getRepRateUnits(self):
+        """  Returns the units of the repRate """
+        return str(self.repRateUnits.currentText())
     def setActive(self, active):
         """ Sets whether the laser is powered on. """
         self.enableButton.setChecked(active)
