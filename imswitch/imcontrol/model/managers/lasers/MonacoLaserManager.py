@@ -7,8 +7,13 @@ HOST = "192.168.0.5"
 PORT = 23
 SHELL_PROMPT = b'Monaco>'
 CONTROL_SEQ = "Error"
+RR_UNIT_FACTORS = {
+    "kHz": 1,
+    "MHz": 1000,
+    "GHz": 1000000,
+}
 
-class CoherentLaserManager(LaserManager):
+class MonacoLaserManager(LaserManager):
     def __init__(self, laserInfo, name, isBinary=False, valueUnits="", valueDecimals=0,
                  **_lowLevelManagers):
         self.__logger = initLogger(self, instanceName=name)
@@ -32,7 +37,9 @@ class CoherentLaserManager(LaserManager):
         response = self.sendCommand(command)
 
     def setReprate(self, reprate, reprateUnits):
-        command = f"SET={reprate}"
+        """ The SET command expects the reprate in kHz. Conversion needs to be done first! """
+        rr = int(reprate * RR_UNIT_FACTORS[reprateUnits])
+        command = f"SET={rr}"
         response = self.sendCommand(command)
 
     def finalize(self):
@@ -49,6 +56,6 @@ class CoherentLaserManager(LaserManager):
             tn.write(command.encode('ascii') + b'\r\n')
             response = tn.read_until(SHELL_PROMPT).decode('ascii')
             if CONTROL_SEQ in response:
-                self.__logger.error(f'Command failed, Monaco returns: {response}')
+                self.__logger.error(f'{command} failed, Monaco returns: {response}')
             tn.close()
             return response

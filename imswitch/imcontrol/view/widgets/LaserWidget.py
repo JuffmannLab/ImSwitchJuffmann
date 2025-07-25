@@ -1,3 +1,5 @@
+from PyQt5.QtCore import QSize
+from PyQt5.QtWidgets import QSizePolicy, QSpacerItem
 from qtpy import QtCore, QtWidgets, QtGui
 
 from imswitch.imcommon.view.guitools import colorutils
@@ -304,7 +306,7 @@ class LaserModule(QtWidgets.QWidget):
         self.repRateEdit.setAlignment(QtCore.Qt.AlignLeft)
 
         self.repRateUnits = QtWidgets.QComboBox()
-        self.repRateUnits.addItems(["MHz", "GHz", "kHz"])
+        self.repRateUnits.addItems(["KHz", "MHz", "GHz"])
         self.repRateUnits.setFixedWidth(50)
 
         #Pulsing
@@ -313,6 +315,16 @@ class LaserModule(QtWidgets.QWidget):
         self.pulsingOn = QtWidgets.QRadioButton("On")
         self.pulsingOff.setChecked(not pulsing)
         self.pulsingOn.setChecked(pulsing)
+
+        #Laser status
+        self.statStartButton = guitools.BetterPushButton("Start")
+        self.statStartButton.setFixedWidth(40)
+        self.statStopButton = guitools.BetterPushButton("Stop")
+        self.statStopButton.setFixedWidth(40)
+        self.statLabel = QtWidgets.QLabel("System Status:")
+        self.statLight = QtWidgets.QLabel()
+        self.statLight.setFixedSize(QSize(25, 25))
+        self.setLightColor("grey")
 
 
         self.minpower = QtWidgets.QLabel()
@@ -341,8 +353,13 @@ class LaserModule(QtWidgets.QWidget):
         powerFrame.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Plain)
         powerFrame.setLayout(self.powerGrid)
 
+
+        spacer = QSpacerItem(50,0, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.powerGrid.addWidget(self.setPointLabel, 0, 0)
         self.powerGrid.addWidget(self.setPointEdit, 0, 1)
+        self.powerGrid.addItem(spacer, 0, 2, 1, 2)
+        self.powerGrid.addWidget(self.statStartButton, 0, 4)
+        self.powerGrid.addWidget(self.statStopButton, 0, 5)
         #self.powerGrid.addWidget(self.minpower, 0, 2, 1, 1)
         #self.powerGrid.addWidget(self.slider, 0, 3, 2, 1)
         #self.powerGrid.addWidget(self.maxpower, 0, 4, 1, 1)
@@ -350,6 +367,9 @@ class LaserModule(QtWidgets.QWidget):
         self.powerGrid.addWidget(self.repRateLabel, 1, 0)
         self.powerGrid.addWidget(self.repRateEdit, 1, 1)
         self.powerGrid.addWidget(self.repRateUnits, 1, 2)
+        self.powerGrid.addItem(spacer, 1, 3)
+        self.powerGrid.addWidget(self.statLight, 1, 4)
+        self.powerGrid.addWidget(self.statLabel, 1, 5)
 
         self.powerGrid.addWidget(self.pulsingLabel, 2, 0)
         self.powerGrid.addWidget(self.pulsingOff, 2, 1)
@@ -358,7 +378,7 @@ class LaserModule(QtWidgets.QWidget):
         self.powerGrid.setColumnStretch(0, 0)  # Label column: no stretch
         self.powerGrid.setColumnStretch(1, 0)  # Edit box: no stretch
         self.powerGrid.setColumnStretch(2, 0)  # Units: no stretch
-        self.powerGrid.setColumnStretch(3, 1)
+        self.powerGrid.setColumnStretch(6, 1)
 
         if isTunable:
             self.wavelengthGroup = QtWidgets.QGroupBox("Wavelength selection")
@@ -458,7 +478,7 @@ class LaserModule(QtWidgets.QWidget):
 
             self.powerGrid.addWidget(self.modulationGroup, 2, 0, 1, 5)
                 
-        self.enableButton = guitools.BetterPushButton('ON')
+        self.enableButton = guitools.BetterPushButton('SHUTTER')
         self.enableButton.setSizePolicy(QtWidgets.QSizePolicy.Minimum,
                                         QtWidgets.QSizePolicy.Expanding)
         self.enableButton.setCheckable(True)
@@ -586,6 +606,15 @@ class LaserModule(QtWidgets.QWidget):
 
     def displayInvalidWavelength(self):
         self.invalidValueLabel.setText("Select a value within specified range.")
+
+    def setLightColor(self, color:str):
+        self.statLight.setStyleSheet(
+            f"""
+            background-color: {color};
+            border-radius: 10px;
+            border: 1px solid black;
+            """
+        )
 
 
 
