@@ -13,7 +13,10 @@ class LaserWidget(Widget):
     sigEnableChanged = QtCore.Signal(str, bool)  # (laserName, enabled)
     sigValueChanged = QtCore.Signal(str, float)  # (laserName, value)
     sigRepRateChanged = QtCore.Signal(str, float) #(laserName, reprate)
-    
+
+    sigStartClicked = QtCore.Signal(str, str)  # (Start laser warming up, text of button)
+    sigStopClicked = QtCore.Signal(str)  # (Stop laser)
+
     sigModEnabledChanged = QtCore.Signal(str, bool) # (laserName, modulationEnabled)
     sigFreqChanged = QtCore.Signal(str, int)        # (laserName, frequency)
     sigDutyCycleChanged = QtCore.Signal(str, int)   # (laserName, dutyCycle)
@@ -115,6 +118,14 @@ class LaserWidget(Widget):
             lambda reprate: self.sigRepRateChanged.emit(laserName, reprate)
         )
 
+        control.sigStartClicked.connect(
+            lambda buttontext: self.sigStartClicked.emit(laserName, buttontext)
+        )
+
+        control.sigStopClicked.connect(
+            lambda: self.sigStopClicked.emit(laserName)
+        )
+
         if all(num > 0 for num in frequencyRange):
             control.sigModEnabledChanged.connect(
                 lambda enabled: self.sigModEnabledChanged.emit(laserName, enabled)
@@ -204,6 +215,11 @@ class LaserWidget(Widget):
     def getRepRateUnits(self, laserName):
         return self.laserModules[laserName].getRepRateUnits()
 
+    def setStatusLabel(self, laserName, status):
+        self.laserModules[laserName].setStatusLabel(status)
+
+    def setStatusLight(self, laserName, color):
+        self.laserModules[laserName].setStatusLight(color)
     # def getCurrentPreset(self):
     #     """ Returns the name of the currently selected preset. """
     #     return self.presetsList.currentData()
@@ -269,9 +285,11 @@ class LaserWidget(Widget):
 class LaserModule(QtWidgets.QWidget):
     """ Module from LaserWidget to handle a single laser. """
 
-    sigEnableChanged = QtCore.Signal(bool)  # (enable laser)
-    sigValueChanged = QtCore.Signal(float)  # (RF Level value)
-    sigRepRateChanged = QtCore.Signal(float) # (reprate value)
+    sigEnableChanged = QtCore.Signal(bool)      # (enable laser)
+    sigValueChanged = QtCore.Signal(float)      # (RF Level value)
+    sigRepRateChanged = QtCore.Signal(float)    # (reprate value)
+    sigStartClicked = QtCore.Signal(str)           # (Start laser warming up)
+    sigStopClicked = QtCore.Signal()            # (Stop laser)
 
     sigModEnabledChanged = QtCore.Signal(bool) # (modulation enabled)
     sigFreqChanged = QtCore.Signal(int)        # (frequency)
@@ -324,7 +342,7 @@ class LaserModule(QtWidgets.QWidget):
         self.statLabel = QtWidgets.QLabel("System Status:")
         self.statLight = QtWidgets.QLabel()
         self.statLight.setFixedSize(QSize(25, 25))
-        self.setLightColor("grey")
+        self.setStatusLight("grey")
 
 
         self.minpower = QtWidgets.QLabel()
@@ -508,6 +526,14 @@ class LaserModule(QtWidgets.QWidget):
             lambda : self.sigRepRateChanged.emit(float(self.repRateEdit.text()))
         )
 
+        self.statStartButton.clicked.connect(
+            lambda : self.sigStartClicked.emit(self.statStartButton.text())
+        )
+
+        self.statStopButton.clicked.connect(
+            lambda : self.sigStopClicked.emit()
+        )
+
         if isModulated:
             self.modulationEnable.toggled.connect(self.sigModEnabledChanged)
             self.modulationFrequencySlider.valueChanged.connect(
@@ -607,7 +633,7 @@ class LaserModule(QtWidgets.QWidget):
     def displayInvalidWavelength(self):
         self.invalidValueLabel.setText("Select a value within specified range.")
 
-    def setLightColor(self, color:str):
+    def setStatusLight(self, color:str):
         self.statLight.setStyleSheet(
             f"""
             background-color: {color};
@@ -615,6 +641,9 @@ class LaserModule(QtWidgets.QWidget):
             border: 1px solid black;
             """
         )
+
+    def setStatusLabel(self, status:str):
+        self.statLabel.setText("System status: " + status)
 
 
 

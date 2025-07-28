@@ -42,6 +42,20 @@ class MonacoLaserManager(LaserManager):
         command = f"SET={rr}"
         response = self.sendCommand(command)
 
+    def getStatus(self):
+        command = "?ST"
+        response = self.sendCommand(command)
+        status = response.strip().splitlines()[0]
+        return status
+
+    def startClicked(self):
+        command = "L=1"
+        #response = self.sendCommand(command)
+
+    def stopClicked(self):
+        command = "L=0"
+        #response = self.sendCommand(command)
+
     def finalize(self):
         pass
 

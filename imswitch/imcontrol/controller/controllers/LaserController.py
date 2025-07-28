@@ -30,6 +30,7 @@ class LaserController(ImConWidgetController):
             self.setSharedAttr(lName, _enabledAttr, self._widget.isLaserActive(lName))
             self.setSharedAttr(lName, _valueAttr, self._widget.getValue(lName))
 
+
         # Load presets
         # for laserPresetName in self._setupInfo.laserPresets:
         #     self._widget.addPreset(laserPresetName)
@@ -47,6 +48,9 @@ class LaserController(ImConWidgetController):
         self._widget.sigEnableChanged.connect(self.toggleLaser)
         self._widget.sigValueChanged.connect(self.valueChanged)
         self._widget.sigRepRateChanged.connect(self.repRateChanged)
+
+        self._widget.sigStartClicked.connect(self.startClicked)
+        self._widget.sigStopClicked.connect(self.stopClicked)
 
         self._widget.sigModEnabledChanged.connect(self.toggleModulation)
         self._widget.sigFreqChanged.connect(self.frequencyChanged)
@@ -82,6 +86,21 @@ class LaserController(ImConWidgetController):
         """ Change laser rep rate. """
         reprateUnits = self._widget.getRepRateUnits(laserName)
         self._master.lasersManager[laserName].setReprate(repRate, reprateUnits)
+
+    def startClicked(self, laserName, buttontext):
+        status = self._master.lasersManager[laserName].getStatus()
+        self._widget.setStatusLabel(laserName, status)
+        if status == "On":
+            self._widget.setStatusLight(laserName, "green")
+            return
+        elif status != "Ready":
+            self._widget.setStatusLight(laserName, "orange")
+            return
+        self._master.lasersManager[laserName].startClicked()
+
+    def stopClicked(self, laserName):
+        return
+
 
     def toggleModulation(self, laserName, enabled):
         """ Enable or disable laser modulation (on/off). """
