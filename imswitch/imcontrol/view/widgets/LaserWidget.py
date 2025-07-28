@@ -13,6 +13,7 @@ class LaserWidget(Widget):
     sigEnableChanged = QtCore.Signal(str, bool)  # (laserName, enabled)
     sigValueChanged = QtCore.Signal(str, float)  # (laserName, value)
     sigRepRateChanged = QtCore.Signal(str, float) #(laserName, reprate)
+    sigPulsingChanged = QtCore.Signal(str, bool)  #(lasername, pulsing on/off)
 
     sigStartClicked = QtCore.Signal(str, str)  # (Start laser warming up, text of button)
     sigStopClicked = QtCore.Signal(str)  # (Stop laser)
@@ -126,6 +127,10 @@ class LaserWidget(Widget):
             lambda: self.sigStopClicked.emit(laserName)
         )
 
+        control.sigPulsingChanged.connect(
+            lambda pulsing: self.sigPulsingChanged.emit(laserName, pulsing)
+        )
+
         if all(num > 0 for num in frequencyRange):
             control.sigModEnabledChanged.connect(
                 lambda enabled: self.sigModEnabledChanged.emit(laserName, enabled)
@@ -220,6 +225,12 @@ class LaserWidget(Widget):
 
     def setStatusLight(self, laserName, color):
         self.laserModules[laserName].setStatusLight(color)
+
+    def toggleStartButtonText(self, laserName, text):
+        self.laserModules[laserName].toggleStartButtonText(text)
+
+    def setShutterState(self, laserName, state):
+        self.laserModules[laserName].setShutterState(state)
     # def getCurrentPreset(self):
     #     """ Returns the name of the currently selected preset. """
     #     return self.presetsList.currentData()
@@ -290,6 +301,7 @@ class LaserModule(QtWidgets.QWidget):
     sigRepRateChanged = QtCore.Signal(float)    # (reprate value)
     sigStartClicked = QtCore.Signal(str)           # (Start laser warming up)
     sigStopClicked = QtCore.Signal()            # (Stop laser)
+    sigPulsingChanged = QtCore.Signal(bool)
 
     sigModEnabledChanged = QtCore.Signal(bool) # (modulation enabled)
     sigFreqChanged = QtCore.Signal(int)        # (frequency)
@@ -496,9 +508,9 @@ class LaserModule(QtWidgets.QWidget):
 
             self.powerGrid.addWidget(self.modulationGroup, 2, 0, 1, 5)
                 
-        self.enableButton = guitools.BetterPushButton('SHUTTER')
-        self.enableButton.setSizePolicy(QtWidgets.QSizePolicy.Minimum,
-                                        QtWidgets.QSizePolicy.Expanding)
+        self.enableButton = guitools.BetterPushButton('Shutter:\nClosed')
+        self.enableButton.setMinimumWidth(120)
+        self.enableButton.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
         self.enableButton.setCheckable(True)
 
         # Add elements to QHBoxLayout
@@ -533,6 +545,8 @@ class LaserModule(QtWidgets.QWidget):
         self.statStopButton.clicked.connect(
             lambda : self.sigStopClicked.emit()
         )
+
+        self.pulsingOn.toggled.connect(self.sigPulsingChanged)
 
         if isModulated:
             self.modulationEnable.toggled.connect(self.sigModEnabledChanged)
@@ -645,7 +659,11 @@ class LaserModule(QtWidgets.QWidget):
     def setStatusLabel(self, status:str):
         self.statLabel.setText("System status: " + status)
 
+    def toggleStartButtonText(self, text: str):
+        self.statStartButton.setText(text)
 
+    def setShutterState(self, state:str):
+        self.enableButton.setText("Shutter:\n" + state)
 
 
 # Copyright (C) 2017 Federico Barabas 2020-2021 ImSwitch developers

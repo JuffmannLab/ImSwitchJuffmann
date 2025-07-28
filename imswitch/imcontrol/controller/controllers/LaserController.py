@@ -48,6 +48,7 @@ class LaserController(ImConWidgetController):
         self._widget.sigEnableChanged.connect(self.toggleLaser)
         self._widget.sigValueChanged.connect(self.valueChanged)
         self._widget.sigRepRateChanged.connect(self.repRateChanged)
+        self._widget.sigPulsingChanged.connect(self.pulsingChanged)
 
         self._widget.sigStartClicked.connect(self.startClicked)
         self._widget.sigStopClicked.connect(self.stopClicked)
@@ -74,6 +75,12 @@ class LaserController(ImConWidgetController):
     def toggleLaser(self, laserName, enabled):
         """ Enable or disable laser (on/off)."""
         self._master.lasersManager[laserName].setEnabled(enabled)
+
+        if enabled:
+            self._widget.setShutterState(laserName, "Open")
+        else:
+            self._widget.setShutterState(laserName, "Closed")
+
         self.setSharedAttr(laserName, _enabledAttr, enabled)
 
     def valueChanged(self, laserName, magnitude):
@@ -88,19 +95,29 @@ class LaserController(ImConWidgetController):
         self._master.lasersManager[laserName].setReprate(repRate, reprateUnits)
 
     def startClicked(self, laserName, buttontext):
+        if buttontext == "Start":
+            self._master.lasersManager[laserName].startLaser()
+            self._widget.toggleStartButtonText(laserName, "Check")
+
         status = self._master.lasersManager[laserName].getStatus()
-        self._widget.setStatusLabel(laserName, status)
+        status is not None and self._widget.setStatusLabel(laserName, status)  # executes function only if status is not None
         if status == "On":
             self._widget.setStatusLight(laserName, "green")
             return
         elif status != "Ready":
             self._widget.setStatusLight(laserName, "orange")
             return
-        self._master.lasersManager[laserName].startClicked()
 
     def stopClicked(self, laserName):
-        return
+        self._master.lasersManager[laserName].stopLaser()
+        self._widget.setStatusLight(laserName, "grey")
+        self._widget.toggleStartButtonText(laserName, "Start")
+        status = self._master.lasersManager[laserName].getStatus()
+        status is not None and self._widget.setStatusLabel(laserName, status)
 
+
+    def pulsingChanged(self, laserName, pulsing):
+        self._master.lasersManager[laserName].togglePulsing(pulsing)
 
     def toggleModulation(self, laserName, enabled):
         """ Enable or disable laser modulation (on/off). """

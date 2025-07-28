@@ -19,9 +19,9 @@ class MonacoLaserManager(LaserManager):
         self.__logger = initLogger(self, instanceName=name)
 
         p = 1 if laserInfo.pulsing else 0
-        self.sendCommand(f"SET={laserInfo.repRate}")
+        #self.sendCommand(f"SET={laserInfo.repRate}")
         self.sendCommand("PM=2")
-        self.sendCommand(f"PC={p}")
+        #self.sendCommand(f"PC={p}")
 
         super().__init__(laserInfo, name, isBinary=isBinary, valueUnits=valueUnits,
                          valueDecimals=valueDecimals)
@@ -45,31 +45,42 @@ class MonacoLaserManager(LaserManager):
     def getStatus(self):
         command = "?ST"
         response = self.sendCommand(command)
-        status = response.strip().splitlines()[0]
-        return status
+        try:
+            status = response.strip().splitlines()[0]
+            return status
+        except Exception as e:
+            self.__logger.error(f"Error getting Monaco Status: {e}")
 
-    def startClicked(self):
+    def startLaser(self):
         command = "L=1"
         #response = self.sendCommand(command)
 
-    def stopClicked(self):
+    def stopLaser(self):
         command = "L=0"
         #response = self.sendCommand(command)
+
+    def togglePulsing(self, pulsing):
+        p = 1 if pulsing else 0
+        response = self.sendCommand(f"PC={p}")
 
     def finalize(self):
         pass
 
     def sendCommand(self, command: str):
-        with telnetlib.Telnet(HOST, PORT) as tn:
-            output = tn.read_until(SHELL_PROMPT).decode('ascii')
-            if "Monaco>" not in output:
-                self.__logger.error("Failed to connect to Monaco laser")
-                tn.close()
-                return None
+        try:
+            with telnetlib.Telnet(HOST, PORT, timeout=3) as tn:
+                output = tn.read_until(SHELL_PROMPT).decode('ascii')
+                if "Monaco>" not in output:
+                    self.__logger.error("Failed to connect to Monaco laser")
+                    tn.close()
+                    return None
 
-            tn.write(command.encode('ascii') + b'\r\n')
-            response = tn.read_until(SHELL_PROMPT).decode('ascii')
-            if CONTROL_SEQ in response:
-                self.__logger.error(f'{command} failed, Monaco returns: {response}')
-            tn.close()
-            return response
+                tn.write(command.encode('ascii') + b'\r\n')
+                response = tn.read_until(SHELL_PROMPT).decode('ascii')
+                if CONTROL_SEQ in response:
+                    self.__logger.error(f'{command} failed, Monaco returns: {response}')
+                tn.close()
+                return response
+
+        except Exception as e:
+            self.__logger.error(f"Failed to connect to Monaco laser: {e}")
