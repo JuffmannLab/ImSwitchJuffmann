@@ -19,9 +19,9 @@ class MonacoLaserManager(LaserManager):
         self.__logger = initLogger(self, instanceName=name)
 
         p = 1 if laserInfo.pulsing else 0
-        #self.sendCommand(f"SET={laserInfo.repRate}")
+        self.sendCommand(f"SET={laserInfo.repRate}")
         self.sendCommand("PM=2")
-        #self.sendCommand(f"PC={p}")
+        self.sendCommand(f"PC={p}")
 
         super().__init__(laserInfo, name, isBinary=isBinary, valueUnits=valueUnits,
                          valueDecimals=valueDecimals)
@@ -53,11 +53,11 @@ class MonacoLaserManager(LaserManager):
 
     def startLaser(self):
         command = "L=1"
-        #response = self.sendCommand(command)
+        response = self.sendCommand(command)
 
     def stopLaser(self):
         command = "L=0"
-        #response = self.sendCommand(command)
+        response = self.sendCommand(command)
 
     def togglePulsing(self, pulsing):
         p = 1 if pulsing else 0

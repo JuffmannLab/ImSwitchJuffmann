@@ -336,7 +336,7 @@ class LaserModule(QtWidgets.QWidget):
         self.repRateEdit.setAlignment(QtCore.Qt.AlignLeft)
 
         self.repRateUnits = QtWidgets.QComboBox()
-        self.repRateUnits.addItems(["KHz", "MHz", "GHz"])
+        self.repRateUnits.addItems(["kHz", "MHz", "GHz"])
         self.repRateUnits.setFixedWidth(50)
 
         #Pulsing
