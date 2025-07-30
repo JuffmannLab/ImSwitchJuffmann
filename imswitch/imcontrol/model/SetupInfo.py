@@ -65,13 +65,13 @@ class LaserInfo(DeviceInfo):
     """ Display colorbar of the laser in the GUI.
         USED TO BE WAVELENGTH VALUE BUT RANGES REPLACES IT AND ADDS FLEXIBILITY """
 
-    wavelengthRanges: List[wavelengthRange]
-    """ Ranges in which the laser can operate. If laser is used at a fixed wavelength, use the same value for min and max"""
+    # wavelengthRanges: List[wavelengthRange]
+    # """ Ranges in which the laser can operate. If laser is used at a fixed wavelength, use the same value for min and max"""
 
-    repRate: Optional[float] = 2
-    """ Repitition rate of the laser, default to 2MHz """
+    # repRate: Optional[float] = 2
+    """ Repetition rate of the laser, default to 2MHz """
 
-    pulsing: Optional[bool] = False
+    # pulsing: Optional[bool] = False
     """ Whether pulsing is on or off, default to False """
 
     freqRangeMin: Optional[int] = 0

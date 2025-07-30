@@ -142,7 +142,7 @@ class LaserWidget(Widget):
                 lambda dutyCycle: self.sigDutyCycleChanged.emit(laserName, dutyCycle)
             )
 
-        if not all(r.min == r.max for r in wavelengthRanges):
+        if not all(r["min"] == r["max"] for r in wavelengthRanges):
             control.sigRangeChanged.connect(
                 lambda index: self.sigRangeChanged.emit(laserName, index)
             )
@@ -318,7 +318,7 @@ class LaserModule(QtWidgets.QWidget):
         self.wavelengthRanges = wavelengthRanges
         isBinary = valueRange is None
         isModulated = all(num > 0 for num in frequencyRange)
-        isTunable = not all(r.min == r.max for r in wavelengthRanges)
+        isTunable = not all(r["min"] == r["max"] for r in wavelengthRanges)
         # Graphical elements
         #Power
         self.setPointLabel = QtWidgets.QLabel(f'RF Level (%):')
@@ -450,9 +450,11 @@ class LaserModule(QtWidgets.QWidget):
             self.powerGrid.addWidget(self.wavelengthGroup, 5, 0, 1, 3)
         else:
             self.wavelengthLabel = QtWidgets.QLabel(f"Wavelength:")
-            self.wavelengthValue = QtWidgets.QLabel(f"{wavelengthRanges[0].min} nm")
+            self.wavelengthValue = QtWidgets.QLabel(f"{wavelengthRanges[0]['min']} nm")
             self.powerGrid.addWidget(self.wavelengthLabel, 3, 0)
             self.powerGrid.addWidget(self.wavelengthValue, 3, 1)
+            self.powerGrid.setRowStretch(3,0)
+            self.powerGrid.setRowStretch(4, 1)
 
         if isModulated:
             freqRangeMin, freqRangeMax, initialFrequency = frequencyRange

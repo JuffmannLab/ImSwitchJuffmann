@@ -17,15 +17,29 @@ class MonacoLaserManager(LaserManager):
     def __init__(self, laserInfo, name, isBinary=False, valueUnits="", valueDecimals=0,
                  **_lowLevelManagers):
         self.__logger = initLogger(self, instanceName=name)
+        self.__wavelengthRanges = laserInfo.managerProperties["wavelengthRanges"]
+        self.__pulsing = laserInfo.managerProperties["pulsing"]
+        self.__repRate = laserInfo.managerProperties["repRate"]
 
-        p = 1 if laserInfo.pulsing else 0
-        self.sendCommand(f"SET={laserInfo.repRate}")
+        p = 1 if self.__pulsing else 0
+        self.sendCommand(f"SET={self.__repRate}")
         self.sendCommand("PM=2")
         self.sendCommand(f"PC={p}")
 
         super().__init__(laserInfo, name, isBinary=isBinary, valueUnits=valueUnits,
                          valueDecimals=valueDecimals)
 
+    @property
+    def wavelengthRanges(self):
+        return self.__wavelengthRanges
+
+    @property
+    def pulsing(self) -> bool:
+        return self.__pulsing
+
+    @property
+    def repRate(self) -> float:
+        return self.__repRate
 
     def setEnabled(self, enabled):
         s = 1 if enabled else 0

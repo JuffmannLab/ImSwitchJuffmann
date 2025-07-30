@@ -4,6 +4,8 @@ from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
     DetectorManager, DetectorNumberParameter, DetectorListParameter
 )
+from pyvcam import pvc
+from pyvcam.camera import Camera
 
 
 class PhotometricsManager(DetectorManager):
@@ -209,9 +211,6 @@ class PhotometricsManager(DetectorManager):
 
     def _getCameraObj(self, cameraId):
         try:
-            from pyvcam import pvc
-            from pyvcam.camera import Camera
-
             pvc.init_pvcam()
             self.__logger.debug(f'Trying to initialize Photometrics camera {cameraId}')
             camera = next(Camera.detect_camera())
