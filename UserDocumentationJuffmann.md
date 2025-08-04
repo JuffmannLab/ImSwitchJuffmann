@@ -99,3 +99,9 @@ python -m pip install .
 ```
 Don't forget the "." (dot) at the end. From GitHub it requires Python version 3.9, the imswitch version of the pyvcam `pyproject.toml` file
 is altered to allow version 3.8 as well. So far no bugs. 
+### TODO / REMINDERS
+
++ Despeckle off
++ fan speed high, otherwise liquid cooled
++ serial number of Moment Mono: A21A635004
++ serial number of BSI Prime: A20D204005
