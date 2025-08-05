@@ -7,6 +7,7 @@ from .DetectorManager import (
 from pyvcam import pvc
 from pyvcam.camera import Camera
 
+_pyvcam_initialized = False
 
 class PhotometricsManager(DetectorManager):
     """ DetectorManager that deals with frame extraction for a Photometrics camera.
@@ -26,7 +27,12 @@ class PhotometricsManager(DetectorManager):
         fullShape = self._camera.sensor_size
 
         model = self._camera.name
-        self.scanLineTime = self._camera.scan_line_time
+
+        # try:
+        #     self.scanLineTime = self._camera.scan_line_time                         #Warning: Camera specific property!
+        # except AttributeError:
+        #     self.__logger.warning(f"Camera {model} has no scan line time attribute!")
+
         self.__acquisition = False
         # Prepare parameters
         parameters = {
@@ -34,8 +40,8 @@ class PhotometricsManager(DetectorManager):
                                                          valueUnits='ms', editable=True),
             'Real exposure time': DetectorNumberParameter(group='Timings', value=0,
                                                           valueUnits='ms', editable=False),
-            'Readout time': DetectorNumberParameter(group='Timings', value=0,
-                                                    valueUnits='ms', editable=False),
+            # 'Readout time': DetectorNumberParameter(group='Timings', value=0,
+            #                                         valueUnits='ms', editable=False),
             'Trigger source': DetectorListParameter(group='Acquisition mode',
                                                     value='Internal trigger',
                                                     options=['Internal trigger',
@@ -61,13 +67,13 @@ class PhotometricsManager(DetectorManager):
         umxpx = self.parameters['Camera pixel size'].value
         return [1, umxpx, umxpx]
 
-    def getLatestFrame(self):
+    def getLatestFrame(self, is_save=True):
         try:
             status = self._camera.check_frame_status()
             if status == "READOUT_NOT_ACTIVE":
                 return self.image
             else:
-                return np.array(self._camera.poll_latest_frame()[0]['pixel_data'])
+                return np.array(self._camera.poll_frame()[0]['pixel_data'])
         except RuntimeError:
             return self.image
 
@@ -98,7 +104,7 @@ class PhotometricsManager(DetectorManager):
         self._frameStart = (hpos, vpos)
         # Only place self.shapes is changed
         self._shape = (hsize, vsize)
-        self.setParameter('Readout time', self.__scanLineTime * vsize / 1e6)
+        #self.setParameter('Readout time', self.__scanLineTime * vsize / 1e6)
 
     def setBinning(self, binning):
         super().setBinning(binning)
@@ -174,8 +180,8 @@ class PhotometricsManager(DetectorManager):
             self._performSafeCameraAction(portAction)
         else:
             raise ValueError(f'Invalid readout port "{port}"')
-        self._performSafeCameraAction(getScanTimeAction)
-        self.setParameter('Readout time', self.__scanLineTime * self._shape[0] / 1e6)
+        #self._performSafeCameraAction(getScanTimeAction)
+        #self.setParameter('Readout time', self.__scanLineTime * self._shape[0] / 1e6)
 
     def _performSafeCameraAction(self, function):
         """ This method is used to change those camera properties that need
@@ -210,20 +216,31 @@ class PhotometricsManager(DetectorManager):
         self._camera.close()
 
     def _getCameraObj(self, cameraId):
+        name = "PMUSBCam0"+str(cameraId)
         try:
-            pvc.init_pvcam()
-            self.__logger.debug(f'Trying to initialize Photometrics camera {cameraId}')
-            camera = next(Camera.detect_camera())
+            global _pyvcam_initialized
+            if not _pyvcam_initialized:
+                rvalue = pvc.init_pvcam()
+                _pyvcam_initialized = True
+
+            self.__logger.debug(f'Trying to initialize Photometrics camera {name}')
+            camera = Camera.select_camera(name)
             camera.open()
         except Exception:
-            self.__logger.warning(f'Failed to initialize Photometrics camera {cameraId},'
+            self.__logger.warning(f'Failed to initialize Photometrics camera {name},'
                                   f' loading mocker')
             from imswitch.imcontrol.model.interfaces import MockHamamatsu
             camera = MockHamamatsu()
 
         self.__logger.info(f'Initialized camera, model: {camera.name}')
+        #TODO create new mocker as this one just causes the program to crash as they are not the same class!
         return camera
 
+    def _ensure_pyvcam_initialized(self):
+        global _pyvcam_initialized
+        if not _pyvcam_initialized:
+            rvalue = pvc.init_pvcam()
+            _pyvcam_initialized = True
 
 # Copyright (C) 2020-2021 ImSwitch developers
 # This file is part of ImSwitch.

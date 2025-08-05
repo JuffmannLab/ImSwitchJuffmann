@@ -119,7 +119,7 @@ class DetectorManager(SignalInterface):
         else:
             if self.__image is not None:
                 self.sigImageUpdated.emit(self.__image, init)
-                self.__logger.warning('No Image taken')
+                #self.__logger.warning('No Image taken')
 
     def setParameter(self, name: str, value: Any) -> Dict[str, DetectorParameter]:
         """ Sets a parameter value and returns the updated list of parameters.
