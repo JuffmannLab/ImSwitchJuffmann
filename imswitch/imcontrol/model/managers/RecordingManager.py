@@ -85,7 +85,7 @@ class HDF5Storer(Storer):
 
                 shape = self.detectorManager[channel].shape
 
-                dataset = file.create_dataset('data', tuple(reversed(shape)), dtype='i2')
+                dataset = file.create_dataset('data', tuple(shape), dtype='i2')
 
                 for key, value in attrs[channel].items():
                     try:
@@ -118,8 +118,17 @@ class TiffStorer(Storer):
     def snap(self, images: Dict[str, np.ndarray], attrs: Dict[str, str] = None):
         for channel, image in images.items():
             with AsTemporayFile(f'{self.filepath}_{channel}.tiff') as path:
-                tiff.imwrite(path, image,) # TODO: Parse metadata to tiff meta data
 
+                metadata = {}
+                for key, value in attrs[channel].items():
+                    try:
+                        metadata[key] = value
+                    except:
+                        logger.debug(f'Could not put key:value pair {key}:{value} in tiff metadata.')
+
+                metadata['detector_name'] = channel
+                tiff.imwrite(path, image, metadata=metadata)
+                logger.info(f"Saved image to tiff file {path}")
 
 
 class SaveMode(enum.Enum):
