@@ -48,6 +48,7 @@ class LaserController(ImConWidgetController):
         self._widget.sigEnableChanged.connect(self.toggleLaser)
         self._widget.sigValueChanged.connect(self.valueChanged)
         self._widget.sigRepRateChanged.connect(self.repRateChanged)
+        self._widget.sigRepEnableChanged.connect(self.ampEnableChanged)
         self._widget.sigAmpChanged.connect(self.ampChanged)
         self._widget.sigPulsingChanged.connect(self.pulsingChanged)
 
@@ -95,6 +96,17 @@ class LaserController(ImConWidgetController):
         reprateUnits = self._widget.getRepRateUnits(laserName)
         self._master.lasersManager[laserName].setAmplifier(repRate, reprateUnits)
 
+    def ampEnableChanged(self, laserName, enable):
+        index = self._widget.getAmplifierIndex(laserName)
+        if index != 5: #5 is the 2MHz setting
+            self._widget.setAmplifierEditable(laserName, enable)
+            self._widget.setRepRateEditable(laserName, enable)
+
+        else:
+            self._widget.setAmplifierEditable(laserName, enable)
+
+
+
     def ampChanged(self, laserName, index):
         """ Fixed amplifier values """
         values = ["200 kHz 5x40 µJ", "250 kHz 4x40 µJ",
@@ -106,7 +118,12 @@ class LaserController(ImConWidgetController):
         reprate = int(str_values[0])
         reprateUnits = str_values[1]
         pulses = int(str_values[2][0])
-        self._master.lasersManager[laserName].setAmplifier(reprate, reprateUnits, pulses=pulses)
+        rr = self._master.lasersManager[laserName].setAmplifier(reprate, reprateUnits, pulses=pulses)
+        self._widget.setRepRate(laserName, rr)
+        if index != 5:
+            self._widget.setRepRateEditable(laserName, True)
+        else:
+            self._widget.setRepRateEditable(laserName, False)
 
     def startClicked(self, laserName, buttontext):
         if buttontext == "Start":

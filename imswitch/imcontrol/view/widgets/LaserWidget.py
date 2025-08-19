@@ -13,6 +13,7 @@ class LaserWidget(Widget):
     sigEnableChanged = QtCore.Signal(str, bool)  # (laserName, enabled)
     sigValueChanged = QtCore.Signal(str, float)  # (laserName, value)
     sigRepRateChanged = QtCore.Signal(str, float) #(laserName, reprate)
+    sigRepEnableChanged = QtCore.Signal(str, bool)   # (laserName, enable reprate edit)
     sigAmpChanged = QtCore.Signal(str, int)            # (lasername, amplifier index value)
     sigPulsingChanged = QtCore.Signal(str, bool)  #(lasername, pulsing on/off)
 
@@ -136,6 +137,10 @@ class LaserWidget(Widget):
             lambda pulsing: self.sigPulsingChanged.emit(laserName, pulsing)
         )
 
+        control.sigRepEnableChanged.connect(
+            lambda enable: self.sigRepEnableChanged.emit(laserName, enable)
+        )
+
         if all(num > 0 for num in frequencyRange):
             control.sigModEnabledChanged.connect(
                 lambda enabled: self.sigModEnabledChanged.emit(laserName, enabled)
@@ -236,6 +241,18 @@ class LaserWidget(Widget):
 
     def setShutterState(self, laserName, state):
         self.laserModules[laserName].setShutterState(state)
+
+    def setAmplifierEditable(self, laserName, enable):
+        self.laserModules[laserName].setAmplifierEditable(enable)
+
+    def setRepRateEditable(self, laserName, enable):
+        self.laserModules[laserName].setRepRateEditable(enable)
+
+    def getAmplifierIndex(self, laserName):
+        return self.laserModules[laserName].getAmplifierIndex()
+
+    def setRepRate(self, laserName, rr):
+        self.laserModules[laserName].setRepRate(rr)
     # def getCurrentPreset(self):
     #     """ Returns the name of the currently selected preset. """
     #     return self.presetsList.currentData()
@@ -302,6 +319,7 @@ class LaserModule(QtWidgets.QWidget):
     """ Module from LaserWidget to handle a single laser. """
 
     sigEnableChanged = QtCore.Signal(bool)      # (enable laser)
+    sigRepEnableChanged = QtCore.Signal(bool)   # (enable reprate edit)
     sigValueChanged = QtCore.Signal(float)      # (RF Level value)
     sigAmpChanged = QtCore.Signal(int)          # (amplifier index value)
     sigRepRateChanged = QtCore.Signal(float)    # (reprate value)
@@ -345,19 +363,21 @@ class LaserModule(QtWidgets.QWidget):
                                  "50 MHz 1x0.8 µJ"])
         self.ampValues.setFixedWidth(120)
         self.ampValues.setCurrentIndex(5)
+        self.ampValues.setEditable(False)
+        self.ampValues.setEnabled(False)
 
 
 
         #Reprate
-        self.repRateLabel = QtWidgets.QLabel(f'Repetition rate:')
+        self.repRateLabel = QtWidgets.QLabel(f'Edit repetition rate:')
         self.repRateLabel.setAlignment(QtCore.Qt.AlignLeft)
         self.repRateEdit = QtWidgets.QLineEdit(str(repRate))
         self.repRateEdit.setFixedWidth(50)
         self.repRateEdit.setAlignment(QtCore.Qt.AlignLeft)
+        self.repRateEdit.setEnabled(False)
 
-        self.repRateUnits = QtWidgets.QComboBox()
-        self.repRateUnits.addItems(["kHz", "MHz", "GHz"])
-        self.repRateUnits.setFixedWidth(50)
+        self.repRateEditButton = guitools.BetterPushButton("I understand \n reprate risk")
+        self.repRateEditButton.setCheckable(True)
 
         #Pulsing
         self.pulsingLabel = QtWidgets.QLabel("Pulsing:")
@@ -417,7 +437,8 @@ class LaserModule(QtWidgets.QWidget):
 
         self.powerGrid.addWidget(self.repRateLabel, 2, 0)
         self.powerGrid.addWidget(self.repRateEdit, 2, 1)
-        self.powerGrid.addWidget(self.repRateUnits, 2, 2)
+        self.powerGrid.addWidget(self.repRateEditButton, 2, 2)
+
         self.powerGrid.addItem(spacer, 2, 3)
         self.powerGrid.addWidget(self.statLight, 2, 4)
         self.powerGrid.addWidget(self.statLabel, 2, 5)
@@ -575,6 +596,8 @@ class LaserModule(QtWidgets.QWidget):
             lambda index: self.sigAmpChanged.emit(index)
         )
 
+        self.repRateEditButton.toggled.connect(self.sigRepEnableChanged)
+
         if isModulated:
             self.modulationEnable.toggled.connect(self.sigModEnabledChanged)
             self.modulationFrequencySlider.valueChanged.connect(
@@ -692,7 +715,17 @@ class LaserModule(QtWidgets.QWidget):
     def setShutterState(self, state:str):
         self.enableButton.setText("Shutter:\n" + state)
 
+    def setAmplifierEditable(self, enable):
+        self.ampValues.setEnabled(enable)
 
+    def setRepRateEditable(self, enable):
+        self.repRateEdit.setEnabled(enable)
+
+    def getAmplifierIndex(self):
+        return self.ampValues.currentIndex()
+
+    def setRepRate(self, rr):
+        self.repRateEdit.setText(str(rr))
 # Copyright (C) 2017 Federico Barabas 2020-2021 ImSwitch developers
 # This file is part of Tormenta and ImSwitch.
 #

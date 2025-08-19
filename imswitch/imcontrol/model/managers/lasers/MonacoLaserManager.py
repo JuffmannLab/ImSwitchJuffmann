@@ -55,7 +55,7 @@ class MonacoLaserManager(LaserManager):
         rr = int(reprate * RR_UNIT_FACTORS[reprateUnits])
         command = f"SET={rr}, {pulsewidth}, {divisor}, {pulses}"
         response = self.sendCommand(command)
-
+        return rr
 
     def getStatus(self):
         command = "?ST"
