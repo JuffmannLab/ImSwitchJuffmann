@@ -48,6 +48,7 @@ class LaserController(ImConWidgetController):
         self._widget.sigEnableChanged.connect(self.toggleLaser)
         self._widget.sigValueChanged.connect(self.valueChanged)
         self._widget.sigRepRateChanged.connect(self.repRateChanged)
+        self._widget.sigAmpChanged.connect(self.ampChanged)
         self._widget.sigPulsingChanged.connect(self.pulsingChanged)
 
         self._widget.sigStartClicked.connect(self.startClicked)
@@ -92,7 +93,20 @@ class LaserController(ImConWidgetController):
     def repRateChanged(self, laserName, repRate):
         """ Change laser rep rate. """
         reprateUnits = self._widget.getRepRateUnits(laserName)
-        self._master.lasersManager[laserName].setReprate(repRate, reprateUnits)
+        self._master.lasersManager[laserName].setAmplifier(repRate, reprateUnits)
+
+    def ampChanged(self, laserName, index):
+        """ Fixed amplifier values """
+        values = ["200 kHz 5x40 µJ", "250 kHz 4x40 µJ",
+                    "330 kHz 3x40 µJ", "500 kHz 2x40 µJ",
+                    "1 MHz 1x40 µJ", "2 MHz 1x20 µJ",
+                    "4 MHz 1x10 µJ", "10 MHz 1x4 µJ",
+                    "50 MHz 1x0.8 µJ"]
+        str_values = values[index].split()
+        reprate = int(str_values[0])
+        reprateUnits = str_values[1]
+        pulses = int(str_values[2][0])
+        self._master.lasersManager[laserName].setAmplifier(reprate, reprateUnits, pulses=pulses)
 
     def startClicked(self, laserName, buttontext):
         if buttontext == "Start":

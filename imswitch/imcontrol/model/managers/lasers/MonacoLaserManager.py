@@ -50,11 +50,12 @@ class MonacoLaserManager(LaserManager):
         command = f"RL={power}"
         response = self.sendCommand(command)
 
-    def setReprate(self, reprate, reprateUnits):
+    def setAmplifier(self, reprate, reprateUnits, pulsewidth=278, divisor=1, pulses=1):
         """ The SET command expects the reprate in kHz. Conversion needs to be done first! """
         rr = int(reprate * RR_UNIT_FACTORS[reprateUnits])
-        command = f"SET={rr}"
+        command = f"SET={rr}, {pulsewidth}, {divisor}, {pulses}"
         response = self.sendCommand(command)
+
 
     def getStatus(self):
         command = "?ST"

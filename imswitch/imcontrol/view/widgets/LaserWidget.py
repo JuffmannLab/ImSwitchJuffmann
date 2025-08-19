@@ -13,6 +13,7 @@ class LaserWidget(Widget):
     sigEnableChanged = QtCore.Signal(str, bool)  # (laserName, enabled)
     sigValueChanged = QtCore.Signal(str, float)  # (laserName, value)
     sigRepRateChanged = QtCore.Signal(str, float) #(laserName, reprate)
+    sigAmpChanged = QtCore.Signal(str, int)            # (lasername, amplifier index value)
     sigPulsingChanged = QtCore.Signal(str, bool)  #(lasername, pulsing on/off)
 
     sigStartClicked = QtCore.Signal(str, str)  # (Start laser warming up, text of button)
@@ -117,6 +118,10 @@ class LaserWidget(Widget):
 
         control.sigRepRateChanged.connect(
             lambda reprate: self.sigRepRateChanged.emit(laserName, reprate)
+        )
+
+        control.sigAmpChanged.connect(
+            lambda index: self.sigAmpChanged.emit(laserName, index)
         )
 
         control.sigStartClicked.connect(
@@ -298,8 +303,9 @@ class LaserModule(QtWidgets.QWidget):
 
     sigEnableChanged = QtCore.Signal(bool)      # (enable laser)
     sigValueChanged = QtCore.Signal(float)      # (RF Level value)
+    sigAmpChanged = QtCore.Signal(int)          # (amplifier index value)
     sigRepRateChanged = QtCore.Signal(float)    # (reprate value)
-    sigStartClicked = QtCore.Signal(str)           # (Start laser warming up)
+    sigStartClicked = QtCore.Signal(str)        # (Start laser warming up)
     sigStopClicked = QtCore.Signal()            # (Stop laser)
     sigPulsingChanged = QtCore.Signal(bool)
 
@@ -327,6 +333,20 @@ class LaserModule(QtWidgets.QWidget):
         self.setPointEdit.setFixedWidth(50)
         self.setPointEdit.setAlignment(QtCore.Qt.AlignLeft)
         self.setPointEdit.setRange(1, 100)
+
+        #Amplifier
+        self.ampLabel = QtWidgets.QLabel('Amplifier:')
+        self.ampLabel.setAlignment(QtCore.Qt.AlignLeft)
+        self.ampValues = QtWidgets.QComboBox()
+        self.ampValues.addItems(["200 kHz 5x40 µJ", "250 kHz 4x40 µJ",
+                                 "330 kHz 3x40 µJ", "500 kHz 2x40 µJ",
+                                 "1 MHz 1x40 µJ", "2 MHz 1x20 µJ",
+                                 "4 MHz 1x10 µJ", "10 MHz 1x4 µJ",
+                                 "50 MHz 1x0.8 µJ"])
+        self.ampValues.setFixedWidth(120)
+        self.ampValues.setCurrentIndex(5)
+
+
 
         #Reprate
         self.repRateLabel = QtWidgets.QLabel(f'Repetition rate:')
@@ -390,20 +410,21 @@ class LaserModule(QtWidgets.QWidget):
         self.powerGrid.addItem(spacer, 0, 2, 1, 2)
         self.powerGrid.addWidget(self.statStartButton, 0, 4)
         self.powerGrid.addWidget(self.statStopButton, 0, 5)
-        #self.powerGrid.addWidget(self.minpower, 0, 2, 1, 1)
-        #self.powerGrid.addWidget(self.slider, 0, 3, 2, 1)
-        #self.powerGrid.addWidget(self.maxpower, 0, 4, 1, 1)
 
-        self.powerGrid.addWidget(self.repRateLabel, 1, 0)
-        self.powerGrid.addWidget(self.repRateEdit, 1, 1)
-        self.powerGrid.addWidget(self.repRateUnits, 1, 2)
-        self.powerGrid.addItem(spacer, 1, 3)
-        self.powerGrid.addWidget(self.statLight, 1, 4)
-        self.powerGrid.addWidget(self.statLabel, 1, 5)
+        self.powerGrid.addWidget(self.ampLabel, 1, 0)
+        self.powerGrid.addWidget(self.ampValues, 1, 1, 1, 2)
 
-        self.powerGrid.addWidget(self.pulsingLabel, 2, 0)
-        self.powerGrid.addWidget(self.pulsingOff, 2, 1)
-        self.powerGrid.addWidget(self.pulsingOn, 2, 2)
+
+        self.powerGrid.addWidget(self.repRateLabel, 2, 0)
+        self.powerGrid.addWidget(self.repRateEdit, 2, 1)
+        self.powerGrid.addWidget(self.repRateUnits, 2, 2)
+        self.powerGrid.addItem(spacer, 2, 3)
+        self.powerGrid.addWidget(self.statLight, 2, 4)
+        self.powerGrid.addWidget(self.statLabel, 2, 5)
+
+        self.powerGrid.addWidget(self.pulsingLabel, 3, 0)
+        self.powerGrid.addWidget(self.pulsingOff, 3, 1)
+        self.powerGrid.addWidget(self.pulsingOn, 3, 2)
 
         self.powerGrid.setColumnStretch(0, 0)  # Label column: no stretch
         self.powerGrid.setColumnStretch(1, 0)  # Edit box: no stretch
@@ -451,11 +472,11 @@ class LaserModule(QtWidgets.QWidget):
         else:
             self.wavelengthLabel = QtWidgets.QLabel(f"Wavelength:")
             self.wavelengthValue = QtWidgets.QLabel(f"{wavelengthRanges[0]['min']} nm")
-            self.powerGrid.addWidget(self.wavelengthLabel, 3, 0)
-            self.powerGrid.addWidget(self.wavelengthValue, 3, 1)
-            self.powerGrid.setRowStretch(3,0)
-            self.powerGrid.setRowStretch(4, 1)
-
+            self.powerGrid.addWidget(self.wavelengthLabel, 4, 0)
+            self.powerGrid.addWidget(self.wavelengthValue, 4, 1)
+            #self.powerGrid.setRowStretch(3,0)
+            self.powerGrid.setRowStretch(4, 0)
+            self.powerGrid.setRowStretch(5, 1)
         if isModulated:
             freqRangeMin, freqRangeMax, initialFrequency = frequencyRange
             # laser modulation widgets
@@ -549,6 +570,10 @@ class LaserModule(QtWidgets.QWidget):
         )
 
         self.pulsingOn.toggled.connect(self.sigPulsingChanged)
+
+        self.ampValues.currentIndexChanged.connect(
+            lambda index: self.sigAmpChanged.emit(index)
+        )
 
         if isModulated:
             self.modulationEnable.toggled.connect(self.sigModEnabledChanged)
