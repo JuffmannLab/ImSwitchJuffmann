@@ -85,19 +85,19 @@ class LaserController(ImConWidgetController):
             self._widget.setShutterState(laserName, "Closed")
 
         self.setSharedAttr(laserName, _enabledAttr, enabled)
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
     def valueChanged(self, laserName, magnitude):
         """ Change magnitude. """
         fault = self._master.lasersManager[laserName].setValue(magnitude)
         self._widget.setValue(laserName, magnitude)
         self.setSharedAttr(laserName, _valueAttr, magnitude)
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
 
     def repRateChanged(self, laserName, repRate):
         """ Change laser rep rate. """
         reprateUnits = self._widget.getRepRateUnits(laserName)
         fault = self._master.lasersManager[laserName].setAmplifier(repRate, reprateUnits)
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
 
 
     def ampEnableChanged(self, laserName, enable):
@@ -128,13 +128,13 @@ class LaserController(ImConWidgetController):
             self._widget.setRepRateEditable(laserName, True)
         else:
             self._widget.setRepRateEditable(laserName, False)
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
 
     def startClicked(self, laserName, buttontext):
         if buttontext == "Start":
             fault = self._master.lasersManager[laserName].startLaser()
             self._widget.toggleStartButtonText(laserName, "Check")
-            self._widget.setFaultStatus(fault)
+            self._widget.setFaultStatus(laserName, fault)
 
         status, fault  = self._master.lasersManager[laserName].getStatus()
         status is not None and self._widget.setStatusLabel(laserName, status)  # executes function only if status is not None
@@ -144,7 +144,7 @@ class LaserController(ImConWidgetController):
         elif status != "Ready":
             self._widget.setStatusLight(laserName, "orange")
 
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
 
     def stopClicked(self, laserName):
         fault = self._master.lasersManager[laserName].stopLaser()
@@ -152,15 +152,15 @@ class LaserController(ImConWidgetController):
         self._widget.toggleStartButtonText(laserName, "Start")
         status = self._master.lasersManager[laserName].getStatus()
         status is not None and self._widget.setStatusLabel(laserName, status)
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
 
     def clearFaultClicked(self, laserName):
         fault = self._master.lasersManager[laserName].clearFault()
-        self._widget.setFaultStatus(" ")
+        self._widget.setFaultStatus(laserName, " ")
 
     def pulsingChanged(self, laserName, pulsing):
         _, fault = self._master.lasersManager[laserName].togglePulsing(pulsing)
-        self._widget.setFaultStatus(fault)
+        self._widget.setFaultStatus(laserName, fault)
 
     def toggleModulation(self, laserName, enabled):
         """ Enable or disable laser modulation (on/off). """
