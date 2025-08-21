@@ -44,39 +44,49 @@ class MonacoLaserManager(LaserManager):
     def setEnabled(self, enabled):
         s = 1 if enabled else 0
         command = f"S={s}"
-        response = self.sendCommand(command)
+        response, f_response = self.sendCommand(command)
+        return f_response
 
     def setValue(self, power):
         command = f"RL={power}"
-        response = self.sendCommand(command)
+        response, f_response = self.sendCommand(command)
+        return f_response
 
     def setAmplifier(self, reprate, reprateUnits, pulsewidth=278, divisor=1, pulses=1):
         """ The SET command expects the reprate in kHz. Conversion needs to be done first! """
         rr = int(reprate * RR_UNIT_FACTORS[reprateUnits])
         command = f"SET={rr}, {pulsewidth}, {divisor}, {pulses}"
-        response = self.sendCommand(command)
-        return rr
+        response, f_response = self.sendCommand(command)
+        return rr, f_response
 
     def getStatus(self):
         command = "?ST"
-        response = self.sendCommand(command)
+        response, f_response = self.sendCommand(command)
         try:
             status = response.strip().splitlines()[0]
-            return status
+            return status, f_response
         except Exception as e:
             self.__logger.error(f"Error getting Monaco Status: {e}")
 
     def startLaser(self):
         command = "L=1"
-        response = self.sendCommand(command)
+        response, f_response = self.sendCommand(command)
+        return f_response
 
     def stopLaser(self):
         command = "L=0"
-        response = self.sendCommand(command)
+        response , f_response= self.sendCommand(command)
+        return f_response
 
     def togglePulsing(self, pulsing):
         p = 1 if pulsing else 0
-        response = self.sendCommand(f"PC={p}")
+        response, f_response = self.sendCommand(f"PC={p}")
+        return f_response
+
+    def clearFault(self):
+        command = "FACK"
+        response, f_response = self.sendCommand(command)
+        return f_response
 
     def finalize(self):
         pass
@@ -85,17 +95,22 @@ class MonacoLaserManager(LaserManager):
         try:
             with telnetlib.Telnet(HOST, PORT, timeout=3) as tn:
                 output = tn.read_until(SHELL_PROMPT).decode('ascii')
-                if "Monaco>" not in output:
-                    self.__logger.error("Failed to connect to Monaco laser")
-                    tn.close()
-                    return None
 
+                #command
                 tn.write(command.encode('ascii') + b'\r\n')
                 response = tn.read_until(SHELL_PROMPT).decode('ascii')
                 if CONTROL_SEQ in response:
                     self.__logger.error(f'{command} failed, Monaco returns: {response}')
+                    tn.close()
+                    return None, None
+
+                #check for faults
+                f_cmd = "?F"
+                tn.write(f_cmd.encode('ascii') + b'\r\n')
+                f_response = tn.read_until(SHELL_PROMPT).decode('ascii')
                 tn.close()
-                return response
+                return response, f_response
 
         except Exception as e:
             self.__logger.error(f"Failed to connect to Monaco laser: {e}")
+            return None, None

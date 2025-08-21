@@ -54,6 +54,7 @@ class LaserController(ImConWidgetController):
 
         self._widget.sigStartClicked.connect(self.startClicked)
         self._widget.sigStopClicked.connect(self.stopClicked)
+        self._widget.sigClearFaultClicked.connect(self.clearFaultClicked)
 
         self._widget.sigModEnabledChanged.connect(self.toggleModulation)
         self._widget.sigFreqChanged.connect(self.frequencyChanged)
@@ -76,7 +77,7 @@ class LaserController(ImConWidgetController):
 
     def toggleLaser(self, laserName, enabled):
         """ Enable or disable laser (on/off)."""
-        self._master.lasersManager[laserName].setEnabled(enabled)
+        fault = self._master.lasersManager[laserName].setEnabled(enabled)
 
         if enabled:
             self._widget.setShutterState(laserName, "Open")
@@ -84,17 +85,20 @@ class LaserController(ImConWidgetController):
             self._widget.setShutterState(laserName, "Closed")
 
         self.setSharedAttr(laserName, _enabledAttr, enabled)
-
+        self._widget.setFaultStatus(fault)
     def valueChanged(self, laserName, magnitude):
         """ Change magnitude. """
-        self._master.lasersManager[laserName].setValue(magnitude)
+        fault = self._master.lasersManager[laserName].setValue(magnitude)
         self._widget.setValue(laserName, magnitude)
         self.setSharedAttr(laserName, _valueAttr, magnitude)
+        self._widget.setFaultStatus(fault)
 
     def repRateChanged(self, laserName, repRate):
         """ Change laser rep rate. """
         reprateUnits = self._widget.getRepRateUnits(laserName)
-        self._master.lasersManager[laserName].setAmplifier(repRate, reprateUnits)
+        fault = self._master.lasersManager[laserName].setAmplifier(repRate, reprateUnits)
+        self._widget.setFaultStatus(fault)
+
 
     def ampEnableChanged(self, laserName, enable):
         index = self._widget.getAmplifierIndex(laserName)
@@ -118,37 +122,45 @@ class LaserController(ImConWidgetController):
         reprate = int(str_values[0])
         reprateUnits = str_values[1]
         pulses = int(str_values[2][0])
-        rr = self._master.lasersManager[laserName].setAmplifier(reprate, reprateUnits, pulses=pulses)
+        rr, fault = self._master.lasersManager[laserName].setAmplifier(reprate, reprateUnits, pulses=pulses)
         self._widget.setRepRate(laserName, rr)
         if index != 5:
             self._widget.setRepRateEditable(laserName, True)
         else:
             self._widget.setRepRateEditable(laserName, False)
+        self._widget.setFaultStatus(fault)
 
     def startClicked(self, laserName, buttontext):
         if buttontext == "Start":
-            self._master.lasersManager[laserName].startLaser()
+            fault = self._master.lasersManager[laserName].startLaser()
             self._widget.toggleStartButtonText(laserName, "Check")
+            self._widget.setFaultStatus(fault)
 
-        status = self._master.lasersManager[laserName].getStatus()
+        status, fault  = self._master.lasersManager[laserName].getStatus()
         status is not None and self._widget.setStatusLabel(laserName, status)  # executes function only if status is not None
         if status == "On":
             self._widget.setStatusLight(laserName, "green")
-            return
+
         elif status != "Ready":
             self._widget.setStatusLight(laserName, "orange")
-            return
+
+        self._widget.setFaultStatus(fault)
 
     def stopClicked(self, laserName):
-        self._master.lasersManager[laserName].stopLaser()
+        fault = self._master.lasersManager[laserName].stopLaser()
         self._widget.setStatusLight(laserName, "grey")
         self._widget.toggleStartButtonText(laserName, "Start")
         status = self._master.lasersManager[laserName].getStatus()
         status is not None and self._widget.setStatusLabel(laserName, status)
+        self._widget.setFaultStatus(fault)
 
+    def clearFaultClicked(self, laserName):
+        fault = self._master.lasersManager[laserName].clearFault()
+        self._widget.setFaultStatus(" ")
 
     def pulsingChanged(self, laserName, pulsing):
-        self._master.lasersManager[laserName].togglePulsing(pulsing)
+        _, fault = self._master.lasersManager[laserName].togglePulsing(pulsing)
+        self._widget.setFaultStatus(fault)
 
     def toggleModulation(self, laserName, enabled):
         """ Enable or disable laser modulation (on/off). """

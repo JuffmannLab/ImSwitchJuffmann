@@ -1,5 +1,5 @@
 from PyQt5.QtCore import QSize
-from PyQt5.QtWidgets import QSizePolicy, QSpacerItem
+from PyQt5.QtWidgets import QSizePolicy, QSpacerItem, QFrame
 from qtpy import QtCore, QtWidgets, QtGui
 
 from imswitch.imcommon.view.guitools import colorutils
@@ -10,15 +10,16 @@ from .basewidgets import Widget
 class LaserWidget(Widget):
     """ Laser widget for setting laser powers etc. """
 
-    sigEnableChanged = QtCore.Signal(str, bool)  # (laserName, enabled)
-    sigValueChanged = QtCore.Signal(str, float)  # (laserName, value)
-    sigRepRateChanged = QtCore.Signal(str, float) #(laserName, reprate)
-    sigRepEnableChanged = QtCore.Signal(str, bool)   # (laserName, enable reprate edit)
-    sigAmpChanged = QtCore.Signal(str, int)            # (lasername, amplifier index value)
-    sigPulsingChanged = QtCore.Signal(str, bool)  #(lasername, pulsing on/off)
+    sigEnableChanged = QtCore.Signal(str, bool)     # (laserName, enabled)
+    sigValueChanged = QtCore.Signal(str, float)     # (laserName, value)
+    sigRepRateChanged = QtCore.Signal(str, float)   #(laserName, reprate)
+    sigRepEnableChanged = QtCore.Signal(str, bool)  # (laserName, enable reprate edit)
+    sigAmpChanged = QtCore.Signal(str, int)         # (lasername, amplifier index value)
+    sigPulsingChanged = QtCore.Signal(str, bool)    #(lasername, pulsing on/off)
 
-    sigStartClicked = QtCore.Signal(str, str)  # (Start laser warming up, text of button)
-    sigStopClicked = QtCore.Signal(str)  # (Stop laser)
+    sigStartClicked = QtCore.Signal(str, str)       # (Start laser warming up, text of button)
+    sigStopClicked = QtCore.Signal(str)             # (Stop laser)
+    sigClearFaultClicked = QtCore.Signal(str)       # (laserName)
 
     sigModEnabledChanged = QtCore.Signal(str, bool) # (laserName, modulationEnabled)
     sigFreqChanged = QtCore.Signal(str, int)        # (laserName, frequency)
@@ -131,6 +132,10 @@ class LaserWidget(Widget):
 
         control.sigStopClicked.connect(
             lambda: self.sigStopClicked.emit(laserName)
+        )
+
+        control.sigClearFaultClicked.connect(
+            lambda : self.sigClearFaultClicked.emit(laserName)
         )
 
         control.sigPulsingChanged.connect(
@@ -253,6 +258,9 @@ class LaserWidget(Widget):
 
     def setRepRate(self, laserName, rr):
         self.laserModules[laserName].setRepRate(rr)
+
+    def setFaultStatus(self, laserName, faults):
+        self.laserModules[laserName].setFaultStatus(faults)
     # def getCurrentPreset(self):
     #     """ Returns the name of the currently selected preset. """
     #     return self.presetsList.currentData()
@@ -325,7 +333,8 @@ class LaserModule(QtWidgets.QWidget):
     sigRepRateChanged = QtCore.Signal(float)    # (reprate value)
     sigStartClicked = QtCore.Signal(str)        # (Start laser warming up)
     sigStopClicked = QtCore.Signal()            # (Stop laser)
-    sigPulsingChanged = QtCore.Signal(bool)
+    sigPulsingChanged = QtCore.Signal(bool)     # (toggle pulsing)
+    sigClearFaultClicked = QtCore.Signal()      # (clear faults)
 
     sigModEnabledChanged = QtCore.Signal(bool) # (modulation enabled)
     sigFreqChanged = QtCore.Signal(int)        # (frequency)
@@ -391,11 +400,31 @@ class LaserModule(QtWidgets.QWidget):
         self.statStartButton.setFixedWidth(40)
         self.statStopButton = guitools.BetterPushButton("Stop")
         self.statStopButton.setFixedWidth(40)
-        self.statLabel = QtWidgets.QLabel("System Status:")
+        self.statLabel = QtWidgets.QLabel("System Status")
+        self.statList = QtWidgets.QLabel(" ")
+        self.statList.setStyleSheet("""
+                  QLabel {
+                      border: 1px solid white;
+                      border-radius: 4px;
+                      padding: 4px;
+                  }
+              """)
+        self.statList.setFixedWidth(150)
         self.statLight = QtWidgets.QLabel()
         self.statLight.setFixedSize(QSize(25, 25))
         self.setStatusLight("grey")
 
+        self.faultLabel = QtWidgets.QLabel("Fault status")
+        self.faultList = QtWidgets.QLabel(" ")
+        self.faultList.setStyleSheet("""
+            QLabel {
+                border: 1px solid white;
+                border-radius: 4px;
+                padding: 4px;
+            }
+        """)
+        self.faultList.setFixedWidth(150)
+        self.faultClearButton = guitools.BetterPushButton('Clear fault')
 
         self.minpower = QtWidgets.QLabel()
         self.minpower.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -434,14 +463,19 @@ class LaserModule(QtWidgets.QWidget):
         self.powerGrid.addWidget(self.ampLabel, 1, 0)
         self.powerGrid.addWidget(self.ampValues, 1, 1, 1, 2)
 
+        self.powerGrid.addItem(spacer, 1, 3)
+        self.powerGrid.addWidget(self.statLabel, 1, 4)
+        self.powerGrid.addWidget(self.statLight, 1, 5)
+        self.powerGrid.addWidget(self.statList, 2, 4, 1, 2)
 
         self.powerGrid.addWidget(self.repRateLabel, 2, 0)
         self.powerGrid.addWidget(self.repRateEdit, 2, 1)
         self.powerGrid.addWidget(self.repRateEditButton, 2, 2)
 
-        self.powerGrid.addItem(spacer, 2, 3)
-        self.powerGrid.addWidget(self.statLight, 2, 4)
-        self.powerGrid.addWidget(self.statLabel, 2, 5)
+        self.powerGrid.addItem(spacer, 3, 3)
+        self.powerGrid.addWidget(self.faultLabel, 3, 4)
+        self.powerGrid.addWidget(self.faultClearButton, 3, 5)
+        self.powerGrid.addWidget(self.faultList, 4, 4, 1, 2)
 
         self.powerGrid.addWidget(self.pulsingLabel, 3, 0)
         self.powerGrid.addWidget(self.pulsingOff, 3, 1)
@@ -590,6 +624,10 @@ class LaserModule(QtWidgets.QWidget):
             lambda : self.sigStopClicked.emit()
         )
 
+        self.faultClearButton.clicked.connect(
+            lambda: self.sigClearFaultClicked.emit()
+        )
+
         self.pulsingOn.toggled.connect(self.sigPulsingChanged)
 
         self.ampValues.currentIndexChanged.connect(
@@ -707,7 +745,7 @@ class LaserModule(QtWidgets.QWidget):
         )
 
     def setStatusLabel(self, status:str):
-        self.statLabel.setText("System status: " + status)
+        self.statList.setText(status)
 
     def toggleStartButtonText(self, text: str):
         self.statStartButton.setText(text)
@@ -726,6 +764,10 @@ class LaserModule(QtWidgets.QWidget):
 
     def setRepRate(self, rr):
         self.repRateEdit.setText(str(rr))
+
+    def setFaultStatus(self, faults):
+        self.faultList.setText(faults)
+
 # Copyright (C) 2017 Federico Barabas 2020-2021 ImSwitch developers
 # This file is part of Tormenta and ImSwitch.
 #
