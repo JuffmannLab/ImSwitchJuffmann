@@ -150,7 +150,7 @@ class LaserController(ImConWidgetController):
         fault = self._master.lasersManager[laserName].stopLaser()
         self._widget.setStatusLight(laserName, "grey")
         self._widget.toggleStartButtonText(laserName, "Start")
-        status = self._master.lasersManager[laserName].getStatus()
+        status, fault = self._master.lasersManager[laserName].getStatus()
         status is not None and self._widget.setStatusLabel(laserName, status)
         self._widget.setFaultStatus(laserName, fault)
 

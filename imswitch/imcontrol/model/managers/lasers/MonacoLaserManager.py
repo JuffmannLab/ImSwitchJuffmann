@@ -84,7 +84,7 @@ class MonacoLaserManager(LaserManager):
         return f_response
 
     def clearFault(self):
-        command = "FACK"
+        command = "FACK=1"
         response, f_response = self.sendCommand(command)
         return f_response
 
@@ -107,7 +107,7 @@ class MonacoLaserManager(LaserManager):
                 #check for faults
                 f_cmd = "?F"
                 tn.write(f_cmd.encode('ascii') + b'\r\n')
-                f_response = tn.read_until(SHELL_PROMPT).decode('ascii')
+                f_response = tn.read_until(SHELL_PROMPT).decode('ascii').splitlines()[0]
                 tn.close()
                 return response, f_response
 
