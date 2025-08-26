@@ -16,6 +16,7 @@ class PhotometricsManager(DetectorManager):
 
     - ``cameraListIndex`` -- the camera's index in the Photometrics camera list
       (list indexing starts at 0)
+    - ``cameraProperties`` -- the camera properties as a dictionary
     """
 
     def __init__(self, detectorInfo, name, **_lowLevelManagers):
@@ -35,6 +36,17 @@ class PhotometricsManager(DetectorManager):
 
         self.__acquisition = False
         # Prepare parameters
+        params = {}
+        for key, param in detectorInfo.managerProperties['cameraProperties'].items():
+            if param["type"] == "number":
+                current = {key: DetectorNumberParameter(group = param["group"], value = param["value"],
+                                                        valueUnits=param["valueUnits"], editable=param["editable"])}
+            elif param["type"] == "list":
+                current = {key: DetectorListParameter(group = param["group"], value = param["value"],
+                                                      options=param["options"], editable=param["editable"])}
+
+            params.update(current)
+
         parameters = {
             'Set exposure time': DetectorNumberParameter(group='Timings', value=0,
                                                          valueUnits='ms', editable=True),
@@ -57,7 +69,7 @@ class PhotometricsManager(DetectorManager):
                                                          valueUnits='µm', editable=True)
         }
 
-        super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1, 2, 4],
+        super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1, 2],
                          model=model, parameters=parameters, croppable=True)
         self._updatePropertiesFromCamera()
         super().setParameter('Set exposure time', self.parameters['Real exposure time'].value)

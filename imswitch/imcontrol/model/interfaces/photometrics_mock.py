@@ -20,7 +20,7 @@ class MockPhotometrics:
         return "MOCK_STATUS"
 
     def poll_frame(self):
-        return np.zeros((self.sensor_size, self.sensor_size))
+        return np.zeros(self.sensor_size)
 
     def start_live(self):
         return
