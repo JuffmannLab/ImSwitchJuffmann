@@ -229,8 +229,8 @@ class PhotometricsManager(DetectorManager):
         except Exception:
             self.__logger.warning(f'Failed to initialize Photometrics camera {name},'
                                   f' loading mocker')
-            from imswitch.imcontrol.model.interfaces import MockHamamatsu
-            camera = MockHamamatsu()
+            from imswitch.imcontrol.model.interfaces import MockPhotometrics
+            camera = MockPhotometrics()
 
         self.__logger.info(f'Initialized camera, model: {camera.name}')
         #TODO create new mocker as this one just causes the program to crash as they are not the same class!
