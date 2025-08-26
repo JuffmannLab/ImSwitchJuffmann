@@ -36,38 +36,35 @@ class PhotometricsManager(DetectorManager):
 
         self.__acquisition = False
         # Prepare parameters
-        params = {}
+        parameters = {}
         for key, param in detectorInfo.managerProperties['cameraProperties'].items():
             if param["type"] == "number":
-                current = {key: DetectorNumberParameter(group = param["group"], value = param["value"],
+                current = {key: DetectorNumberParameter(group=param["group"], value=param["value"],
                                                         valueUnits=param["valueUnits"], editable=param["editable"])}
             elif param["type"] == "list":
-                current = {key: DetectorListParameter(group = param["group"], value = param["value"],
+                current = {key: DetectorListParameter(group=param["group"], value=param["value"],
                                                       options=param["options"], editable=param["editable"])}
+            parameters.update(current)
 
-            params.update(current)
-
-        parameters = {
-            'Set exposure time': DetectorNumberParameter(group='Timings', value=0,
-                                                         valueUnits='ms', editable=True),
-            'Real exposure time': DetectorNumberParameter(group='Timings', value=0,
-                                                          valueUnits='ms', editable=False),
-            # 'Readout time': DetectorNumberParameter(group='Timings', value=0,
-            #                                         valueUnits='ms', editable=False),
-            'Trigger source': DetectorListParameter(group='Acquisition mode',
-                                                    value='Internal trigger',
-                                                    options=['Internal trigger',
-                                                             'External "start-trigger"',
-                                                             'External "frame-trigger"'],
-                                                    editable=True),
-            'Readout port': DetectorListParameter(group='ports',
+        parameters.update({'Set exposure time': DetectorNumberParameter(group='Timings', value=10,
+                                                                        valueUnits='ms', editable=True)})
+        parameters.update({'Real exposure time': DetectorNumberParameter(group='Timings', value=0,
+                                                                         valueUnits='ms', editable=False)})
+        parameters.update({'Readout port': DetectorListParameter(group='ports',
                                                   value='Sensitivity',
                                                   options=['Sensitivity',
                                                            'Speed',
-                                                           'Dynamic range'], editable=True),
-            'Camera pixel size': DetectorNumberParameter(group='Miscellaneous', value=0.1,
-                                                         valueUnits='µm', editable=True)
-        }
+                                                           'Dynamic range'], editable=True)})
+
+        # 'Trigger source': DetectorListParameter(group='Acquisition mode',
+        #                                             value='Internal trigger',
+        #                                             options=['Internal trigger',
+        #                                                      'External "start-trigger"',
+        #                                                      'External "frame-trigger"'],
+        #
+        #     'Camera pixel size': DetectorNumberParameter(group='Miscellaneous', value=0.1,
+        #                                                  valueUnits='µm', editable=True)
+        # }
 
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1, 2],
                          model=model, parameters=parameters, croppable=True)

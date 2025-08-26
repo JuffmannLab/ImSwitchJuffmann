@@ -1,0 +1,251 @@
+{
+    "detectors": {
+        "Green": {
+            "analogChannel": null,
+            "digitalLine": "Dev1/port0/line4",
+            "managerName": "HamamatsuManager",
+            "managerProperties": {
+                "cameraListIndex": 0,
+                "hamamatsu": {
+                    "readout_speed": 3,
+                    "trigger_global_exposure": 5,
+                    "trigger_active": 2,
+                    "trigger_polarity": 2,
+                    "exposure_time": 0.01,
+                    "trigger_source": 1,
+                    "subarray_hpos": 0,
+                    "subarray_vpos": 0,
+                    "subarray_hsize": 2048,
+                    "subarray_vsize": 2048
+                }
+            },
+            "forAcquisition": true
+        },
+        "Photometrics Prime BSI": {
+            "analogChannel": null,
+            "digitalLine": null,
+            "managerName": "PhotometricsManager",
+            "managerProperties": {
+                "cameraListIndex": 0,
+                "cameraProperties": {
+                    "Current Temperature": {
+                        "type": "number",
+                        "group": "Acquisition mode",
+                        "value": 0,
+                        "valueUnits": "C",
+                        "editable": false
+                    },
+                    "Denoising/Enhance": {
+                        "type": "list",
+                        "group": "Acquisition mode",
+                        "value": "No",
+                        "options": ["Yes", "No"],
+                        "editable": true
+                    },
+                    "Fan Speed": {
+                        "type": "list",
+                        "group": "Miscellaneous",
+                        "value": "Low",
+                        "options": ["Low", "Medium", "High", "Liquid Cooled"],
+                        "editable": true
+                    },
+                    "Gain 11bit":{
+                        "type": "list",
+                        "group": "Acquisition mode",
+                        "value": "1-Full well",
+                        "options": [" ", "1-Full well", "2-Balanced", "3-Sensitivity"],
+                        "editable": true
+                    },
+                    "Gain 16bit": {
+                        "type": "list",
+                        "group":"Acquisition mode",
+                        "value": " ",
+                        "options": [" ", "1-CMS", "2-HDR"],
+                        "editable": false
+                    },
+                    "QuantView": {
+                        "type": "list",
+                        "group": "Miscellaneous",
+                        "value": "No",
+                        "options": ["No", "Yes"],
+                        "editable": true
+                    },
+                    "Readout Rate (speed)": {
+                        "type": "list",
+                        "group": "Timings",
+                        "value": "200MHz 11bit",
+                        "options": ["200MHz 11bit", "100MHz 16bit"],
+                        "editable": true
+                    },
+                    "Smart Stream Channel": {
+                        "type": "list",
+                        "group": "Miscellaneous",
+                        "value": "1",
+                        "options": ["1", "2", "3", "4"],
+                        "editable": true
+                    },
+                    "Smart Stream Timing": {
+                        "type": "list",
+                        "group": "Miscellaneous",
+                        "value": "10",
+                        "options": ["10", "20", "30", "40"],
+                        "editable": true
+                    },
+                    "Smart Stream ON/OFF": {
+                        "type": "list",
+                        "group": "Miscellaneous",
+                        "value": "Off",
+                        "options": ["On", "Off"],
+                        "editable": true
+                    },
+                    "Set Temperature": {
+                        "type": "number",
+                        "group": "Miscellaneous",
+                        "value": -20,
+                        "valueUnits": "C",
+                        "editable": true
+                    },
+                    "Trigger IN": {
+                        "type": "list",
+                        "group": "Acquisition mode",
+                        "value": "Internal Trigger",
+                        "options": ["Internal Trigger", "Edge Trigger", "Trigger First"],
+                        "editable": true
+                    },
+                    "Trigger OUT": {
+                        "type": "list",
+                        "group": "Acquisition mode",
+                        "value": "Rolling Shutter",
+                        "options": ["Any Row", "First Row", "Line Output", "Rolling Shutter"],
+                        "editable": true
+                    }
+                }
+            },
+            "forAcquisition": true
+        }
+    },
+    "lasers": {
+        "Monaco": {
+            "managerName": "MonacoLaserManager",
+            "managerProperties": {
+                "digitalDriver": "cobolt.cobolt0601.Cobolt0601_f2",
+                "digitalPorts": [
+                    "COM12"
+                ],
+                "repRate": 2000,
+                "pulsing": true,
+                 "wavelengthRanges": [{"min": 1035,"max": 1035}]
+
+            },
+            "color": 492,
+            "valueRangeMin": 0,
+            "valueRangeMax": 200
+        }
+    },
+    "positioners": {
+        "X": {
+            "analogChannel": 0,
+            "digitalLine": null,
+            "managerName": "NidaqPositionerManager",
+            "managerProperties": {
+                "conversionFactor": 1.75,
+                "minVolt": 0,
+                "maxVolt": 10
+            },
+            "axes": ["X"],
+            "forScanning": true,
+            "forPositioning": true
+        },
+        "Y": {
+            "analogChannel": 1,
+            "digitalLine": null,
+            "managerName": "NidaqPositionerManager",
+            "managerProperties": {
+                "conversionFactor": 1.75,
+                "minVolt": 0,
+                "maxVolt": 10
+            },
+            "axes": ["Y"],
+            "forScanning": true,
+            "forPositioning": true
+        },
+        "Z": {
+            "analogChannel": 2,
+            "digitalLine": null,
+            "managerName": "NidaqPositionerManager",
+            "managerProperties": {
+                "conversionFactor": 1.75,
+                "minVolt": 0,
+                "maxVolt": 10
+            },
+            "axes": ["Z"],
+            "forScanning": true,
+            "forPositioning": true
+        }
+    },
+    "shutter": {
+        "delay": 5,
+        "managerName": "ShutterManager"
+    },
+    "scan": {
+        "scanDesigner": "BetaScanDesigner",
+        "scanDesignerParams": {
+            "return_time": 0.01
+        },
+        "TTLCycleDesigner": "BetaTTLCycleDesigner",
+        "TTLCycleDesignerParams": {},
+        "sampleRate": 100000
+    },
+    "nidaq": {
+        "timerCounterChannel": null,
+        "startTrigger": false
+    },
+    "rois": {
+        "Imaging_green": {
+            "x": 283,
+            "y": 1011,
+            "w": 564,
+            "h": 564
+        },
+        "FastROI_green": {
+            "x": 580,
+            "y": 1163,
+            "w": 16,
+            "h": 249
+        },
+        "WideField_green": {
+            "x": 549,
+            "y": 1260,
+            "w": 90,
+            "h": 90
+        },
+        "ROI_test": {
+            "x": 706,
+            "y": 570,
+            "w": 839,
+            "h": 839
+        },
+        "test": {
+            "x": 543,
+            "y": 1086,
+            "w": 520,
+            "h": 520
+        }
+    },
+    "availableWidgets": [
+        "Settings",
+        "View",
+        "Recording",
+        "Image",
+        "Laser",
+        "Positioner",
+        "Scan",
+        "AlignXY",
+        "AlignAverage",
+        "AlignmentLine",
+        "BeadRec",
+        "Shutter",
+        "FFT",
+        "ULenses"
+    ]
+}
