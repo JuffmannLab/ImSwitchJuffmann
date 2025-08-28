@@ -30,7 +30,7 @@
                 "cameraProperties": {
                     "Current Temperature": {
                         "type": "number",
-                        "group": "Acquisition mode",
+                        "group": "Miscellaneous",
                         "value": 0,
                         "valueUnits": "C",
                         "editable": false
@@ -118,6 +118,13 @@
                         "value": "Rolling Shutter",
                         "options": ["Any Row", "First Row", "Line Output", "Rolling Shutter"],
                         "editable": true
+                    },
+                    "Camera pixel size": {
+                        "type": "number",
+                        "group": "Miscellaneous",
+                        "value": 6.5,
+                        "valueUnits": "µm",
+                        "editable": false
                     }
                 }
             },

@@ -50,11 +50,11 @@ class PhotometricsManager(DetectorManager):
                                                                         valueUnits='ms', editable=True)})
         parameters.update({'Real exposure time': DetectorNumberParameter(group='Timings', value=0,
                                                                          valueUnits='ms', editable=False)})
-        parameters.update({'Readout port': DetectorListParameter(group='ports',
-                                                  value='Sensitivity',
-                                                  options=['Sensitivity',
-                                                           'Speed',
-                                                           'Dynamic range'], editable=True)})
+        # parameters.update({'Readout port': DetectorListParameter(group='ports',
+        #                                           value='Sensitivity',
+        #                                           options=['Sensitivity',
+        #                                                    'Speed',
+        #                                                    'Dynamic range'], editable=True)})
 
         # 'Trigger source': DetectorListParameter(group='Acquisition mode',
         #                                             value='Internal trigger',
@@ -131,8 +131,8 @@ class PhotometricsManager(DetectorManager):
             self._updatePropertiesFromCamera()
         elif name == 'Trigger source':
             self._setTriggerSource(value)
-        elif name == 'Readout port':
-            self._setReadoutPort(value)
+        # elif name == 'Readout port':
+        #     self._setReadoutPort(value)
         return self.parameters
 
     def startAcquisition(self):
@@ -167,28 +167,28 @@ class PhotometricsManager(DetectorManager):
         else:
             raise ValueError(f'Invalid trigger source "{source}"')
 
-    def _setReadoutPort(self, port):
-        self.__logger.debug("Change readout port")
-
-        def portAction():
-            self._camera.readout_port = port_value
-
-        def getScanTimeAction():
-            self.__scanLineTime = self._camera.scan_line_time
-
-        if port == 'Sensitivity':
-            port_value = 0
-            self._performSafeCameraAction(portAction)
-
-        elif port == 'Speed':
-            port_value = 1
-            self._performSafeCameraAction(portAction)
-
-        elif port == 'Dynamic range':
-            port_value = 2
-            self._performSafeCameraAction(portAction)
-        else:
-            raise ValueError(f'Invalid readout port "{port}"')
+    # def _setReadoutPort(self, port):
+    #     self.__logger.debug("Change readout port")
+    #
+    #     def portAction():
+    #         self._camera.readout_port = port_value
+    #
+    #     def getScanTimeAction():
+    #         self.__scanLineTime = self._camera.scan_line_time
+    #
+    #     if port == 'Sensitivity':
+    #         port_value = 0
+    #         self._performSafeCameraAction(portAction)
+    #
+    #     elif port == 'Speed':
+    #         port_value = 1
+    #         self._performSafeCameraAction(portAction)
+    #
+    #     elif port == 'Dynamic range':
+    #         port_value = 2
+    #         self._performSafeCameraAction(portAction)
+    #     else:
+    #         raise ValueError(f'Invalid readout port "{port}"')
         #self._performSafeCameraAction(getScanTimeAction)
         #self.setParameter('Readout time', self.__scanLineTime * self._shape[0] / 1e6)
 
@@ -213,13 +213,13 @@ class PhotometricsManager(DetectorManager):
         elif triggerSource == 2048:
             self.setParameter('Trigger source', 'External "frame-trigger"')
 
-        readoutPort = self._camera.readout_port
-        if readoutPort == 0:
-            self.setParameter('Readout port', 'Sensitivity')
-        elif readoutPort == 1:
-            self.setParameter('Readout port', 'Speed')
-        elif readoutPort == 2:
-            self.setParameter('Readout port', 'Dynamic range')
+        # readoutPort = self._camera.readout_port
+        # if readoutPort == 0:
+        #     self.setParameter('Readout port', 'Sensitivity')
+        # elif readoutPort == 1:
+        #     self.setParameter('Readout port', 'Speed')
+        # elif readoutPort == 2:
+        #     self.setParameter('Readout port', 'Dynamic range')
 
     def finalize(self):
         self._camera.close()
@@ -242,7 +242,7 @@ class PhotometricsManager(DetectorManager):
             camera = MockPhotometrics()
 
         self.__logger.info(f'Initialized camera, model: {camera.name}')
-        #TODO create new mocker as this one just causes the program to crash as they are not the same class!
+
         return camera
 
     def _ensure_pyvcam_initialized(self):
