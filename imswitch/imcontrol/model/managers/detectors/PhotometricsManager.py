@@ -5,8 +5,8 @@ from .DetectorManager import (
     DetectorManager, DetectorNumberParameter, DetectorListParameter
 )
 from pyvcam import pvc
+from pyvcam import constants as consts
 from pyvcam.camera import Camera
-
 _pyvcam_initialized = False
 
 class PhotometricsManager(DetectorManager):
@@ -50,6 +50,11 @@ class PhotometricsManager(DetectorManager):
                                                                         valueUnits='ms', editable=True)})
         parameters.update({'Real exposure time': DetectorNumberParameter(group='Timings', value=0,
                                                                          valueUnits='ms', editable=False)})
+        parameters.update({'Trigger source': DetectorListParameter(group='Acquisition mode',
+                                                     value='Internal trigger',
+                                                     options=['Internal trigger',
+                                                         'External start-trigger',
+                                                              'External frame-trigger'], editable=True)})
         # parameters.update({'Readout port': DetectorListParameter(group='ports',
         #                                           value='Sensitivity',
         #                                           options=['Sensitivity',
@@ -126,13 +131,67 @@ class PhotometricsManager(DetectorManager):
     def setParameter(self, name, value):
         super().setParameter(name, value)
 
-        if name == 'Set exposure time':
+        if name == "Set exposure time":
             self._setExposure(value)
             self._updatePropertiesFromCamera()
         elif name == 'Trigger source':
             self._setTriggerSource(value)
         # elif name == 'Readout port':
         #     self._setReadoutPort(value)
+        elif name == "Denoising/Enhance":           #post processing parameter: DENOISING, ENABLED 0 or 1 use strings in the getter/setter.
+            # TODO: implement
+            var = self._camera.get_post_processing_param("DENOISING", "ENABLED")
+            print(var)
+            pass
+        elif name == "Despeckle (pixel defects)":    #post processing parameter: 4 different ones BRIGHT/DARK LOW/HIGH, ENABLED 0 or 1
+            #TODO: implement
+            pass
+        elif name == "Fan Speed":                    #parameter: getter with constant: HIGH=0, MEDIUM=1, LOW=2, OFF (liquid cooled)=3
+            var = self._camera.get_param(consts.PARAM_FAN_SPEED_SETPOINT)
+            print(var)
+            # TODO: implement
+            pass
+        elif name == "Gain 11bit":                  #parameter: getter with constant: full well = 1, balanced = 2, sensitivity = 3
+            var = self._camera.get_param(consts.PARAM_GAIN_INDEX)
+            var2 = self._camera.get_param(consts.PARAM_GAIN_NAME)
+            var3= self._camera.gain
+            table = self._camera.port_speed_gain_table
+            print(var)
+            #TODO: implement
+            pass
+        elif name == "Gain 16bit":                  #Not sure if this property is available in PRIME BSI
+            #TODO: implement
+            pass
+        elif name == "QuantView":                    #post processing parameter: QUANTVIEW, ENABLED 0 or 1
+            #TODO: implement
+            pass
+        elif name == "Readout Rate (speed)":
+            #TODO: implement
+            var = self._camera.speed_table_index
+            var1 = self._camera.speed_name
+            var2 = self._camera.speed
+            print(var)
+            pass
+        elif name == "Smart Stream Channel":
+            #TODO: implement
+            pass
+        elif name == "Smart Stream Timing":
+            #TODO: implement
+            pass
+        elif name == "Smart Stream ON/OFF":
+            #TODO: implement
+            pass
+        elif name == "Set Temperature":
+            #TODO: implement
+            pass
+        elif name == "Trigger IN":
+            #TODO: implement
+            pass
+        elif name == "Trigger OUT":
+            #TODO: implement
+            pass
+        else:
+            self.__logger.warning(f'Setting parameter {name} not implemented.')
         return self.parameters
 
     def startAcquisition(self):

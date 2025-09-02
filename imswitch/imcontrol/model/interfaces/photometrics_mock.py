@@ -31,3 +31,6 @@ class MockPhotometrics:
 
     def close(self):
         return
+
+    def get_param(self, int):
+        pass

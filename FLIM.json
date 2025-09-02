@@ -42,6 +42,13 @@
                         "options": ["Yes", "No"],
                         "editable": true
                     },
+                    "Despeckle (pixel defects)": {
+                        "type": "list",
+                        "group": "Acquisition mode",
+                        "value": "ON (all ON)",
+                        "options": ["ON (all ON)", "OFF (all OFF)"],
+                        "editable": true
+                    },
                     "Fan Speed": {
                         "type": "list",
                         "group": "Miscellaneous",

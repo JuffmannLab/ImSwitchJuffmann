@@ -1,7 +1,7 @@
 ###############################################################################
 # File: constants.py
 # Author: Cameron Smith
-# Date of Last Edit: 2025-06-05
+# Date of Last Edit: 2025-09-02
 #
 # Purpose: To maintain the naming conventions used with pvcam.h for Python
 #          scripts.
