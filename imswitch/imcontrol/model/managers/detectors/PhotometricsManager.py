@@ -1,4 +1,6 @@
-import numpy as np
+import os
+import sys
+import faulthandler
 
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
@@ -7,6 +9,7 @@ from .DetectorManager import (
 from pyvcam import pvc
 from pyvcam import constants as consts
 from pyvcam.camera import Camera
+import numpy as np
 _pyvcam_initialized = False
 
 class PhotometricsManager(DetectorManager):
@@ -293,6 +296,11 @@ class PhotometricsManager(DetectorManager):
 
             self.__logger.debug(f'Trying to initialize Photometrics camera {name}')
             camera = Camera.select_camera(name)
+            print(f"Seleced camera {camera.name}")
+            print(f"Environment path: {os.environ['PATH']}")
+            print(f"Working directory: {os.getcwd()}")
+            print(f"system executable: {sys.executable}")
+            faulthandler.enable()
             camera.open()
         except Exception:
             self.__logger.warning(f'Failed to initialize Photometrics camera {name},'
