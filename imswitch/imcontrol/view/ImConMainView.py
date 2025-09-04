@@ -56,6 +56,7 @@ class ImConMainView(QtWidgets.QMainWindow):
         rightDockInfos = {
             'Autofocus': _DockInfo(name='Autofocus', yPosition=0),
             'FocusLock': _DockInfo(name='Focus Lock', yPosition=0),
+            'MCLFocus': _DockInfo(name='Focus Lock', yPosition=0),
             'iScatFocus': _DockInfo(name='iScat Focus', yPosition=0),
             'Laser': _DockInfo(name='Laser Control', yPosition=0),
             'EtSTED': _DockInfo(name='EtSTED', yPosition=0),
