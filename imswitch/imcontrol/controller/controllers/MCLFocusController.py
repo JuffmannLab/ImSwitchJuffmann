@@ -12,13 +12,35 @@ logger = initLogger(__name__)
 class MCLFocusController(ImConWidgetController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.stage_x = None
-        self.stage_y = None
-        self.stage_z = None
+        current_position = self._master.positionersManager["MCL"].getPosition()
+        self._widget.setPosition(current_position)
+
         self._connect_signals()
 
     def _connect_signals(self):
-        self._widget.sigMoveStage.connect(self.move_stage)
+        self._widget.sigMove.connect(self.moveCoordinate)
+        self._widget.sigMicroUp.connect(self.microUp)
+        self._widget.sigMicroDown.connect(self.microDown)
+        self._widget.sigMoveToZero.connect(self.moveToZero)
+        self._widget.sigSetFocus.connect(self.setFocus)
+
+    def moveCoordinate(self):
+        x = self._widget.getCoordinate()
+        pos = self._master.positionersManager["MCL"].moveCoordinate(x)
+        self._widget.setPosition(pos)
+
+    def microUp(self):
+        pass
+
+    def microDown(self):
+        pass
+
+    def moveToZero(self):
+        pass
+
+    def setFocus(self):
+        pass
+
 
     def activate(self):
         logger.info("MCLFocusController activated")

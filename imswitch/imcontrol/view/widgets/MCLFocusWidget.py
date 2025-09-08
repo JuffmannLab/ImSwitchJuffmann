@@ -10,7 +10,11 @@ from .basewidgets import Widget
 class MCLFocusWidget(Widget):
     """Widget for manually controlling the MCL positioner in X, Y, Z directions."""
 
-    sigMoveStage = Signal(float, float, float)
+    sigMove = Signal()
+    sigMicroUp = Signal()
+    sigMicroDown = Signal()
+    sigMoveToZero = Signal()
+    sigSetFocus = Signal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -21,47 +25,46 @@ class MCLFocusWidget(Widget):
         stageControlBox = QtWidgets.QGroupBox("MCL Stage Control")
         stageLayout = QtWidgets.QGridLayout(stageControlBox)
 
-        # Position input fields
-        self.xEdit = QDoubleSpinBox()
-        self.xEdit.setRange(-500.0, 500.0)
-        self.xEdit.setSingleStep(0.1)
-        self.xEdit.setValue(0.0)
+        self.posLabel = QtWidgets.QLabel("Current position: ")
+        self.posEdit = QtWidgets.QLineEdit()
+        self.posEdit.setPlaceholderText("Enter coordinate")
+        self.moveCoordinateBtn = guitools.BetterPushButton("Move")
+        self.microLabel = QtWidgets.QLabel("Adjust with microsteps:")
+        self.microUpBtn = guitools.BetterPushButton("+")
+        self.microDownBtn = guitools.BetterPushButton("-")
+        self.toZeroBtn = guitools.BetterPushButton("Move to 0 position")
+        self.focusLabel = QtWidgets.QLabel("Current focus position: 0")
+        self.focusBtn = guitools.BetterPushButton("Save position")
 
 
-        self.yEdit = QDoubleSpinBox()
-        self.yEdit.setRange(-500.0, 500.0)
-        self.yEdit.setSingleStep(0.1)
-        self.yEdit.setValue(0.0)
-        
-        
-        self.zEdit = QDoubleSpinBox()
-        self.zEdit.setRange(-500.0, 500.0)
-        self.zEdit.setSingleStep(0.1)
-        self.zEdit.setValue(0.0)
 
-        # Button to move the stage
-        self.moveButton = QtWidgets.QPushButton("Move Stage")
 
         # Arrange widgets
-        stageLayout.addWidget(QtWidgets.QLabel("X [µm]"), 0, 0)
-        stageLayout.addWidget(self.xEdit, 0, 1)
-        stageLayout.addWidget(QtWidgets.QLabel("Y [µm]"), 1, 0)
-        stageLayout.addWidget(self.yEdit, 1, 1)
-        stageLayout.addWidget(QtWidgets.QLabel("Z [µm]"), 2, 0)
-        stageLayout.addWidget(self.zEdit, 2, 1)
-        stageLayout.addWidget(self.moveButton, 3, 0, 1, 2)
+        stageLayout.addWidget(self.posLabel, 0, 0)
+        stageLayout.addWidget(self.posEdit, 0, 1, 1, 2)
+        stageLayout.addWidget(self.moveCoordinateBtn, 0, 3)
+        stageLayout.addWidget(self.microLabel, 1, 0)
+        stageLayout.addWidget(self.microUpBtn, 1, 1)
+        stageLayout.addWidget(self.microDownBtn, 1, 2)
+        stageLayout.addWidget(self.toZeroBtn, 1, 3)
+        stageLayout.addWidget(self.focusLabel, 2, 0, 1, 2)
+        stageLayout.addWidget(self.focusBtn, 2, 3)
 
         layout.addWidget(stageControlBox)
         layout.addStretch(1)
 
-        self.moveButton.clicked.connect(self.emitMoveStage)
+        #connect signals
+        self.moveCoordinateBtn.clicked.connect(self.sigMove)
+        self.microUpBtn.clicked.connect(self.sigMicroUp)
+        self.microDownBtn.clicked.connect(self.sigMicroDown)
+        self.toZeroBtn.clicked.connect(self.sigMoveToZero)
+        self.focusBtn.clicked.connect(self.sigSetFocus)
 
-    def emitMoveStage(self):
-        x = self.xEdit.value()
-        y = self.yEdit.value()
-        z = self.zEdit.value()
-        self.sigMoveStage.emit(x, y, z)
+    def setPosition(self, position):
+        self.posLabel.setText("Current position: "+str(position))
 
+    def getCoordinate(self):
+        return float(self.posEdit.text())
 
 # Copyright (C) 2020-2021 ImSwitch developers
 # This file is part of ImSwitch.

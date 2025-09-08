@@ -1,10 +1,12 @@
-import MCL_microdrive as md
+import MCL_microdrive_iscat as md
 
 if __name__ == '__main__':
     driver = md.MicroDrive()
-
+    #driver.EncodersReset()
     print(driver.getPosition())
+    print(driver.getStatus())
+    x = float(input())
+    pos = driver.moveCoordinate(x)
 
-    value = float(input())
-    new_position = driver.moveRelativeAxis(1, value, velocity=1)
-    print(new_position)
+    print("moving home")
+    print(driver.home())

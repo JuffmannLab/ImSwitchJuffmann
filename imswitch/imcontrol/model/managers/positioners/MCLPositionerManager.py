@@ -1,7 +1,7 @@
 import ctypes
 from ctypes import c_int, c_double, byref
 from .PositionerManager import PositionerManager
-from ...interfaces.MCL_microdrive import MicroDrive
+from ...interfaces.MCL_microdrive_iscat import MicroDrive
 
 
 class MCLPositionerManager(PositionerManager):
@@ -12,18 +12,19 @@ class MCLPositionerManager(PositionerManager):
         # Extract mock flag, library path, and axes safely
         self._mock = manager_props.get('mock', False)
         self._libraryPath = manager_props.get('libraryPath', 'MicroDrive/MCL_MICRODrive.dll')
-        #self.axes = manager_props.get('axes', []) #already set as read only property in positionermanager.
 
-        # Initialize superclass
-        super().__init__(positionerInfo, name, initialPosition={axis: 0 for axis in positionerInfo.axes})
-
-        self._position = {axis: 0 for axis in positionerInfo.axes}
+        startPosition = float(manager_props.get('startPosition', 0))
 
         if not self._mock:
             self.MicroDrive = MicroDrive()
-            #self.dll = ctypes.windll.LoadLibrary(self._libraryPath)
-            #self.handle = self.dll.MDOpenBySerialNumber("MCL-µD2555".encode('utf-8'))  # Replace with actual S/N
-            #self.channel = 0
+            self.MicroDrive.moveCoordinate(startPosition)
+
+        initialPosition = {"X": 0, "Y": 0, "Z": startPosition}
+        self._position = initialPosition
+        super().__init__(positionerInfo, name, initialPosition=startPosition)
+
+    def moveCoordinate(self, x):
+        return self.MicroDrive.moveCoordinate(x)
 
     def move(self, dist, axis):
         target_pos = self._position[axis] + dist
@@ -44,6 +45,9 @@ class MCLPositionerManager(PositionerManager):
                 self.dll.MDGetPosition(self.handle, c_int(axis_index), byref(val))
                 pos[axis] = val.value
             return pos
+
+    def getPosition(self):
+        return round(self.MicroDrive.getPosition(), 4)
 
     def finalize(self):
         self.MicroDrive.closeConnection()
