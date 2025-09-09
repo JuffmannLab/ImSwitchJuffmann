@@ -30,16 +30,20 @@ class MCLFocusController(ImConWidgetController):
         self._widget.setPosition(pos)
 
     def microUp(self):
-        pass
+        pos = self._master.positionersManager["MCL"].microUp()
+        self._widget.setPosition(pos)
 
     def microDown(self):
-        pass
+        pos = self._master.positionersManager["MCL"].microDown()
+        self._widget.setPosition(pos)
 
     def moveToZero(self):
-        pass
+        pos = self._master.positionersManager["MCL"].moveToZero()
+        self._widget.setPosition(pos)
 
     def setFocus(self):
-        pass
+        string_pos = self._widget.getPosition()
+        self._widget.setFocusLabel(string_pos)
 
 
     def activate(self):

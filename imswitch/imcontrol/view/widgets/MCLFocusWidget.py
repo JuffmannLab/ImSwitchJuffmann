@@ -25,7 +25,7 @@ class MCLFocusWidget(Widget):
         stageControlBox = QtWidgets.QGroupBox("MCL Stage Control")
         stageLayout = QtWidgets.QGridLayout(stageControlBox)
 
-        self.posLabel = QtWidgets.QLabel("Current position: ")
+        self.posLabel = QtWidgets.QLabel("Current position [mm]: ")
         self.posEdit = QtWidgets.QLineEdit()
         self.posEdit.setPlaceholderText("Enter coordinate")
         self.moveCoordinateBtn = guitools.BetterPushButton("Move")
@@ -33,7 +33,7 @@ class MCLFocusWidget(Widget):
         self.microUpBtn = guitools.BetterPushButton("+")
         self.microDownBtn = guitools.BetterPushButton("-")
         self.toZeroBtn = guitools.BetterPushButton("Move to 0 position")
-        self.focusLabel = QtWidgets.QLabel("Current focus position: 0")
+        self.focusLabel = QtWidgets.QLabel("Current focus position [mm]: 0")
         self.focusBtn = guitools.BetterPushButton("Save position")
 
 
@@ -61,11 +61,17 @@ class MCLFocusWidget(Widget):
         self.focusBtn.clicked.connect(self.sigSetFocus)
 
     def setPosition(self, position):
-        self.posLabel.setText("Current position: "+str(position))
+        self.posLabel.setText("Current position [mm]: "+str(position))
+
+    def getPosition(self):
+        label =  self.posLabel.text()   #slice out the "Current position: " of the string
+        return label[23:]
 
     def getCoordinate(self):
         return float(self.posEdit.text())
 
+    def setFocusLabel(self, string_pos):
+        self.focusLabel.setText("Current focus position [mm]: "+string_pos)
 # Copyright (C) 2020-2021 ImSwitch developers
 # This file is part of ImSwitch.
 #

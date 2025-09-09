@@ -105,11 +105,11 @@ class MicroDrive(object):
         # Connect to the instrument and creat a handle
         self.handle = self.mcl.MCL_InitHandle()  # Handle number is assigned, which is a positive integer
         # Check if connection was successful
-        if self.handle > 0:
-            print('Connected to SN: ' + str(self.mcl.MCL_GetSerialNumber(self.handle)) + '\nWith handle: ' + str(
-                self.handle))
-        else:
-            print('Connection failed. Maybe the device is turned off?')
+        # if self.handle > 0:
+        #     print('Connected to SN: ' + str(self.mcl.MCL_GetSerialNumber(self.handle)) + '\nWith handle: ' + str(
+        #         self.handle))
+        # else:
+        #     print('Connection failed. Maybe the device is turned off?')
 
         # Save Product information
         # Create pointers for query
@@ -129,6 +129,8 @@ class MicroDrive(object):
         self.maxVelocityTwoAxis = maxVelocityTwoAxis_temp.contents.value
         self.maxVelocityThreeAxis = maxVelocityThreeAxis_temp.contents.value
         self.minVelocity = minVelocity_temp.contents.value
+
+        self.serialNumber = self.mcl.MCL_GetSerialNumber(self.handle)
         # Delete pointers just to be save
         del encoderResolution_temp
         del stepSize_temp
@@ -155,15 +157,13 @@ class MicroDrive(object):
         e3 = ctypes.pointer(ctypes.c_double())
         e4 = ctypes.pointer(ctypes.c_double())
         errorNumber = self.mcl.MCL_MDReadEncoders(e1, e2, e3, e4, self.handle)
-        if errorNumber != 0:
-            print('Error reading the encoders: ' + self.errorDictionary[errorNumber])
-        print('Encoder position: ' + str(np.round(e1.contents.value, 4)))
+
         position_temp = e1.contents.value
         del e1
         del e2
         del e3
         del e4
-        return position_temp
+        return errorNumber, position_temp
 
     def _getStatus(self): #Internal function to get the error number
         status_temp = ctypes.pointer(ctypes.c_ushort())
@@ -216,7 +216,6 @@ class MicroDrive(object):
     def _microstep(self, direction):
         axis = 1
         errorCode = self.mcl.MCL_MDSingleStep(ctypes.c_uint(axis), ctypes.c_uint(-direction), self.handle)
-        self.wait()
         return errorCode
 
     def moveCoordinate(self, x, velocity=3):
@@ -226,56 +225,57 @@ class MicroDrive(object):
 
         # Check the given velocity
         if velocity > self.velocityMax:
-            print('Given velocity is too high. Velocity is set to maximum value.')
+            #print('Given velocity is too high. Velocity is set to maximum value.')
             velocity = self.velocityMax
         elif velocity < self.velocityMin:
-            print('Given velocity is too low. Velocity is set to minimum value.')
+            #print('Given velocity is too low. Velocity is set to minimum value.')
             velocity = self.velocityMin
         # Check if the movement would go out of bounds
         if x > 25 or x < 0:
-            print("Given position is out of bounds. Please enter a value between 0 and 25.")
+            #print("Given position is out of bounds. Please enter a value between 0 and 25.")
             return self.getPosition()
-        position = self.getPosition()
+        _, position = self.getPosition()
 
         # Move the stage
         errorNumber = self._move(x-position, velocity)
         # Check for error
-        if errorNumber != 0:
-            print('Error while moving axis: ' + self.errorDictionary[errorNumber])
+        # if errorNumber != 0:
+        #     print('Error while moving axis: ' + self.errorDictionary[errorNumber])
+        #
+        # # Check if motors moved out of bounds
+        # status = self.getStatus()
+        # if status[0] != [0, 0, 'All ok']:
+        #     print('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
 
-        # Check if motors moved out of bounds
-        status = self.getStatus()
-        if status[0] != [0, 0, 'All ok']:
-            print('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
-
-        return self.getPosition()
+        return errorNumber, self.getPosition()[1]
 
     def moveMicrostepUp(self):
         errorNumber = self._microstep(1)
-        if errorNumber != 0:
-            print('Error while moving axis: ' + self.errorDictionary[errorNumber])
-
-        # Check if motors moved out of bounds
-        status = self.getStatus()
-        if status[0] != [0, 0, 'All ok']:
-            print('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
-        return self.getPosition()
+        # if errorNumber != 0:
+        #     print('Error while moving axis: ' + self.errorDictionary[errorNumber])
+        #
+        # # Check if motors moved out of bounds
+        # status = self.getStatus()
+        # if status[0] != [0, 0, 'All ok']:
+        #     print('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
+        return errorNumber, self.getPosition()[1]
 
     def moveMicrostepDown(self):
         errorNumber =self._microstep(-1)
-        if errorNumber != 0:
-            print('Error while moving axis: ' + self.errorDictionary[errorNumber])
-
-        # Check if motors moved out of bounds
-        status = self.getStatus()
-        if status[0] != [0, 0, 'All ok']:
-            print('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
-        return self.getPosition()
+        # if errorNumber != 0:
+        #     print('Error while moving axis: ' + self.errorDictionary[errorNumber])
+        #
+        # # Check if motors moved out of bounds
+        # status = self.getStatus()
+        # if status[0] != [0, 0, 'All ok']:
+        #     print('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
+        return errorNumber, self.getPosition()[1]
 
     def isMoving(self):
         """
         Checks if motors are moving.
         This function takes approximately 20ms.
+        returns 0 if motors are not moving, 1 if they are.
         """
         isMoving = ctypes.pointer(ctypes.c_int())
         self.mcl.MCL_MicroDriveMoveStatus(isMoving, self.handle)
@@ -297,8 +297,8 @@ class MicroDrive(object):
         """
         returns to 0 position
         """
-        self.moveCoordinate(0)
-        return self.getPosition()
+        errorNumber, position = self.moveCoordinate(0)
+        return errorNumber, position
 
     def EncodersReset(self):
         """

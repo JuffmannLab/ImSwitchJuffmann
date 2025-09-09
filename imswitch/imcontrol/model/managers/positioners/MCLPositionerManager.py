@@ -2,10 +2,13 @@ import ctypes
 from ctypes import c_int, c_double, byref
 from .PositionerManager import PositionerManager
 from ...interfaces.MCL_microdrive_iscat import MicroDrive
+from imswitch.imcommon.model import initLogger
+
 
 
 class MCLPositionerManager(PositionerManager):
     def __init__(self, positionerInfo, name, **kwargs):
+        self.__logger = initLogger(self, instanceName=name)
         # Use managerProperties instead of direct attribute access
         manager_props = positionerInfo.managerProperties or {}
 
@@ -17,14 +20,75 @@ class MCLPositionerManager(PositionerManager):
 
         if not self._mock:
             self.MicroDrive = MicroDrive()
-            self.MicroDrive.moveCoordinate(startPosition)
+            if self.MicroDrive.handle > 0:
+                self.__logger.info('Connected to MCL stage: ' + str(self.MicroDrive.serialNumber) + ', with handle: ' + str(
+                    self.MicroDrive.handle))
+                self.MicroDrive.moveCoordinate(startPosition)
+            else:
+                self.__logger.warning('Connection failed. Maybe the device is turned off?')
+
 
         initialPosition = {"X": 0, "Y": 0, "Z": startPosition}
         self._position = initialPosition
-        super().__init__(positionerInfo, name, initialPosition=startPosition)
+        super().__init__(positionerInfo, name, initialPosition=initialPosition)
 
     def moveCoordinate(self, x):
-        return self.MicroDrive.moveCoordinate(x)
+        #check if motors are still moving first
+        if self.MicroDrive.isMoving():
+            self.__logger.warning("Motors are still moving, try again later.")
+            return self.getPosition()
+
+        if x > 25 or x < 0:
+            self.__logger.error("Given position is out of bounds. Please enter a value between 0 and 25.")
+            return self.getPosition()
+
+        errorNumber, position = self.MicroDrive.moveCoordinate(x)
+        if errorNumber != 0:
+            self.__logger.error('Error while moving axis: ' + self.MicroDrive.errorDictionary[errorNumber])
+
+        # Check if motors moved out of bounds
+        status = self.MicroDrive.getStatus()
+        if status[0] != [0, 0, 'All ok']:
+            self.__logger.warning('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
+        return round(position, 4)
+
+    def microUp(self):
+        if self.MicroDrive.isMoving():
+            self.__logger.warning("Motors are still moving, try again later.")
+            return self.getPosition()
+
+        errorNumber, position = self.MicroDrive.moveMicrostepUp()
+
+        if errorNumber != 0:
+            self.__logger.error('Error while moving axis: ' + self.MicroDrive.errorDictionary[errorNumber])
+
+        # Check if motors moved out of bounds
+        status = self.MicroDrive.getStatus()
+        if status[0] != [0, 0, 'All ok']:
+            self.__logger.warning('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
+        return round(position, 4)
+
+    def microDown(self):
+        if self.MicroDrive.isMoving():
+            self.__logger.warning("Motors are still moving, try again later.")
+            return self.getPosition()
+        errorNumber, position = self.MicroDrive.moveMicrostepDown()
+
+        if errorNumber != 0:
+            self.__logger.error('Error while moving axis: ' + self.MicroDrive.errorDictionary[errorNumber])
+
+        # Check if motors moved out of bounds
+        status = self.MicroDrive.getStatus()
+        if status[0] != [0, 0, 'All ok']:
+            self.__logger.warning('Motor moved out of bounds: ' + str([temp[2] for temp in status]))
+        return round(position, 4)
+
+    def moveToZero(self):
+        errorNumber, position = self.MicroDrive.home()
+        if errorNumber != 0:
+            self.__logger.error('Error while moving to zero position: ' + self.MicroDrive.errorDictionary[errorNumber])
+        return round(position, 4)
+
 
     def move(self, dist, axis):
         target_pos = self._position[axis] + dist
@@ -47,7 +111,10 @@ class MCLPositionerManager(PositionerManager):
             return pos
 
     def getPosition(self):
-        return round(self.MicroDrive.getPosition(), 4)
+        errorNumber, pos = self.MicroDrive.getPosition()
+        if errorNumber != 0:
+            self.__logger.error('Error reading the encoders: ' + self.MicroDrive.errorDictionary[errorNumber])
+        return round(pos, 4)
 
     def finalize(self):
         self.MicroDrive.closeConnection()

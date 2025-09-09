@@ -7,6 +7,5 @@ if __name__ == '__main__':
     print(driver.getStatus())
     x = float(input())
     pos = driver.moveCoordinate(x)
-
-    print("moving home")
-    print(driver.home())
+    what = driver.isMoving()
+    print(what)
