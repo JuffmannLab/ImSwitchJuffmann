@@ -68,7 +68,7 @@
                         "group":"Acquisition mode",
                         "value": " ",
                         "options": [" ", "1-CMS", "2-HDR"],
-                        "editable": false
+                        "editable": true
                     },
                     "QuantView": {
                         "type": "list",

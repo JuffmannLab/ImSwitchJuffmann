@@ -130,48 +130,75 @@ class PhotometricsManager(DetectorManager):
 
     def setParameter(self, name, value):
         super().setParameter(name, value)
+        if value == " ":
+            return self.parameters
 
         if name == "Set exposure time":
             self._setExposure(value)
             self._updatePropertiesFromCamera()
+
         elif name == 'Trigger source':
             self._setTriggerSource(value)
         # elif name == 'Readout port':
         #     self._setReadoutPort(value)
+
         elif name == "Denoising/Enhance":           #post processing parameter: DENOISING, ENABLED 0 or 1 use strings in the getter/setter.
-            # TODO: implement
+            self._camera.set_post_processing_param("DENOISING", "ENABLED", 1) if value == "Yes" else self._camera.set_post_processing_param("DENOISING", "ENABLED", 0)
             var = self._camera.get_post_processing_param("DENOISING", "ENABLED")
-            print(var)
-            pass
+
         elif name == "Despeckle (pixel defects)":    #post processing parameter: 4 different ones BRIGHT/DARK LOW/HIGH, ENABLED 0 or 1
-            #TODO: implement
-            pass
-        elif name == "Fan Speed":                    #parameter: getter with constant: HIGH=0, MEDIUM=1, LOW=2, OFF (liquid cooled)=3
+            if value == "ON (all ON)":
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT LOW", "ENABLED", 1)
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT HIGH", "ENABLED", 1)
+                self._camera.set_post_processing_param("DESPECKLE DARK LOW", "ENABLED", 1)
+                self._camera.set_post_processing_param("DESPECKLE DARK HIGH", "ENABLED", 1)
+            else:
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT LOW", "ENABLED", 0)
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT HIGH", "ENABLED", 0)
+                self._camera.set_post_processing_param("DESPECKLE DARK LOW", "ENABLED", 0)
+                self._camera.set_post_processing_param("DESPECKLE DARK HIGH", "ENABLED", 0)
+
+        elif name == "Fan Speed":               #parameter: getter with constant: HIGH=0, MEDIUM=1, LOW=2, OFF (liquid cooled)=3
+            if value == "High":
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 0)
+            elif value == "Medium":
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 1)
+            elif value == "Low":
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 2)
+            else:
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 3)
+
             var = self._camera.get_param(consts.PARAM_FAN_SPEED_SETPOINT)
-            print(var)
-            # TODO: implement
-            pass
+
         elif name == "Gain 11bit":                  #parameter: getter with constant: full well = 1, balanced = 2, sensitivity = 3
-            var = self._camera.get_param(consts.PARAM_GAIN_INDEX)
-            var2 = self._camera.get_param(consts.PARAM_GAIN_NAME)
-            var3= self._camera.gain
-            table = self._camera.port_speed_gain_table
-            print(var)
-            #TODO: implement
-            pass
-        elif name == "Gain 16bit":                  #Not sure if this property is available in PRIME BSI
-            #TODO: implement
-            pass
+            spdtab_index = 0
+            self._setPortSpeedGain(value, spdtab_index)
+            self.parameters["Gain 16bit"].value = " "
+            self.parameters["Readout Rate (speed)"].value = "200MHz 11bit"
+
+        elif name == "Gain 16bit":
+            spdtab_index = 1
+            self._setPortSpeedGain(value, spdtab_index)
+            self.parameters["Gain 11bit"].value = " "
+            self.parameters["Readout Rate (speed)"].value = "100MHz 16bit"
+
         elif name == "QuantView":                    #post processing parameter: QUANTVIEW, ENABLED 0 or 1
-            #TODO: implement
-            pass
+            self._camera.set_post_processing_param("QUANTVIEW", "ENABLED", 1) if value == "Yes" else self._camera.set_post_processing_param("QUANTVIEW", "ENABLED", 0)
+            var = self._camera.get_post_processing_param("QUANTVIEW", "ENABLED")
+
         elif name == "Readout Rate (speed)":
-            #TODO: implement
-            var = self._camera.speed_table_index
-            var1 = self._camera.speed_name
-            var2 = self._camera.speed
-            print(var)
-            pass
+            #Seems to be just a shortcut for setting the gain and speed modes. Doesn't matter, can be set via Gain 11/16bit
+            #Changing the detector parameter will trigger the widget via the controller and call setParameter for the respective gain changes!
+            if value == "200MHz 11bit":
+                self.parameters["Gain 11bit"].value = "1-Full well"
+                self.parameters["Gain 16bit"].value = " "
+                self.parameters["Readout Rate (speed)"].value = "200MHz 11bit"
+
+            elif value == "100MHz 16bit":
+                self.parameters["Gain 11bit"].value = " "
+                self.parameters["Gain 16bit"].value = "1-CMS"
+                self.parameters["Readout Rate (speed)"].value = "100MHz 16bit"
+
         elif name == "Smart Stream Channel":
             #TODO: implement
             pass
@@ -226,6 +253,35 @@ class PhotometricsManager(DetectorManager):
         else:
             raise ValueError(f'Invalid trigger source "{source}"')
 
+    def _setPortSpeedGain(self, gain_name, spdtab_idx):
+        self.__logger.info("Changing speed and/or gain")
+
+        def portSpeedGainAction():
+            self._camera.speed = spdtab_idx
+            self._camera.gain = gain_idx
+
+        if gain_name == "1-Full well":
+            gain_idx = 1
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "2-Balanced":
+            gain_idx = 2
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "3-Sensitivity":
+            gain_idx = 3
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "1-CMS":
+            gain_idx = 1
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "2-HDR":
+            gain_idx = 2
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        else:
+            raise ValueError(f'Invalid gain name"{gain_name}"')
     # def _setReadoutPort(self, port):
     #     self.__logger.debug("Change readout port")
     #
