@@ -84,27 +84,6 @@
                         "options": ["200MHz 11bit", "100MHz 16bit"],
                         "editable": true
                     },
-                    "Smart Stream Channel": {
-                        "type": "list",
-                        "group": "Miscellaneous",
-                        "value": "1",
-                        "options": ["1", "2", "3", "4"],
-                        "editable": true
-                    },
-                    "Smart Stream Timing": {
-                        "type": "list",
-                        "group": "Miscellaneous",
-                        "value": "10",
-                        "options": ["10", "20", "30", "40"],
-                        "editable": true
-                    },
-                    "Smart Stream ON/OFF": {
-                        "type": "list",
-                        "group": "Miscellaneous",
-                        "value": "Off",
-                        "options": ["On", "Off"],
-                        "editable": true
-                    },
                     "Set Temperature": {
                         "type": "number",
                         "group": "Miscellaneous",
