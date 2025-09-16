@@ -13,8 +13,14 @@ class MockPhotometrics:
         self.binning = 1
         self.exp_time = 10
         self.exp_mode = 1
+        self.exp_out_mode = 0
+        self.speed = 1
+        self.gain = 1
         self.readout_port = 1
         self.scan_line_time = 10
+        self.fan_speed = 1
+        self.temp = 1
+
 
     def check_frame_status(self):
         return "MOCK_STATUS"
@@ -27,6 +33,18 @@ class MockPhotometrics:
     def abort(self):
         return
     def finish(self):
+        return
+
+    def set_post_processing_param(self, param, attribute,  value):
+        return
+
+    def get_post_processing_param(self, param, attribute):
+        return
+
+    def get_param(self, name):
+        return
+
+    def set_param(self, name, value):
         return
 
     def close(self):

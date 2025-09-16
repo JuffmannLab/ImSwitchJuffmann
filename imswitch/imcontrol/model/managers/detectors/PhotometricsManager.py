@@ -171,7 +171,7 @@ class PhotometricsManager(DetectorManager):
 
             elif value == "100MHz 16bit":
                 self.parameters["Gain 11bit"].value = " "
-                self.parameters["Gain 16bit"].value = "1-CMS"
+                self.parameters["Gain 16bit"].value = "1-HDR"
                 self.parameters["Readout Rate (speed)"].value = "100MHz 16bit"
 
         elif name == "Set Temperature":  #should be between -35 and 5 Celsius
@@ -261,11 +261,11 @@ class PhotometricsManager(DetectorManager):
             gain_idx = 3
             self._performSafeCameraAction(portSpeedGainAction)
 
-        elif gain_name == "1-CMS":
+        elif gain_name == "1-HDR":
             gain_idx = 1
             self._performSafeCameraAction(portSpeedGainAction)
 
-        elif gain_name == "2-HDR":
+        elif gain_name == "2-CMS":
             gain_idx = 2
             self._performSafeCameraAction(portSpeedGainAction)
 
