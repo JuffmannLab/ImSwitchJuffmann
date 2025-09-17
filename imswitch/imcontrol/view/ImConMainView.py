@@ -59,6 +59,7 @@ class ImConMainView(QtWidgets.QMainWindow):
             'Laser': _DockInfo(name='Laser Control', yPosition=0),
             'EtSTED': _DockInfo(name='EtSTED', yPosition=0),
             'Shutter': _DockInfo(name='Shutter', yPosition=1),
+            'PockelCell': _DockInfo(name='Pockel Cell', yPosition=1),
             'SLM': _DockInfo(name='SLM', yPosition=2),
             'Scan': _DockInfo(name='Scan', yPosition=2),
             'BeadRec': _DockInfo(name='Bead Rec', yPosition=3),

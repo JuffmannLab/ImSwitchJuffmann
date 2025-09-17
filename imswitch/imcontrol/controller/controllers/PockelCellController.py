@@ -1,0 +1,6 @@
+from ..basecontrollers import ImConWidgetController
+
+class PockelCellController(ImConWidgetController):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)

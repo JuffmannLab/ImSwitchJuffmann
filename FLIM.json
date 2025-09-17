@@ -232,6 +232,7 @@
         "Image",
         "Laser",
         "Positioner",
+        "PockelCell",
         "Scan",
         "AlignXY",
         "AlignAverage",

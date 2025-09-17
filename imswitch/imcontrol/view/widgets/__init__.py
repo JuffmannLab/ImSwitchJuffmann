@@ -20,3 +20,4 @@ from .ViewWidget import ViewWidget
 from .TilingWidget import TilingWidget
 from .basewidgets import WidgetFactory
 from .ShutterWidget import ShutterWidget
+from .PockelCellWidget import PockelCellWidget
