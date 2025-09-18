@@ -19,3 +19,4 @@ from .ViewController import ViewController
 from .TilingController import TilingController
 from .WatcherController import WatcherController
 from .ShutterController import ShutterController
+from .PockelCellController import PockelCellController

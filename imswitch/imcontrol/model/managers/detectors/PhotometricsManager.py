@@ -53,26 +53,6 @@ class PhotometricsManager(DetectorManager):
                                                                         valueUnits='ms', editable=True)})
         parameters.update({'Real exposure time': DetectorNumberParameter(group='Timings', value=0,
                                                                          valueUnits='ms', editable=False)})
-        parameters.update({'Trigger source': DetectorListParameter(group='Acquisition mode',
-                                                     value='Internal trigger',
-                                                     options=['Internal trigger',
-                                                         'External start-trigger',
-                                                              'External frame-trigger'], editable=True)})
-        # parameters.update({'Readout port': DetectorListParameter(group='ports',
-        #                                           value='Sensitivity',
-        #                                           options=['Sensitivity',
-        #                                                    'Speed',
-        #                                                    'Dynamic range'], editable=True)})
-
-        # 'Trigger source': DetectorListParameter(group='Acquisition mode',
-        #                                             value='Internal trigger',
-        #                                             options=['Internal trigger',
-        #                                                      'External "start-trigger"',
-        #                                                      'External "frame-trigger"'],
-        #
-        #     'Camera pixel size': DetectorNumberParameter(group='Miscellaneous', value=0.1,
-        #                                                  valueUnits='µm', editable=True)
-        # }
 
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1, 2],
                          model=model, parameters=parameters, croppable=True)
@@ -133,66 +113,80 @@ class PhotometricsManager(DetectorManager):
 
     def setParameter(self, name, value):
         super().setParameter(name, value)
+        if value == " ":
+            return self.parameters
 
         if name == "Set exposure time":
             self._setExposure(value)
             self._updatePropertiesFromCamera()
-        elif name == 'Trigger source':
-            self._setTriggerSource(value)
-        # elif name == 'Readout port':
-        #     self._setReadoutPort(value)
+
         elif name == "Denoising/Enhance":           #post processing parameter: DENOISING, ENABLED 0 or 1 use strings in the getter/setter.
-            # TODO: implement
+            self._camera.set_post_processing_param("DENOISING", "ENABLED", 1) if value == "Yes" else self._camera.set_post_processing_param("DENOISING", "ENABLED", 0)
             var = self._camera.get_post_processing_param("DENOISING", "ENABLED")
-            print(var)
-            pass
+
         elif name == "Despeckle (pixel defects)":    #post processing parameter: 4 different ones BRIGHT/DARK LOW/HIGH, ENABLED 0 or 1
-            #TODO: implement
-            pass
-        elif name == "Fan Speed":                    #parameter: getter with constant: HIGH=0, MEDIUM=1, LOW=2, OFF (liquid cooled)=3
+            if value == "ON (all ON)":
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT LOW", "ENABLED", 1)
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT HIGH", "ENABLED", 1)
+                self._camera.set_post_processing_param("DESPECKLE DARK LOW", "ENABLED", 1)
+                self._camera.set_post_processing_param("DESPECKLE DARK HIGH", "ENABLED", 1)
+            else:
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT LOW", "ENABLED", 0)
+                self._camera.set_post_processing_param("DESPECKLE BRIGHT HIGH", "ENABLED", 0)
+                self._camera.set_post_processing_param("DESPECKLE DARK LOW", "ENABLED", 0)
+                self._camera.set_post_processing_param("DESPECKLE DARK HIGH", "ENABLED", 0)
+
+        elif name == "Fan Speed":               #parameter: getter with constant: HIGH=0, MEDIUM=1, LOW=2, OFF (liquid cooled)=3
+            if value == "High":
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 0)
+            elif value == "Medium":
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 1)
+            elif value == "Low":
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 2)
+            else:
+                self._camera.set_param(consts.PARAM_FAN_SPEED_SETPOINT, 3)
+
             var = self._camera.get_param(consts.PARAM_FAN_SPEED_SETPOINT)
-            print(var)
-            # TODO: implement
-            pass
+
         elif name == "Gain 11bit":                  #parameter: getter with constant: full well = 1, balanced = 2, sensitivity = 3
-            var = self._camera.get_param(consts.PARAM_GAIN_INDEX)
-            var2 = self._camera.get_param(consts.PARAM_GAIN_NAME)
-            var3= self._camera.gain
-            table = self._camera.port_speed_gain_table
-            print(var)
-            #TODO: implement
-            pass
-        elif name == "Gain 16bit":                  #Not sure if this property is available in PRIME BSI
-            #TODO: implement
-            pass
+            spdtab_index = 0
+            self._setPortSpeedGain(value, spdtab_index)
+            self.parameters["Gain 16bit"].value = " "
+            self.parameters["Readout Rate (speed)"].value = "200MHz 11bit"
+
+        elif name == "Gain 16bit":
+            spdtab_index = 1
+            self._setPortSpeedGain(value, spdtab_index)
+            self.parameters["Gain 11bit"].value = " "
+            self.parameters["Readout Rate (speed)"].value = "100MHz 16bit"
+
         elif name == "QuantView":                    #post processing parameter: QUANTVIEW, ENABLED 0 or 1
-            #TODO: implement
-            pass
+            self._camera.set_post_processing_param("QUANTVIEW", "ENABLED", 1) if value == "Yes" else self._camera.set_post_processing_param("QUANTVIEW", "ENABLED", 0)
+            var = self._camera.get_post_processing_param("QUANTVIEW", "ENABLED")
+
         elif name == "Readout Rate (speed)":
-            #TODO: implement
-            var = self._camera.speed_table_index
-            var1 = self._camera.speed_name
-            var2 = self._camera.speed
-            print(var)
-            pass
-        elif name == "Smart Stream Channel":
-            #TODO: implement
-            pass
-        elif name == "Smart Stream Timing":
-            #TODO: implement
-            pass
-        elif name == "Smart Stream ON/OFF":
-            #TODO: implement
-            pass
-        elif name == "Set Temperature":
-            #TODO: implement
-            pass
-        elif name == "Trigger IN":
-            #TODO: implement
-            pass
-        elif name == "Trigger OUT":
-            #TODO: implement
-            pass
+            #Seems to be just a shortcut for setting the gain and speed modes. Doesn't matter, can be set via Gain 11/16bit
+            #Changing the detector parameter will trigger the widget via the controller and call setParameter for the respective gain changes!
+            if value == "200MHz 11bit":
+                self.parameters["Gain 11bit"].value = "1-Full well"
+                self.parameters["Gain 16bit"].value = " "
+                self.parameters["Readout Rate (speed)"].value = "200MHz 11bit"
+
+            elif value == "100MHz 16bit":
+                self.parameters["Gain 11bit"].value = " "
+                self.parameters["Gain 16bit"].value = "1-HDR"
+                self.parameters["Readout Rate (speed)"].value = "100MHz 16bit"
+
+        elif name == "Set Temperature":  #should be between -35 and 5 Celsius
+            new_temp = value
+            self._camera.temp_setpoint = new_temp
+
+        elif name == "Trigger IN":                          #Internal trigger: 1792, Edge trigger: 2304, Trigger first: 2048
+            self._setTriggerSource(value)
+
+        elif name == "Trigger OUT":                         #Rolling Shutter: 3, First Row: 0, Any row: 2, Line Output: 4
+            self._setTriggerOutput(value)
+
         else:
             self.__logger.warning(f'Setting parameter {name} not implemented.')
         return self.parameters
@@ -215,20 +209,77 @@ class PhotometricsManager(DetectorManager):
         def triggerAction():
             self._camera.exp_mode = trigger_value
 
-        if source == 'Internal trigger':
+        if source == 'Internal Trigger':
             trigger_value = 1792
             self._performSafeCameraAction(triggerAction)
 
-        elif source == 'External "start-trigger"':
-            trigger_value = 2048
+        elif source == 'Edge Trigger':
+            trigger_value = 2304
             self._performSafeCameraAction(triggerAction)
 
-        elif source == 'External "frame-trigger"':
-            trigger_value = 2560
+        elif source == 'Trigger First':
+            trigger_value = 2048
             self._performSafeCameraAction(triggerAction)
         else:
             raise ValueError(f'Invalid trigger source "{source}"')
 
+    def _setTriggerOutput(self, output):
+        def triggerOutAction():
+            self._camera.exp_out_mode = trigger_value
+
+        if output == 'First Row':
+            trigger_value = 0
+            self._performSafeCameraAction(triggerOutAction)
+
+        elif output == 'Any Row':
+            trigger_value = 2
+            self._performSafeCameraAction(triggerOutAction)
+
+        elif output == 'Rolling Shutter':
+            trigger_value = 3
+            self._performSafeCameraAction(triggerOutAction)
+
+        elif output == 'Line Output':
+            trigger_value = 4
+            self._performSafeCameraAction(triggerOutAction)
+        else:
+            raise ValueError(f'Invalid trigger output "{output}"')
+
+    def _setPortSpeedGain(self, gain_name, spdtab_idx):
+        self.__logger.info("Changing speed and/or gain")
+
+        def portSpeedGainAction():
+            self._camera.speed = spdtab_idx
+            self._camera.gain = gain_idx
+
+        if gain_name == "1-Full well":
+            gain_idx = 1
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "2-Balanced":
+            gain_idx = 2
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "3-Sensitivity":
+            gain_idx = 3
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "1-HDR":
+            gain_idx = 1
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        elif gain_name == "2-CMS":
+            gain_idx = 2
+            self._performSafeCameraAction(portSpeedGainAction)
+
+        else:
+            raise ValueError(f'Invalid gain name"{gain_name}"')
+
+    def _getCameraTemp(self):
+
+        def getTempAction():
+            return self._camera.temp
+        return self._performSafeCameraAction(getTempAction)
     # def _setReadoutPort(self, port):
     #     self.__logger.debug("Change readout port")
     #
@@ -260,28 +311,74 @@ class PhotometricsManager(DetectorManager):
         """
         if self.__acquisition:
             self.stopAcquisition()
-            function()
+            result = function()
             self.startAcquisition()
+            return result
         else:
-            function()
+            return function()
 
     def _updatePropertiesFromCamera(self):
-        self.setParameter('Real exposure time', self._camera.exp_time)
+        super().setParameter('Real exposure time', self._camera.exp_time)
+
         triggerSource = self._camera.exp_mode
         if triggerSource == 1792:
-            self.setParameter('Trigger source', 'Internal trigger')
+            super().setParameter('Trigger IN', 'Internal Trigger')
         elif triggerSource == 2304:
-            self.setParameter('Trigger source', 'External "start-trigger"')
+            super().setParameter('Trigger IN', 'Edge Trigger')
         elif triggerSource == 2048:
-            self.setParameter('Trigger source', 'External "frame-trigger"')
+            super().setParameter('Trigger IN', 'Trigger First')
 
-        # readoutPort = self._camera.readout_port
-        # if readoutPort == 0:
-        #     self.setParameter('Readout port', 'Sensitivity')
-        # elif readoutPort == 1:
-        #     self.setParameter('Readout port', 'Speed')
-        # elif readoutPort == 2:
-        #     self.setParameter('Readout port', 'Dynamic range')
+        triggerOutput = self._camera.exp_out_mode
+        if triggerOutput == 0:
+            super().setParameter('Trigger OUT', 'First Row')
+        elif triggerOutput == 2:
+            super().setParameter('Trigger OUT', 'Any Row')
+        elif triggerOutput == 3:
+            super().setParameter('Trigger OUT', 'Rolling Shutter')
+        elif triggerOutput == 4:
+            super().setParameter('Trigger OUT', 'Line Output')
+
+        speed = self._camera.speed
+        gain = self._camera.gain
+
+        if speed == 0:
+            super().setParameter('Gain 16bit', " ")
+            super().setParameter("Readout Rate (speed)", "200MHz 11bit")
+            if gain == 1:
+                super().setParameter('Gain 11bit', "1-Full well")
+            elif gain == 2:
+                super().setParameter('Gain 11bit', '2-Balanced')
+            elif gain == 3:
+                super().setParameter('Gain 11bit', "3-Sensitivity")
+        if speed == 1:
+            super().setParameter('Gain 11bit', " ")
+            super().setParameter("Readout Rate (speed)", "100MHz 16bit")
+            if gain == 1:
+                super().setParameter("Gain 16bit", "1-HDR")
+            elif gain == 2:
+                super().setParameter("Gain 16bit", "2-CMS")
+
+        denoise = self._camera.get_post_processing_param("DENOISING", "ENABLED")
+        super().setParameter("Denoising/Enhance", "Yes") if denoise else super().setParameter("Denoising/Enhance", "No")
+
+        despeckle = self._camera.get_post_processing_param("DESPECKLE BRIGHT LOW", "ENABLED")
+        super().setParameter("Despeckle (pixel defects)", "ON (all ON)") if despeckle else super().setParameter("Despeckle (pixel defects)", "OFF (all OFF)")
+
+        fanSpeed = self._camera.fan_speed
+        if fanSpeed == 0:
+            super().setParameter("Fan Speed", "High")
+        elif fanSpeed == 1:
+            super().setParameter("Fan Speed", "Medium")
+        elif fanSpeed == 2:
+            super().setParameter("Fan Speed", "Low")
+        elif fanSpeed == 3:
+            super().setParameter("Fan Speed", "Liquid Cooled")
+
+        super().setParameter("Current Temperature", self._camera.temp)
+
+        quantview = self._camera.get_post_processing_param("QUANTVIEW", "ENABLED")
+        super().setParameter("QuantView", "Yes") if quantview else super().setParameter("QuantView", "No")
+
 
     def finalize(self):
         self._camera.close()
