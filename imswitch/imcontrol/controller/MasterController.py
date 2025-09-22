@@ -2,7 +2,7 @@ from imswitch.imcommon.model import VFileItem
 from imswitch.imcontrol.model import (
     #DetectorsManager, LasersManager, MultiManager, NidaqManager, PulseStreamerManager, PositionersManager,
     DetectorsManager, LasersManager, MultiManager, NidaqManager, PositionersManager,
-    RecordingManager, RS232sManager, ScanManager, SLMManager, ShutterManager
+    RecordingManager, RS232sManager, ScanManager, SLMManager, ShutterManager, PockelCellManager
 )
 
 
@@ -40,6 +40,7 @@ class MasterController:
         self.slmManager = SLMManager(self.__setupInfo.slm)
 
         self.ShutterManager = ShutterManager(self.__setupInfo.shutter)
+        self.PockelCellManager = PockelCellManager()
 
         # Connect signals
         cc = self.__commChannel

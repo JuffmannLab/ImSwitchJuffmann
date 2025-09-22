@@ -254,6 +254,10 @@ class ShutterInfo:
 
     managerName: str
 
+@dataclass(frozen=True)
+class PockelCellInfo:
+    managerName: str
+
 @dataclass_json(undefined=Undefined.INCLUDE)
 @dataclass
 class SetupInfo:
@@ -278,6 +282,11 @@ class SetupInfo:
     their properties.
     """
 
+    pockelcell: Optional[PockelCellInfo] = field(default_factory=lambda: None)
+    """
+    Pockel cell only contains the name of the manager needed to be loaded. Without this 
+    the manager object does not get created?
+    """
     shutter: Optional[ShutterInfo] = field(default_factory=lambda : None)
 
     slm: Optional[SLMInfo] = field(default_factory=lambda: None)

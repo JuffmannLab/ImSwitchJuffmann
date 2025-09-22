@@ -100,3 +100,5 @@ class PockelCellWidget(Widget):
             "Reset": self.flagReset.isChecked()
         }
         return controlbits
+    def setStatus(self, status):
+        self.statusTextBox.setText(status)
