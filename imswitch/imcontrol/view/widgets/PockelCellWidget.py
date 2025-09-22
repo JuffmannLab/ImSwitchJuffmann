@@ -102,3 +102,6 @@ class PockelCellWidget(Widget):
         return controlbits
     def setStatus(self, status):
         self.statusTextBox.setText(status)
+
+    def setActualVolt(self, voltage):
+        self.voltActualValue.setText(str(voltage))
