@@ -4,6 +4,10 @@ from imswitch.imcontrol.view import guitools as guitools
 from .basewidgets import Widget
 
 class PockelCellWidget(Widget):
+
+    sigSendControl = QtCore.Signal()
+    sigSendVoltage = QtCore.Signal()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -29,9 +33,11 @@ class PockelCellWidget(Widget):
         self.voltSlider.setRange(0, 3000)
         self.voltSlider.setValue(0)
         self.voltSliderMinLabel = QtWidgets.QLabel("0V")
+        self.voltSliderMinLabel.setAlignment(QtCore.Qt.AlignRight)
         self.voltSliderMaxLabel = QtWidgets.QLabel("3000V")
         self.voltActualLabel = QtWidgets.QLabel("Actual Voltage [V]: ")
         self.voltActualValue = QtWidgets.QLabel("")
+        self.voltSend = guitools.BetterPushButton("Send target voltage")
 
 
         #Status
@@ -41,21 +47,56 @@ class PockelCellWidget(Widget):
         self.statusTextBox.setPlaceholderText("Status flags will appear here")
 
         self.layout.addWidget(self.flagLabel, 0, 0)
-        self.layout.addWidget(self.flagHV, 1, 0)
-        self.layout.addWidget(self.flagRemote, 2, 0)
-        self.layout.addWidget(self.flagCalibrate, 3, 0)
-        self.layout.addWidget(self.flagReset, 4, 0)
-        self.layout.addWidget(self.flagSendButton, 5, 0)
+        self.layout.addWidget(self.flagHV, 2, 0)
+        self.layout.addWidget(self.flagRemote, 3, 0)
+        self.layout.addWidget(self.flagCheckRation, 4, 0)
+        self.layout.addWidget(self.flagCalibrate, 5, 0)
+        self.layout.addWidget(self.flagReset, 6, 0)
+        self.layout.addWidget(self.flagSendButton, 7, 0)
 
         self.layout.addWidget(self.voltTargetLabel, 0, 1)
         self.layout.addWidget(self.voltTargetSpin, 0, 2)
-        self.layout.addWidget(self.voltSliderMinLabel, 1, 1)
-        self.layout.addWidget(self.voltSlider, 1, 2)
-        self.layout.addWidget(self.voltSliderMaxLabel, 1, 3)
-        self.layout.addWidget(self.voltActualLabel, 2, 1)
-        self.layout.addWidget(self.voltActualValue, 2, 2)
+        self.layout.addWidget(self.voltSliderMinLabel, 2, 1)
+        self.layout.addWidget(self.voltSlider, 1, 2, 2, 1)
+        self.layout.addWidget(self.voltSliderMaxLabel, 2, 3)
+        self.layout.addWidget(self.voltActualLabel, 3, 1)
+        self.layout.addWidget(self.voltActualValue, 3, 2)
+        self.layout.addWidget(self.voltSend, 4, 1)
 
         self.layout.addWidget(self.statusLabel, 0, 4)
-        self.layout.addWidget(self.statusTextBox, 1, 4)
+        self.layout.addWidget(self.statusTextBox, 1, 4, 4, 1)
 
         self.setLayout(self.layout)
+
+        self.voltSlider.valueChanged.connect(self.setVoltValue)
+        self.voltTargetSpin.valueChanged.connect(self.setVoltValue)
+
+        self.flagSendButton.clicked.connect(
+            lambda: self.sigSendControl.emit()
+        )
+
+        self.voltSend.clicked.connect(
+            lambda: self.sigSendVoltage.emit()
+        )
+
+    def setVoltValue(self, value):
+        self.voltSlider.setValue(value)
+        self.voltTargetSpin.setValue(value)
+
+    def getVoltage(self):
+        spin_value = self.voltTargetSpin.value()
+        slider_value = self.voltSlider.value()
+        if spin_value == slider_value:
+            return spin_value
+        else:
+            return 0
+
+    def getControlBits(self):
+        controlbits = {
+            "HV": self.flagHV.isChecked(),
+            "Remote": self.flagRemote.isChecked(),
+            "Ratio": self.flagCheckRation.isChecked(),
+            "Calibrate": self.flagCalibrate.isChecked(),
+            "Reset": self.flagReset.isChecked()
+        }
+        return controlbits
