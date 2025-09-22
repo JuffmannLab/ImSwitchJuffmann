@@ -5,7 +5,13 @@ class PockelCellController(ImConWidgetController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        data = self.getStatus()
+        self.getStatus()
+        self._widget.sigSendVoltage.connect(self.sendVoltage)
+        self._widget.sigSendControl.connect(self.sendControl)
+
+
+    def getStatus(self):
+        data = self._master.PockelCellManager.getStatus()
         if data != 0:
             status = ""
             for key, value in data["status"].items():
@@ -13,15 +19,6 @@ class PockelCellController(ImConWidgetController):
                     status = status + key + "\n"
             self._widget.setStatus(status)
 
-
-            print(data)
-
-        self._widget.sigSendVoltage.connect(self.sendVoltage)
-        self._widget.sigSendControl.connect(self.sendControl)
-
-
-    def getStatus(self):
-        data = self._master.PockelCellManager.getStatus()
         return data
 
     def sendVoltage(self):
