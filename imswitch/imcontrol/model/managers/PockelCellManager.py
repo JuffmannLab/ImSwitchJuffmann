@@ -9,8 +9,22 @@ class PockelCellManager(SignalInterface):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
-    def sendVoltage(self, voltage):
-        print(voltage)
+    def sendVoltage(self, voltage_bits):
+        cmd = URL + "value"
+        payload = {
+            "id": "up1",
+            "value": voltage_bits
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.post(cmd, json=payload, headers=headers)
+            response.raise_for_status()  # Raises error if the request failed (HTTP 4xx/5xx)
+
+        except requests.exceptions.RequestException as e:
+            self.__logger.error("Sending control bits failed", e)
 
     def sendControl(self, controlbits):
         cmd = URL+"flags"

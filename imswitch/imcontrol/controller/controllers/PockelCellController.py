@@ -27,6 +27,7 @@ class PockelCellController(ImConWidgetController):
 
     def sendVoltage(self):
         voltages = self._widget.getVoltage()
+        voltage_bits = self.voltage_to_bits(voltages)
         self._master.PockelCellManager.sendVoltage(voltages)
 
     def sendControl(self):
