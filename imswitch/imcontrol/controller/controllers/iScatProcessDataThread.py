@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage as ndi
 from skimage.feature import peak_local_max
@@ -64,6 +65,33 @@ class ProcessDataThread(Thread):
         except Exception as e:
             self.__logger.warning(f"Position detection error: {str(e)}")
             return self._last_valid_position
+
+    def generate_gaussian_laser(self,im_size=512,line_x=256,slope=0.2,sigma=10.0,peak=200):
+        img = np.zeros((im_size, im_size), dtype=np.float32)
+
+        for y in range(im_size):
+            x0 = line_x + slope * (y - im_size // 2)
+            xs = np.arange(im_size)
+            img[y] = peak * np.exp(-0.5 * ((xs - x0) / sigma) ** 2)
+
+        return img.astype(np.uint8)
+
+    def test_getBeamPosition(self, img = None):
+        if img is None:
+            img = self.generate_gaussian_laser()
+            if img is None:
+                return self._last_valid_position
+
+        try:
+            nr_of_rows = img.shape[0]
+            #for each row get the central position, index the function since tuple is returned
+            row_positions = [ndi.center_of_mass(img[i])[0] for i in range(nr_of_rows)]
+            x_position = np.sum(row_positions)/nr_of_rows
+            return x_position
+
+        except Exception as e:
+            self.__logger.warning(f"Position detection error: {str(e)}")
+            return self._last_valid_position
         
     def analyzeFrame(self, img):
         """Main analysis method with calibration support"""
@@ -125,3 +153,4 @@ class ProcessDataThread(Thread):
         """Interface-compatible update method"""
         img = self.grabCameraFrame()
         return self.analyzeFrame(img)
+

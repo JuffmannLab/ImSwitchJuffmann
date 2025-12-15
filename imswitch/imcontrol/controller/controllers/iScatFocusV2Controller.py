@@ -3,6 +3,7 @@ import time
 import numpy as np
 from time import perf_counter
 from lantz import Q_
+from matplotlib import pyplot as plt
 
 from imswitch.imcommon.framework import Timer
 from imswitch.imcommon.model import initLogger
@@ -90,6 +91,7 @@ class iScatFocusV2Controller(ImConWidgetController):
             super().__del__()
     def runCalibration(self, from_V: float, to_V: float, steps: int):
         try:
+            self.__processDataThread.test_getBeamPosition()
             # 1. Prepare measurement points with hysteresis compensation
             test_voltages = np.linspace(from_V, to_V, steps)
             test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
