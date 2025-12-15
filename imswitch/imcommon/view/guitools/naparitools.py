@@ -2,6 +2,8 @@ from abc import abstractmethod
 
 import napari
 import numpy as np
+import matplotlib
+matplotlib.use("QtAgg")
 
 from matplotlib import pyplot as plt
 from matplotlib.cm import ScalarMappable
