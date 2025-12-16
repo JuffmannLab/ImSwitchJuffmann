@@ -76,11 +76,13 @@ class ProcessDataThread(Thread):
 
         return img.astype(np.uint8)
 
-    def test_getBeamPosition(self, img = None):
+    def test_getBeamPosition(self, current_step, img = None):
         if img is None:
-            img = self.generate_gaussian_laser()
-            if img is None:
-                return self._last_valid_position
+            if current_step < 24:
+                line_x = current_step*2 + 200
+            else:
+                line_x = 300 - current_step*2
+            img = self.generate_gaussian_laser(512, line_x=line_x,slope=0.2,sigma=np.random.randint(1, 15), peak=200)
 
         try:
             nr_of_rows = img.shape[0]
@@ -99,17 +101,17 @@ class ProcessDataThread(Thread):
             return self._last_valid_position
 
         try:
-            # Gaussian filter with dynamic sigma based on image size
-            sigma = min(img.shape) * 0.02  # ~2% of image size
-            img_filtered = ndi.gaussian_filter(img, sigma=sigma)
-            
-            # Find brightest region
-            coords = peak_local_max(img_filtered, num_peaks=1, min_distance=20)
-            if len(coords) == 0:
-                return self._last_valid_position
-                
-            y, x = coords[0]
-            return self._fitSubpixelPosition(img_filtered, x, y)
+        #TODO: write a row-per-row gaussian fit and return the average over all rows
+        #Introduce windowing as to limit background influence
+        #if too slow, sum the rows and do a single fit or use COM to estimate with less accuracy
+            x = np.arange(img.shape[0])
+            positions = []
+            for row in img:
+                #a guess for better fit?
+                #p0 = [np.max(row), np.argmax(row), 2.0, 0.0]
+                params, _ = curve_fit(self.gaussian_1d, x, row)
+                fitted_pos = params[1]
+
             
         except Exception as e:
             self._controller._logger.warning(f"Analysis error: {str(e)}")

@@ -91,7 +91,6 @@ class iScatFocusV2Controller(ImConWidgetController):
             super().__del__()
     def runCalibration(self, from_V: float, to_V: float, steps: int):
         try:
-            self.__processDataThread.test_getBeamPosition()
             # 1. Prepare measurement points with hysteresis compensation
             test_voltages = np.linspace(from_V, to_V, steps)
             test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
@@ -103,10 +102,10 @@ class iScatFocusV2Controller(ImConWidgetController):
             # 3. Enhanced measurement collection
             for i, v in enumerate(test_voltages):
                 # Move with overshoot compensation
-                if i > 0:
-                    overshoot = 0.1 * (v - test_voltages[i-1])
-                    self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
-                    time.sleep(0.1)
+                # if i > 0:
+                #     overshoot = 0.1 * (v - test_voltages[i-1])
+                #     self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
+                #     time.sleep(0.1)
                 
                 # Final precise positioning
                 self._master.positionersManager[self.positioner].setPosition(v, 0)
@@ -117,25 +116,31 @@ class iScatFocusV2Controller(ImConWidgetController):
                 time.sleep(settle_time)
                 
                 # Capture multiple samples with validation
-                sample_pos = []
-                for _ in range(10):
-                    img = self.__processDataThread.grabCameraFrame()
-                    pos = self.__processDataThread.getBeamPosition(img)
-                    if pos is not None:
-                        sample_pos.append(pos)
-                    time.sleep(0.05)
-                
-                if len(sample_pos) < 5:
-                    raise ValueError(f"Insufficient valid positions at {v}V")
-                    
-                # Use median and IQR filtering
-                q75, q25 = np.percentile(sample_pos, [75, 25])
-                iqr = q75 - q25
-                valid_pos = [p for p in sample_pos if (q25 - 1.5*iqr) < p < (q75 + 1.5*iqr)]
-                median_pos = np.median(valid_pos)
-                positions.append(median_pos)
-                
-                self.__logger.debug(f"Voltage {v:.2f}V -> {median_pos:.2f} px (n={len(valid_pos)})")
+                # Cisse: This is no longer necessary as getBeamPosition now implements a position per row in the image and averages that to get a single value.
+
+                # sample_pos = []
+                # for _ in range(10):
+                #     img = self.__processDataThread.grabCameraFrame()
+                #     pos = self.__processDataThread.getBeamPosition(img)
+                #     if pos is not None:
+                #         sample_pos.append(pos)
+                #     time.sleep(0.05)
+                #
+                # if len(sample_pos) < 5:
+                #     raise ValueError(f"Insufficient valid positions at {v}V")
+                #
+                # # Use median and IQR filtering
+                # q75, q25 = np.percentile(sample_pos, [75, 25])
+                # iqr = q75 - q25
+                # valid_pos = [p for p in sample_pos if (q25 - 1.5*iqr) < p < (q75 + 1.5*iqr)]
+                # median_pos = np.median(valid_pos)
+                # positions.append(median_pos)
+
+
+                img = self.__processDataThread.grabCameraFrame()
+                position = self.__processDataThread.test_getBeamPosition(i)
+                self.__logger.debug(f"Voltage {v:.2f}V -> {position:.2f} px")
+                positions.append(position)
             
             # 4. Split forward and backward measurements
             n = len(test_voltages)//2
@@ -307,7 +312,7 @@ class iScatFocusV2Controller(ImConWidgetController):
         if not self.locked:
             self.pid = PID(self.setPointSignal, 
                           dt=self.focusTime/1000, 
-                          kp=kp, ki=ki, kd=kd)
+                          kp=kp, ki=ki, kd=kd, vpx = self.volts_per_px)
             self.lockPosition = current_voltage
             self.locked = True
     
@@ -358,7 +363,7 @@ class iScatFocusV2Controller(ImConWidgetController):
 
 class PID:
     """Enhanced discrete PID controller with Kalman filtering and stability monitoring."""
-    def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0):
+    def __init__(self, setpoint, dt=0.001, kp=0, ki=0, kd=0, vpx=0):
         # Gains
         self._kp = kp          # Proportional gain (V/px)
         self._ki = ki          # Integral gain (V/(px·s))
@@ -369,7 +374,7 @@ class PID:
         # Control parameters
         self._setpoint = setpoint  # Target position (px)
         self._dt = dt          # Time step (s)
-        self.volts_per_px = None  # Calibration factor
+        self.volts_per_px = vpx  # Calibration factor
         
         # State variables
         self._integral = 0
@@ -377,26 +382,26 @@ class PID:
         self._last_derivative = 0 
         self._output = 0
         
-        # Anti-windup and limits
-        self.integral_min = -5  # Conservative limits
-        self.integral_max = 5
-        self.output_min = -10
-        self.output_max = 10
-        
-        # Kalman filter setup
-        self._kf = None
-        self.last_position = 0
-        self.last_velocity = 0
-        
-        # Stability monitoring
-        self.error_history = []
-        self.stability_counter = 0
-        self.max_unstable_count = 10
-        self.stable_threshold = 1.0  # px RMS error for stability
-        
-        # Dynamic control parameters
-        self.derivative_alpha = 0.3  # Smoothing factor for derivative
-        self.error_scaling = 1.0     # Dynamic error scaling
+        # # Anti-windup and limits
+        # self.integral_min = -5  # Conservative limits
+        # self.integral_max = 5
+        # self.output_min = -10
+        # self.output_max = 10
+        #
+        # # Kalman filter setup
+        # self._kf = None
+        # self.last_position = 0
+        # self.last_velocity = 0
+        #
+        # # Stability monitoring
+        # self.error_history = []
+        # self.stability_counter = 0
+        # self.max_unstable_count = 10
+        # self.stable_threshold = 1.0  # px RMS error for stability
+        #
+        # # Dynamic control parameters
+        # self.derivative_alpha = 0.3  # Smoothing factor for derivative
+        # self.error_scaling = 1.0     # Dynamic error scaling
 
     def setCalibration(self, volts_per_px):
         """Update calibration values with validation"""
@@ -410,110 +415,100 @@ class PID:
         Returns control output in volts.
         """
         # Initialize Kalman filter if needed
-        if self._kf is None:
-            self._init_kalman(current_px)
+        # if self._kf is None:
+        #     self._init_kalman(current_px)
         
         # Get filtered position and velocity estimates
-        filtered_pos, filtered_vel = self._update_kalman(current_px)
+        #filtered_pos, filtered_vel = self._update_kalman(current_px)
         
         # Calculate error with dynamic scaling
-        error_px, error = self._calculate_error(filtered_pos)
-        
+        #error_px, error = self._calculate_error(filtered_pos)
+        error_px, error_volts = self._calculate_error(current_px)
         # Calculate PID terms
-        p_term, i_term, d_term = self._calculate_terms(error, filtered_vel)
-        
-        # Combine terms with output limiting
-        self._output = self._limit_output(p_term + i_term + d_term)
-        
+        p_term, i_term, d_term = self._calculate_terms(error_volts, current_px)
+
+        self._output = p_term + i_term + d_term
         # Monitor stability
-        self._check_stability(error_px)
+        #self._check_stability(error_px)
         
         return self._output
 
-    def _init_kalman(self, current_px):
-        """Initialize Kalman filter with reasonable defaults"""
-        self._kf = KalmanFilter(
-            initial_pos=current_px,
-            initial_vel=0,
-            dt=self._dt,
-            process_noise=0.1,  # Adjust based on your system dynamics
-            measurement_noise=1.0  # Should match your measurement variance
-        )
-        self.last_position = current_px
-        self.last_velocity = 0
-
-    def _update_kalman(self, current_px):
-        """Update Kalman filter and return filtered estimates"""
-        self._kf.predict()
-        filtered_pos, filtered_vel = self._kf.update(current_px)
-        self.last_position = filtered_pos
-        self.last_velocity = filtered_vel
-        return filtered_pos, filtered_vel
-
+    # def _init_kalman(self, current_px):
+    #     """Initialize Kalman filter with reasonable defaults"""
+    #     self._kf = KalmanFilter(
+    #         initial_pos=current_px,
+    #         initial_vel=0,
+    #         dt=self._dt,
+    #         process_noise=0.1,  # Adjust based on your system dynamics
+    #         measurement_noise=1.0  # Should match your measurement variance
+    #     )
+    #     self.last_position = current_px
+    #     self.last_velocity = 0
+    #
+    # def _update_kalman(self, current_px):
+    #     """Update Kalman filter and return filtered estimates"""
+    #     self._kf.predict()
+    #     filtered_pos, filtered_vel = self._kf.update(current_px)
+    #     self.last_position = filtered_pos
+    #     self.last_velocity = filtered_vel
+    #     return filtered_pos, filtered_vel
+    #
     def _calculate_error(self, filtered_pos):
-        """Calculate error with dynamic scaling"""
         error_px = self._setpoint - filtered_pos
-        
-        # Dynamic error scaling - reduces aggression for large errors
-        self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
-        
-        if self.volts_per_px:
-            error = error_px * self.error_scaling * self.volts_per_px
-        else:
-            error = error_px * self.error_scaling
-            
-        return error_px, error
+        error_volts = error_px * self.volts_per_px
+        return error_px, error_volts
+    #     """Calculate error with dynamic scaling"""
+    #     error_px = self._setpoint - filtered_pos
+    #
+    #     # Dynamic error scaling - reduces aggression for large errors
+    #     self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
+    #
+    #     if self.volts_per_px:
+    #         error = error_px * self.error_scaling * self.volts_per_px
+    #     else:
+    #         error = error_px * self.error_scaling
+    #
+    #     return error_px, error
 
     def _calculate_terms(self, error, filtered_vel):
-        """Calculate PID terms with anti-windup and filtering"""
-        # Proportional term
+
         p_term = self._kp * error
-        
-        # Integral term with conditional integration and anti-windup
-        if abs(error) < 5:  # Only integrate when close to target
-            self._integral += error * self._dt
-        else:
-            self._integral *= 0.95  # Leaky integration
-        
-        self._integral = np.clip(self._integral, self.integral_min, self.integral_max)
+
+        self._integral += error * self._dt
         i_term = self._ki * self._integral
-        
-        # Derivative term using filtered velocity
-        if self.volts_per_px:
-            d_term = self._kd * (-filtered_vel * self.volts_per_px)
-        else:
-            d_term = self._kd * (-filtered_vel)
-            
-        # Apply low-pass filtering to derivative term
-        d_term = self.derivative_alpha * d_term + (1 - self.derivative_alpha) * self._last_derivative
+
+        derivative = (error - self._last_error) / self._dt
+        d_term = self._kd * derivative
+
         self._last_derivative = d_term
-        
+        self._last_error = error
+
         return p_term, i_term, d_term
 
-    def _limit_output(self, output):
-        """Apply output limits with anti-windup compensation"""
-        limited_output = np.clip(output, self.output_min, self.output_max)
-        
-        # Anti-windup: only integrate if not saturating
-        if output != limited_output:
-            self._integral -= (output - limited_output) * self._dt
-            
-        return limited_output
-
-    def _check_stability(self, error_px):
-        """Monitor stability and detect oscillations"""
-        self.error_history.append(abs(error_px))
-        if len(self.error_history) > 100:
-            self.error_history.pop(0)
-            
-        if len(self.error_history) == 100:
-            rms_error = np.sqrt(np.mean(np.array(self.error_history)**2))
-            if rms_error > self.stable_threshold:
-                self.stability_counter += 1
-                if self.stability_counter > self.max_unstable_count:
-                    raise RuntimeError("PID controller unstable - needs retuning")
-            else:
-                self.stability_counter = 0
+    # def _limit_output(self, output):
+    #     """Apply output limits with anti-windup compensation"""
+    #     limited_output = np.clip(output, self.output_min, self.output_max)
+    #
+    #     # Anti-windup: only integrate if not saturating
+    #     if output != limited_output:
+    #         self._integral -= (output - limited_output) * self._dt
+    #
+    #     return limited_output
+    #
+    # def _check_stability(self, error_px):
+    #     """Monitor stability and detect oscillations"""
+    #     self.error_history.append(abs(error_px))
+    #     if len(self.error_history) > 100:
+    #         self.error_history.pop(0)
+    #
+    #     if len(self.error_history) == 100:
+    #         rms_error = np.sqrt(np.mean(np.array(self.error_history)**2))
+    #         if rms_error > self.stable_threshold:
+    #             self.stability_counter += 1
+    #             if self.stability_counter > self.max_unstable_count:
+    #                 raise RuntimeError("PID controller unstable - needs retuning")
+    #         else:
+    #             self.stability_counter = 0
 
     def reset(self):
         """Reset controller state while preserving calibration"""
@@ -523,12 +518,12 @@ class PID:
         self.error_history = []
         self.stability_counter = 0
         
-        if self._kf is not None:
-            self._kf = KalmanFilter(
-                self.last_position,
-                self.last_velocity,
-                self._dt
-            )
+        # if self._kf is not None:
+        #     self._kf = KalmanFilter(
+        #         self.last_position,
+        #         self.last_velocity,
+        #         self._dt
+        #     )
 
     def restart(self):
         self._started = False
