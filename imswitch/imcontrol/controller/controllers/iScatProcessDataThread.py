@@ -77,6 +77,7 @@ class ProcessDataThread(Thread):
         return img.astype(np.uint8)
 
     def test_getBeamPosition(self, current_step, img = None):
+        #following if statement only matters for software testing
         if img is None:
             if current_step < 24:
                 line_x = current_step*2 + 200
@@ -101,21 +102,35 @@ class ProcessDataThread(Thread):
             return self._last_valid_position
 
         try:
-        #TODO: write a row-per-row gaussian fit and return the average over all rows
-        #Introduce windowing as to limit background influence
+
         #if too slow, sum the rows and do a single fit or use COM to estimate with less accuracy
-            x = np.arange(img.shape[0])
-            positions = []
-            for row in img:
-                #a guess for better fit?
-                #p0 = [np.max(row), np.argmax(row), 2.0, 0.0]
-                params, _ = curve_fit(self.gaussian_1d, x, row)
-                fitted_pos = params[1]
+            row_pos = np.array([self.fit_single_row(row) for row in img])
+
+            valid_idx = ~np.isnan(row_pos)
+            valid_pos = row_pos[valid_idx]
+
+            beam_pos = np.mean(valid_pos)
+
+            return beam_pos
 
             
         except Exception as e:
             self._controller._logger.warning(f"Analysis error: {str(e)}")
             return self._last_valid_position
+
+    def fit_single_row(self, row):
+        x = np.arange(row.size)
+
+        A0 = row.max() - row.min()
+        mu0 = np.argmax(row)
+        sigma0 = row.size/10
+        c0 = row.min()
+
+        try:
+            popt, _ = curve_fit(self.gaussian_1d, x, row, p0=[A0, mu0, sigma0, c0])
+            return popt[1]
+        except RuntimeError as e:
+            return np.nan
 
     def _fitSubpixelPosition(self, img, approx_x, approx_y):
         """Robust subpixel fitting with fallback"""
@@ -151,8 +166,12 @@ class ProcessDataThread(Thread):
         """1D Gaussian model for fitting"""
         return a * np.exp(-((x - x0) ** 2) / (2 * sigma ** 2)) + offset
 
-    def update(self):
+    def update(self, img):
         """Interface-compatible update method"""
-        img = self.grabCameraFrame()
+        #TODO: Don't forget to set this boolean to False when actually testing!
+        software_test = False
+        if software_test:
+            img = self.generate_gaussian_laser(512, line_x = np.random.randint(245,267))
+
         return self.analyzeFrame(img)
 

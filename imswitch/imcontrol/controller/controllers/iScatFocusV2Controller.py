@@ -138,7 +138,7 @@ class iScatFocusV2Controller(ImConWidgetController):
 
 
                 img = self.__processDataThread.grabCameraFrame()
-                position = self.__processDataThread.test_getBeamPosition(i)
+                position = self.__processDataThread.test_getBeamPosition(i,img)
                 self.__logger.debug(f"Voltage {v:.2f}V -> {position:.2f} px")
                 positions.append(position)
             
@@ -238,7 +238,7 @@ class iScatFocusV2Controller(ImConWidgetController):
         # 1 Grab camera frame
         img = self.__processDataThread.grabCameraFrame()
         # 2 Pass camera frame and get back focusSignalPosition from ProcessDataThread
-        self.setPointSignal = self.__processDataThread.update()
+        self.setPointSignal = self.__processDataThread.update(img)
         # 3 Update PID with the new setPointSignal and get back the distance to move, send to
         # update the PID control, and then send the move-distance to the z-piezo
         if self.locked:
@@ -247,10 +247,10 @@ class iScatFocusV2Controller(ImConWidgetController):
                 new_voltage = self.currentPosition + voltage_adjustment
                 # Clamp to -10V to +10V range
                 new_voltage = max(-10, min(10, new_voltage))
-                self._master.positionersManager[self.positioner].move(new_voltage - self.currentPosition, 0)
+                self._master.positionersManager[self.positioner].move(new_voltage - self.currentPosition, 0) #does this work fine?
         
         self.updateSetPointData()
-        self._widget.camImg.setImage(img)
+        self._widget.camImg.setImage(img.T)
         if self.currPoint < self.buffer:
             self._widget.updateFocusPlot(
                 self.timeData[1:self.currPoint],
