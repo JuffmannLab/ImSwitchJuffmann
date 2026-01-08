@@ -250,7 +250,7 @@ class iScatFocusV2Controller(ImConWidgetController):
                 self._master.positionersManager[self.positioner].move(new_voltage - self.currentPosition, 0) #does this work fine?
         
         self.updateSetPointData()
-        self._widget.camImg.setImage(img.T)
+        self._widget.camImg.setImage(img)
         if self.currPoint < self.buffer:
             self._widget.updateFocusPlot(
                 self.timeData[1:self.currPoint],
