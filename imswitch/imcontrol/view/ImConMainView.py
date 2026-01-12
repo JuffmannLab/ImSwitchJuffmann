@@ -72,7 +72,8 @@ class ImConMainView(QtWidgets.QMainWindow):
             'FFT': _DockInfo(name='FFT Tool', yPosition=3),
             'Watcher': _DockInfo(name='File Watcher', yPosition=3),
             'Tiling': _DockInfo(name='Tiling', yPosition=3),
-            'DifferentialView': _DockInfo(name='Differential View', yPosition=3)
+            'DifferentialView': _DockInfo(name='Differential View', yPosition=3),
+            'SynthControl': _DockInfo(name = "ISOMET synthesizer control", yPosition=3)
             
         }
         leftDockInfos = {

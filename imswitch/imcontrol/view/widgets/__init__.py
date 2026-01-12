@@ -23,3 +23,4 @@ from .DifferentialViewWidget import DifferentialViewWidget
 from .ShutterWidget import ShutterWidget
 from .iScatFocusWidget import iScatFocusWidget
 from .iScatFocusWidgetV2 import iScatFocusV2Widget
+from .SynthControlWidget import SynthControlWidget

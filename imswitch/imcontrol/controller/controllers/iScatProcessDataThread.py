@@ -169,7 +169,8 @@ class ProcessDataThread(Thread):
     def update(self, img):
         """Interface-compatible update method"""
         #TODO: Don't forget to set this boolean to False when actually testing!
-        software_test = False
+        #This is already quite slow for mock camera frame.
+        software_test = True
         if software_test:
             img = self.generate_gaussian_laser(512, line_x = np.random.randint(245,267))
 
