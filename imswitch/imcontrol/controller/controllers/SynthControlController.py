@@ -17,3 +17,5 @@ class SynthControlController(ImConWidgetController):
             self._widget.updateLabel("This is an even number.")
         else:
             self._widget.updateLabel("This is an odd number.")
+
+
