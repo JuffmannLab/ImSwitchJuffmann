@@ -260,7 +260,9 @@ class ShutterInfo:
             return f'COM{self.ComChannel}'
         else:
             return self.ComChannel
-
+@dataclass(frozen=True)
+class SynthControl:
+    systemID: Optional[str] = None
 
 @dataclass(frozen=True)
 class PulseStreamerInfo:
@@ -331,6 +333,10 @@ class SetupInfo:
     """ Pulse Streamer settings. """
 
     pyroServerInfo: PyroServerInfo = field(default_factory=PyroServerInfo)
+
+    synthcontrol: Optional[SynthControl] = field(default_factory=SynthControl)
+
+
 
     _catchAll: CatchAll = None
 
