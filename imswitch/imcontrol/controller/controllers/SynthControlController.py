@@ -8,9 +8,8 @@ class SynthControlController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+
         #connect signal widgets
-        self._widget.sigAmpValueChanged.connect(self._widget.updateAmpValue)
-        self._widget.sigSomethingChanged.connect(self.updateLabel)
 
     def updateLabel(self, value):
         if value % 2 == 0:
