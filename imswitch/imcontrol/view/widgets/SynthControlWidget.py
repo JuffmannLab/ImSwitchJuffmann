@@ -48,18 +48,18 @@ class SynthControlWidget(Widget):
 
         imPlayerLayout.addWidget(self.clockRateLabel, 0, 0, 1, 1)
         imPlayerLayout.addWidget(self.clockRateEdit, 0, 1, 1, 1)
-        imPlayerLayout.addWidget(self.imageTable, 0, 2, 2, 3)
+        imPlayerLayout.addWidget(self.imageTable, 0, 2, 3, 3)
 
         imPlayerLayout.addWidget(self.triggerRadioButtonCon, 1, 0, 1, 1)
         imPlayerLayout.addWidget(self.triggerRadioButtonExt, 1, 1, 1, 1)
 
-        imPlayerLayout.addWidget(self.currentImageLabel, 2, 0, 1, 1)
-        imPlayerLayout.addWidget(self.currentImage, 2, 1, 1, 1)
-        imPlayerLayout.addWidget(self.repeatOptions, 2, 2, 1, 1)
-        imPlayerLayout.addWidget(self.programmedRepeats, 2, 3, 1, 1)
+        imPlayerLayout.addWidget(self.currentImageLabel, 3, 0, 1, 1)
+        imPlayerLayout.addWidget(self.currentImage, 3, 1, 1, 1)
+        imPlayerLayout.addWidget(self.repeatOptions, 3, 2, 1, 1)
+        imPlayerLayout.addWidget(self.programmedRepeats, 3, 3, 1, 1)
 
-        imPlayerLayout.addWidget(self.startButton, 3, 0, 1, 1)
-        imPlayerLayout.addWidget(self.stopButton, 3, 1, 1, 1)
+        imPlayerLayout.addWidget(self.startButton, 4, 0, 1, 1)
+        imPlayerLayout.addWidget(self.stopButton, 4, 1, 1, 1)
 
         #Add signals
         self.repeatOptions.currentIndexChanged.connect(self.sigRepeatOptionChanged)
