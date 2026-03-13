@@ -39,7 +39,7 @@ class MasterController:
         self.recordingManager = RecordingManager(self.detectorsManager)
         self.slmManager = SLMManager(self.__setupInfo.slm)
         self.shutterManager = ShutterManager(self.__setupInfo)
-        self.synthcontrolManager = SynthControlManager(self.__setupInfo.synthcontrol)
+        self.synthControlManager = SynthControlManager(self.__setupInfo.synthcontrol)
 
         # Connect signals
         cc = self.__commChannel
