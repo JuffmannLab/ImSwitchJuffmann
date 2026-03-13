@@ -64,7 +64,6 @@ class MultiModuleWindow(QtWidgets.QMainWindow):
         picLabel = QtWidgets.QLabel()
         pixmap = QtGui.QPixmap(f"./loadingscreens/{idx}.jpg")
         picLabel.setPixmap(pixmap)
-        picLabel.setScaledContents(True)
         picLabel.setAlignment(QtCore.Qt.AlignCenter)
         loadingLayout = QtWidgets.QVBoxLayout()
         loadingLayout.setAlignment(QtCore.Qt.AlignCenter)
