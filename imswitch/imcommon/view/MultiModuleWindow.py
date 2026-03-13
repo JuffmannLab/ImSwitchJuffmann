@@ -1,10 +1,10 @@
 from qdarkstyle import DarkPalette
-from qtpy import QtCore, QtWidgets
+from qtpy import QtCore, QtWidgets, QtGui, QtMultimedia
 
 from .AboutDialog import AboutDialog
 from .CheckUpdatesDialog import CheckUpdatesDialog
 from .PickModulesDialog import PickModulesDialog
-
+from random import randint
 
 class MultiModuleWindow(QtWidgets.QMainWindow):
     sigPickModules = QtCore.Signal()
@@ -54,19 +54,33 @@ class MultiModuleWindow(QtWidgets.QMainWindow):
         loadingLabel = QtWidgets.QLabel('<h1>Starting ImSwitch…</h1>')
         loadingLabel.setAlignment(QtCore.Qt.AlignCenter)
         self.loadingProgressBar = QtWidgets.QProgressBar()
-        self.loadingProgressBar.setMaximumWidth(480)
+        self.loadingProgressBar.setFixedWidth(480)
         self.loadingProgressBar.setValue(0)
         self.loadingProgressBar.setTextVisible(False)
+        self.loadingProgressBar.setAlignment(QtCore.Qt.AlignCenter)
 
+        idx = randint(0, 12)
+
+        picLabel = QtWidgets.QLabel()
+        pixmap = QtGui.QPixmap(f"./loadingscreens/{idx}.jpg")
+        picLabel.setPixmap(pixmap)
+        picLabel.setScaledContents(True)
+        picLabel.setAlignment(QtCore.Qt.AlignCenter)
         loadingLayout = QtWidgets.QVBoxLayout()
         loadingLayout.setAlignment(QtCore.Qt.AlignCenter)
         loadingLayout.setSpacing(32)
+
+        loadingLayout.addWidget(picLabel)
         loadingLayout.addWidget(loadingLabel)
-        loadingLayout.addWidget(self.loadingProgressBar)
+        loadingLayout.addWidget(self.loadingProgressBar, alignment=QtCore.Qt.AlignCenter)
 
         loadingContainer = QtWidgets.QWidget()
         loadingContainer.setLayout(loadingLayout)
         self.setCentralWidget(loadingContainer)
+
+        self.soundeffect = QtMultimedia.QSoundEffect()
+        self.soundeffect.setSource(QtCore.QUrl.fromLocalFile(f"./loadingscreens/{idx}.wav"))
+        self.soundeffect.setVolume(0.7)
 
     def addModule(self, moduleId, moduleName, moduleWidget):
         self.moduleWidgets[moduleName] = moduleWidget
@@ -154,9 +168,11 @@ class MultiModuleWindow(QtWidgets.QMainWindow):
 
             # Show tabs
             self.setCentralWidget(self.moduleTabs)
-
         self.showMaximized()
         super().show()
+
+    def playSoundEffect(self):
+        self.soundeffect.play()
 
     def closeEvent(self, event):
         QtWidgets.QApplication.instance().quit()

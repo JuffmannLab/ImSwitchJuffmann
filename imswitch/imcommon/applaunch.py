@@ -41,6 +41,7 @@ def launchApp(app, mainView, moduleMainControllers):
     # Show app
     mainView.showMaximized()
     mainView.show()
+    mainView.playSoundEffect()
     exitCode = app.exec_()
 
     # Clean up
