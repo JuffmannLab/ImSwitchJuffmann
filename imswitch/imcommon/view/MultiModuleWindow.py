@@ -60,16 +60,18 @@ class MultiModuleWindow(QtWidgets.QMainWindow):
         self.loadingProgressBar.setAlignment(QtCore.Qt.AlignCenter)
 
         idx = randint(0, 12)
+        print(f"Pokemon loaded: {idx}")
+        self.picLabel = QtWidgets.QLabel()
+        self.pixmap = QtGui.QPixmap(f"./loadingscreens/{idx}.jpg")
+        self.picLabel.setPixmap(self.pixmap)
+        self.picLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.picLabel.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
 
-        picLabel = QtWidgets.QLabel()
-        pixmap = QtGui.QPixmap(f"./loadingscreens/{idx}.jpg")
-        picLabel.setPixmap(pixmap)
-        picLabel.setAlignment(QtCore.Qt.AlignCenter)
         loadingLayout = QtWidgets.QVBoxLayout()
         loadingLayout.setAlignment(QtCore.Qt.AlignCenter)
         loadingLayout.setSpacing(32)
 
-        loadingLayout.addWidget(picLabel)
+        loadingLayout.addWidget(self.picLabel)
         loadingLayout.addWidget(loadingLabel)
         loadingLayout.addWidget(self.loadingProgressBar, alignment=QtCore.Qt.AlignCenter)
 

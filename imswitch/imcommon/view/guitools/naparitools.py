@@ -130,13 +130,13 @@ class NapariBaseWidget(QtWidgets.QWidget):
 
         # Move layer list to bottom
         napariViewer.window._qt_window.removeDockWidget(
-            napariViewer.window.qt_viewer.dockLayerList
+            napariViewer.window._qt_viewer.dockLayerList
         )
         napariViewer.window._qt_window.addDockWidget(
-            napariViewer.window.qt_viewer.dockLayerList.qt_area,
-            napariViewer.window.qt_viewer.dockLayerList
+            napariViewer.window._qt_viewer.dockLayerList.qt_area,
+            napariViewer.window._qt_viewer.dockLayerList
         )
-        napariViewer.window.qt_viewer.dockLayerList.show()
+        napariViewer.window._qt_viewer.dockLayerList.show()
         return widget
 
     def addItemToViewer(self, item):
@@ -171,7 +171,7 @@ class NapariUpdateLevelsWidget(NapariBaseWidget):
                                                  QtWidgets.QSizePolicy.Maximum))
 
     def _on_update_levels(self):
-        for layer in self.viewer.layers.selected:
+        for layer in self.viewer.layers.selection:
             layer.contrast_limits = minmaxLevels(layer.data)
 
 
@@ -303,11 +303,11 @@ class NapariShiftWidget(NapariBaseWidget):
         self._do_shift(-self._get_shift_distance(), 0)
 
     def _on_reset(self):
-        for layer in self.viewer.layers.selected:
+        for layer in self.viewer.layers.selection:
             layer.translate = [0, 0]
 
     def _do_shift(self, xDist, yDist):
-        for layer in self.viewer.layers.selected:
+        for layer in self.viewer.layers.selection:
             y, x = layer.translate
             layer.translate = [y + yDist, x + xDist]
 
@@ -815,9 +815,12 @@ class VispyCrosshairVisual(VispyBaseVisual):
         self._nodes = [self.node]
 
         try:
-            canvas.connect(self.on_mouse_press)
-            canvas.connect(self.on_mouse_move)
-            canvas.connect(self.on_mouse_release)
+            canvas.events.mouse_press.connect(self.on_mouse_press)
+            canvas.events.mouse_move.connect(self.on_mouse_move)
+            canvas.events.mouse_release.connect(self.on_mouse_release)
+            #canvas.connect(self.on_mouse_press)
+            #canvas.connect(self.on_mouse_move)
+            #canvas.connect(self.on_mouse_release)
         except Exception as e:
             print(f'Error connecting to canvas: {e}')
         self._viewer.camera.events.zoom.connect(self._on_zoom_change)
