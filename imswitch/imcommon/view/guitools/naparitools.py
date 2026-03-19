@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 import napari
+import qdarkstyle.dark.darkstyle_rc
 import numpy as np
 import matplotlib
 matplotlib.use("QtAgg")
@@ -57,7 +58,6 @@ def addMatplotlibGrayclipColormap():
 
     grayclip_colormap = ListedColormap(colors, name='grayclip')
     plt.register_cmap('grayclip', grayclip_colormap)
-
 
 
 class EmbeddedNapari(napari.Viewer):
@@ -233,25 +233,25 @@ class NapariShiftWidget(NapariBaseWidget):
         # Shift up button
         self.upButton = QtWidgets.QPushButton()
         self.upButton.setToolTip('Shift selected layer up')
-        self.upButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/up_arrow.svg'))
+        self.upButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_up.png'))
         self.upButton.clicked.connect(self._on_up)
 
         # Shift right button
         self.rightButton = QtWidgets.QPushButton()
         self.rightButton.setToolTip('Shift selected layer right')
-        self.rightButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/right_arrow.svg'))
+        self.rightButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_right.png'))
         self.rightButton.clicked.connect(self._on_right)
 
         # Shift down button
         self.downButton = QtWidgets.QPushButton()
         self.downButton.setToolTip('Shift selected layer down')
-        self.downButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/down_arrow.svg'))
+        self.downButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_down.png'))
         self.downButton.clicked.connect(self._on_down)
 
         # Shift left button
         self.leftButton = QtWidgets.QPushButton()
         self.leftButton.setToolTip('Shift selected layer left')
-        self.leftButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/left_arrow.svg'))
+        self.leftButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_left.png'))
         self.leftButton.clicked.connect(self._on_left)
 
         # Reset button
