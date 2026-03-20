@@ -1,55 +1,47 @@
 from imswitch.imcommon.framework import Signal, SignalInterface
 from imswitch.imcommon.model import initLogger
-import requests
+import PyDAQmx as pd
+import numpy as np
 
-URL = "http://192.168.0.177/api/"
+reset_line = "Dev1/port1/line1" #pin 4
+HV_line = "Dev1/port1/line2" #pin 5
 
 class PockelCellManager(SignalInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
+        self.reset_line = reset_line
+        self.HV_line = HV_line
+        self.digital_lines = ",".join([self.reset_line, self.HV_line])
 
-    def sendVoltage(self, voltage_bits):
-        cmd = URL + "value"
-        payload = {
-            "id": "up1",
-            "value": voltage_bits
-        }
-        headers = {
-            "Content-Type": "application/json"
-        }
+        self.hv = False
+        self.reset = False
 
-        try:
-            response = requests.post(cmd, json=payload, headers=headers)
-            response.raise_for_status()  # Raises error if the request failed (HTTP 4xx/5xx)
+        self.samplesWritten = pd.int32()
+        self.analogOutTask = pd.Task()
+        self.digitalOutTask = pd.Task()
+        # DAQmx Configure Code
+        self.analogOutTask.CreateAOVoltageChan(b"Dev1/ao1", "", -10.0, 10.0, pd.DAQmx_Val_Volts, None)
+        self.digitalOutTask.CreateDOChan(self.digital_lines, "", pd.DAQmx_Val_ChanForAllLines)
+        # DAQmx Start Code
+        self.analogOutTask.StartTask()
+        self.digitalOutTask.StartTask()
 
-        except requests.exceptions.RequestException as e:
-            self.__logger.error("Sending control bits failed", e)
+    def __del__(self):
+        #Make sure that control lines and voltage are set to zero when imswitch quits.
+        data = np.array([False, False])
+        self.digitalOutTask.WriteDigitalLines(1, 1, 10.0, pd.DAQmx_Val_GroupByChannel, data, pd.byref(self.samplesWritten), None)
+        self.analogOutTask.WriteAnalogScalarF64(1, 10.0, 0, None)
+        self.analogOutTask.StopTask()
+        self.digitalOutTask.StopTask()
 
-    def sendControl(self, controlbits):
-        cmd = URL+"flags"
-        headers = {
-            "Content-Type": "application/json"
-        }
-        try:
-            response = requests.post(cmd, json=controlbits, headers=headers)
-            response.raise_for_status()  # Raises error if the request failed (HTTP 4xx/5xx)
+    def sendVoltage(self, control_voltage):
+        pass
 
-        except requests.exceptions.RequestException as e:
-            self.__logger.error("Sending control bits failed", e)
+    def setHV(self, HV_ON):
+        pass
 
-    def getStatus(self):
-        cmd = URL+"status"
-        data = 0
-        try:
-            response = requests.get(cmd)
-            response.raise_for_status()  # raises an error if HTTP response is 4xx or 5xx
-
-            data = response.json()
-
-        except requests.exceptions.RequestException as e:
-            self.__logger.error("Get status request failed:", e)
-
-        return data
+    def sendReset(self):
+        pass
 
 
