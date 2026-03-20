@@ -21,11 +21,14 @@ class PockelCellManager(SignalInterface):
         self.analogOutTask = pd.Task()
         self.digitalOutTask = pd.Task()
         # DAQmx Configure Code
-        self.analogOutTask.CreateAOVoltageChan(b"Dev1/ao1", "", -10.0, 10.0, pd.DAQmx_Val_Volts, None)
-        self.digitalOutTask.CreateDOChan(self.digital_lines, "", pd.DAQmx_Val_ChanForAllLines)
-        # DAQmx Start Code
-        self.analogOutTask.StartTask()
-        self.digitalOutTask.StartTask()
+        try:
+            self.analogOutTask.CreateAOVoltageChan(b"Dev1/ao1", "", -10.0, 10.0, pd.DAQmx_Val_Volts, None)
+            self.digitalOutTask.CreateDOChan(self.digital_lines, "", pd.DAQmx_Val_ChanForAllLines)
+            # DAQmx Start Code
+            self.analogOutTask.StartTask()
+            self.digitalOutTask.StartTask()
+        except Exception as e:
+            self.__logger.error(f"Exception caught when connecting to NIDAQ device: {e}")
 
     def __del__(self):
         #Make sure that control lines and voltage are set to zero when imswitch quits.

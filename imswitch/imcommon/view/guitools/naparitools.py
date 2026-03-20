@@ -2,6 +2,7 @@ from abc import abstractmethod
 
 import napari
 import numpy as np
+import qdarkstyle.dark.darkstyle_rc
 from napari.utils.translations import trans
 from qtpy import QtCore, QtGui, QtWidgets
 from vispy.color import Color
@@ -94,20 +95,20 @@ class NapariBaseWidget(QtWidgets.QWidget):
 
         # Move layer list to bottom
         napariViewer.window._qt_window.removeDockWidget(
-            napariViewer.window.qt_viewer.dockLayerList
+            napariViewer.window._qt_viewer.dockLayerList
         )
         napariViewer.window._qt_window.addDockWidget(
-            napariViewer.window.qt_viewer.dockLayerList.qt_area,
-            napariViewer.window.qt_viewer.dockLayerList
+            napariViewer.window._qt_viewer.dockLayerList.qt_area,
+            napariViewer.window._qt_viewer.dockLayerList
         )
-        napariViewer.window.qt_viewer.dockLayerList.show()
+        napariViewer.window._qt_viewer.dockLayerList.show()
         return widget
 
     def addItemToViewer(self, item):
         item.attach(self.viewer,
-                    canvas=self.viewer.window.qt_viewer.canvas,
-                    view=self.viewer.window.qt_viewer.view,
-                    parent=self.viewer.window.qt_viewer.view.scene,
+                    canvas=self.viewer.window._qt_viewer.canvas,
+                    view=self.viewer.window._qt_viewer.view,
+                    parent=self.viewer.window._qt_viewer.view.scene,
                     order=1e6 + 8000)
 
 
@@ -156,25 +157,25 @@ class NapariShiftWidget(NapariBaseWidget):
         # Shift up button
         self.upButton = QtWidgets.QPushButton()
         self.upButton.setToolTip('Shift selected layer up')
-        self.upButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/up_arrow.svg'))
+        self.upButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_up.png'))
         self.upButton.clicked.connect(self._on_up)
 
         # Shift right button
         self.rightButton = QtWidgets.QPushButton()
         self.rightButton.setToolTip('Shift selected layer right')
-        self.rightButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/right_arrow.svg'))
+        self.rightButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_right.png'))
         self.rightButton.clicked.connect(self._on_right)
 
         # Shift down button
         self.downButton = QtWidgets.QPushButton()
         self.downButton.setToolTip('Shift selected layer down')
-        self.downButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/down_arrow.svg'))
+        self.downButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_down.png'))
         self.downButton.clicked.connect(self._on_down)
 
         # Shift left button
         self.leftButton = QtWidgets.QPushButton()
         self.leftButton.setToolTip('Shift selected layer left')
-        self.leftButton.setIcon(QtGui.QIcon(f':/themes/{self.viewer.theme}/left_arrow.svg'))
+        self.leftButton.setIcon(QtGui.QIcon(f':/qss_icons/{self.viewer.theme}/rc/arrow_left.png'))
         self.leftButton.clicked.connect(self._on_left)
 
         # Reset button
