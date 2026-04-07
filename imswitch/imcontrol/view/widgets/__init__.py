@@ -19,3 +19,4 @@ from .WatcherWidget import WatcherWidget
 from .ViewWidget import ViewWidget
 from .TilingWidget import TilingWidget
 from .basewidgets import WidgetFactory
+from .ShuttersWidget import ShuttersWidget
