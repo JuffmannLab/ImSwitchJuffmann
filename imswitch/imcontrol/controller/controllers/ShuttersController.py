@@ -7,3 +7,19 @@ class ShuttersController(ImConWidgetController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
+
+        # connect signal widgets
+        self._widget.sigIRToggled.connect(self.on_ir_toggled)
+        self._widget.sigUVToggled.connect(self.on_uv_toggled)
+
+        # Optional: initialize labels as OFF
+        self._widget.setIRLabel("OFF")
+        self._widget.setUVLabel("OFF")
+
+    def on_ir_toggled(self, checked: bool):
+        self._widget.setIRLabel("ON" if checked else "OFF")
+
+    def on_uv_toggled(self, checked: bool):
+        self._widget.setUVLabel("ON" if checked else "OFF")
+
+
