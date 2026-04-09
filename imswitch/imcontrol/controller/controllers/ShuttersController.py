@@ -17,9 +17,18 @@ class ShuttersController(ImConWidgetController):
         self._widget.setUVLabel("OFF")
 
     def on_ir_toggled(self, checked: bool):
-        self._widget.setIRLabel("ON" if checked else "OFF")
+        if checked:
+            self._widget.setIRLabel("ON")
+            self._master.ShuttersManager.newSignal('IR_ON\n')
+        else:
+            self._widget.setIRLabel("OFF")
+            self._master.ShuttersManager.newSignal('IR_OFF\n')
+
 
     def on_uv_toggled(self, checked: bool):
-        self._widget.setUVLabel("ON" if checked else "OFF")
-
-
+        if checked:
+            self._widget.setUVLabel("ON")
+            self._master.ShuttersManager.newSignal('UV_ON\n')
+        else:
+            self._widget.setUVLabel("OFF")
+            self._master.ShuttersManager.newSignal('UV_OFF\n')

@@ -3,6 +3,14 @@ from typing import Any, Dict, List, Optional, Union
 
 from dataclasses_json import dataclass_json, Undefined, CatchAll
 
+@dataclass(frozen=True)
+class ShuttersInfo:
+
+    managerName: str
+    """ Shutters Manager class name. """
+
+    managerProperties: Dict[str, Any]
+    """ Properties to be read by the ShuttersManager. """
 
 @dataclass(frozen=True)
 class DeviceInfo:
@@ -239,6 +247,9 @@ class PyroServerInfo:
 @dataclass
 class SetupInfo:
     # default_factory seems to be required for the field to show up in autodocs for deriving classes
+
+    SEMdevices: Dict[str, ShuttersInfo] = field(default_factory=dict)
+    """SEM devices, like shutters """
 
     detectors: Dict[str, DetectorInfo] = field(default_factory=dict)
     """ Detectors in this setup. This is a map from unique detector names to
