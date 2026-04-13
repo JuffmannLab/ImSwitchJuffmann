@@ -12,9 +12,12 @@ class ShuttersController(ImConWidgetController):
         self._widget.sigIRToggled.connect(self.on_ir_toggled)
         self._widget.sigUVToggled.connect(self.on_uv_toggled)
 
-        # Optional: initialize labels as OFF
+        # Optional: initialize as OFF
         self._widget.setIRLabel("OFF")
         self._widget.setUVLabel("OFF")
+        self._master.ShuttersManager.connectDevice()
+        self._master.ShuttersManager.newSignal('IR_OFF\n')
+        self._master.ShuttersManager.newSignal('UV_OFF\n')
 
     def on_ir_toggled(self, checked: bool):
         if checked:
