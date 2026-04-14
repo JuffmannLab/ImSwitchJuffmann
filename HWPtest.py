@@ -1,37 +1,37 @@
-# print_hwp_angle_com3.py
-from ctypes import byref, c_int
-from pyximc import *
+# print_hwp_angle_com3_libximc.py
+import libximc.highlevel as ximc
 
-def open_on_com3(lib):
-    enum = lib.enumerate_devices(EnumerateFlags.ENUMERATE_PROBE, b"")
-    n = lib.get_device_count(enum)
-    if n == 0:
-        raise RuntimeError("No XiLab/ximc devices found.")
-    target = b"COM3"
-    for i in range(n):
-        name = lib.get_device_name(enum, i)  # e.g., b"xi-com:\\\\.\\COM3"
-        if b"xi-com" in name and target in name:
-            return lib.open_device(name), name.decode(errors="ignore")
-    raise RuntimeError("No device on COM3 found. Is it listed in XiLab?")
+DEVICE_URI = r"xi-com:\\.\COM3"  # Windows COM3
 
-def get_usteps_per_rev(lib, dev):
-    ms = motor_settings_t()
-    lib.get_motor_settings(dev, byref(ms))
-    full_steps = getattr(ms, "FullStepsPerRev", 200)
-    microstep_mode = getattr(ms, "MicrostepMode", MicrostepMode.MICROSTEP_MODE_FULL)
-    micro_div = {
-        MicrostepMode.MICROSTEP_MODE_FULL: 1,
-        MicrostepMode.MICROSTEP_MODE_FRAC_2: 2,
-        MicrostepMode.MICROSTEP_MODE_FRAC_4: 4,
-        MicrostepMode.MICROSTEP_MODE_FRAC_8: 8,
-        MicrostepMode.MICROSTEP_MODE_FRAC_16: 16,
-        MicrostepMode.MICROSTEP_MODE_FRAC_32: 32,
-        MicrostepMode.MICROSTEP_MODE_FRAC_64: 64,
-        MicrostepMode.MICROSTEP_MODE_FRAC_128: 128,
+def microstep_divisor(microstep_mode):
+    # Map enum to numeric divisor
+    return {
+        ximc.MicrostepMode.MICROSTEP_MODE_FULL: 1,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_2: 2,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_4: 4,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_8: 8,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_16: 16,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_32: 32,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_64: 64,
+        ximc.MicrostepMode.MICROSTEP_MODE_FRAC_128: 128,
+        getattr(ximc.MicrostepMode, "MICROSTEP_MODE_FRAC_256", None): 256,
     }.get(microstep_mode, 1)
 
-    gs = gears_settings_t()
-    lib.get_gears_settings(dev, byref(gs))
+def get_usteps_per_rev(axis):
+    # Full steps/rev from motor settings
+    ms = axis.get_motor_settings()
+    full_steps = getattr(ms, "FullStepsPerRev", 200)
+
+    # Microstep mode (engine settings preferred; fall back to motor settings if needed)
+    try:
+        es = axis.get_engine_settings()
+        micro_mode = getattr(es, "MicrostepMode", ximc.MicrostepMode.MICROSTEP_MODE_FULL)
+    except Exception:
+        micro_mode = getattr(ms, "MicrostepMode", ximc.MicrostepMode.MICROSTEP_MODE_FULL)
+    micro_div = microstep_divisor(micro_mode)
+
+    # Gear ratio (if any)
+    gs = axis.get_gears_settings()
     ratio_num = getattr(gs, "GearRatio_Mul", 1)
     ratio_den = getattr(gs, "GearRatio_Div", 1) or 1
 
@@ -39,38 +39,36 @@ def get_usteps_per_rev(lib, dev):
     usteps_per_output_rev = int(usteps_per_motor_rev * ratio_num / ratio_den)
     return max(1, usteps_per_output_rev)
 
-def read_position_counts(lib, dev):
-    pos = get_position_t()
-    res = lib.get_position(dev, byref(pos))
-    if res != Result.Ok:
-        raise RuntimeError("get_position failed")
-    if hasattr(pos, "CurPosition"):
-        return int(pos.CurPosition)
-    if hasattr(pos, "Position"):
-        return int(pos.Position)
-    raise RuntimeError("Position field not found")
+def read_counts(axis):
+    pos = axis.get_position()
+    # Try common field names across firmware/SDK versions
+    for field in ("CurPosition", "Position", "position"):
+        if hasattr(pos, field):
+            return int(getattr(pos, field))
+    # Fallback: some wrappers store it under 'Pos'
+    for field in ("Pos", "cur_position"):
+        if hasattr(pos, field):
+            return int(getattr(pos, field))
+    raise RuntimeError("Could not find position field in get_position() result")
 
 def counts_to_degrees(counts, usteps_per_rev):
-    # Convert counts modulo one full revolution to degrees
+    # θ = (c mod U) * 360 / U
     return (counts % usteps_per_rev) * 360.0 / usteps_per_rev
 
-if __name__ == "__main__":
-    lib = ximc  # provided by pyximc
-    dev = None
+def main():
+    axis = ximc.Axis(DEVICE_URI)
+    axis.open_device()
     try:
-        dev, name = open_on_com3(lib)
-        print(f"Opened device: {name}")
-
-        upr = get_usteps_per_rev(lib, dev)
-        counts = read_position_counts(lib, dev)
+        upr = get_usteps_per_rev(axis)
+        counts = read_counts(axis)
         angle_deg = counts_to_degrees(counts, upr)
 
+        print(f"Device: {DEVICE_URI}")
         print(f"Raw counts: {counts}")
         print(f"Microsteps per revolution: {upr}")
-        print(f"Current angle (COM3): {angle_deg:.2f} degrees")
+        print(f"Current angle: {angle_deg:.2f}°")
     finally:
-        if dev is not None:
-            try:
-                lib.close_device(byref(c_int(dev)))
-            except Exception:
-                pass
+        axis.close_device()
+
+if __name__ == "__main__":
+    main()
