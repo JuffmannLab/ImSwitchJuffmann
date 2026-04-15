@@ -3,12 +3,8 @@ from qtpy import QtWidgets, QtCore
 from imswitch.imcontrol.view import guitools as guitools
 
 class HWPWidget(Widget):
-    sigValueHWP1 = QtCore.Signal(int)
-    # Optional: signals for the new spinboxes (uncomment if you need them)
-    # sigPercentHWP1 = QtCore.Signal(int)
-    # sigCountHWP1   = QtCore.Signal(int)
-    # sigPercentHWP2 = QtCore.Signal(int)
-    # sigCountHWP2   = QtCore.Signal(int)
+    sigCountIR = QtCore.Signal(int)
+    sigCountUV = QtCore.Signal(int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -45,11 +41,14 @@ class HWPWidget(Widget):
         self.perc1.setKeyboardTracking(False)
 
         self.count1 = QtWidgets.QSpinBox()
-        self.count1.setRange(0, 50000)
+        self.count1.setRange(0, 10000)
         self.count1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.count1.setValue(0)
         self.count1.setSingleStep(100)  # adjust as desired
         self.count1.setKeyboardTracking(False)
+
+        # Emit signals when counts change
+        self.count1.valueChanged.connect(self.sigCountIR.emit)
 
         # Row 2: UV label, count, angle value, percent
         self.label2 = QtWidgets.QLabel("UV")
@@ -75,6 +74,9 @@ class HWPWidget(Widget):
         self.count2.setValue(0)
         self.count2.setSingleStep(10)  # adjust as desired
         self.count2.setKeyboardTracking(False)
+
+        # Emit signals when counts change
+        self.count2.valueChanged.connect(self.sigCountUV.emit)
 
         # Layout: [Label] [Angle SpinBox] [Slider] [Percent SpinBox] [Count SpinBox]
         grid.addWidget(self.labelsteps, 0, 1, 1, 1)

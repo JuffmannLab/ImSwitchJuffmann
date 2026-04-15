@@ -18,7 +18,6 @@ class ShuttersController(ImConWidgetController):
         self._master.ShuttersManager.connectDevice()
         self._master.ShuttersManager.newSignal('IR_OFF\n')
         self._master.ShuttersManager.newSignal('UV_OFF\n')
-        print("hello")
 
     def on_ir_toggled(self, checked: bool):
         if checked:
