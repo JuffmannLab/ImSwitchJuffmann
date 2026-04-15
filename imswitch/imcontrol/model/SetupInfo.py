@@ -249,7 +249,7 @@ class SetupInfo:
     # default_factory seems to be required for the field to show up in autodocs for deriving classes
 
     SEMdevices: Dict[str, ShuttersInfo] = field(default_factory=dict)
-    """SEM devices, like shutters """
+    """SEM devices, like shutters, HWP """
 
     detectors: Dict[str, DetectorInfo] = field(default_factory=dict)
     """ Detectors in this setup. This is a map from unique detector names to
