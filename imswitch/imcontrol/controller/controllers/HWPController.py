@@ -14,3 +14,5 @@ class HWPController(ImConWidgetController):
 
     def new_count(self, count: int):
         print(count)
+
+    def starting_position(self):

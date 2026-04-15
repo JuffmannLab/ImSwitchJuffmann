@@ -1,8 +1,8 @@
 import imslib as ims
 from imswitch.imcommon.model import initLogger
 from imswitch.imcommon.framework import Signal, SignalInterface, Thread
-import serial
-import time
+import libximc.highlevel as ximc
+
 
 class HWPManager:
 
@@ -15,7 +15,14 @@ class HWPManager:
         self.connection = ims.ConnectionList(max_discover_timeout_ms=100) #milliseconds
 
     def connectDevice(self):
-
+        return
 
     def newSignal(self, cmd):
         self.ser.write(cmd.encode('ascii'))
+
+    def get_starting_position(self):
+        a = ximc.Axis(r"xi-com:\\.\COM3"); a.open_device()
+        try:
+            print(int(a.get_position().Position))
+        finally:
+            a.close_device()
