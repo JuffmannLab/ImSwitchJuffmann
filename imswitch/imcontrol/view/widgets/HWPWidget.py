@@ -4,6 +4,11 @@ from imswitch.imcontrol.view import guitools as guitools
 
 class HWPWidget(Widget):
     sigValueHWP1 = QtCore.Signal(int)
+    # Optional: signals for the new spinboxes (uncomment if you need them)
+    # sigPercentHWP1 = QtCore.Signal(int)
+    # sigCountHWP1   = QtCore.Signal(int)
+    # sigPercentHWP2 = QtCore.Signal(int)
+    # sigCountHWP2   = QtCore.Signal(int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -11,8 +16,18 @@ class HWPWidget(Widget):
         grid = QtWidgets.QGridLayout()
         self.setLayout(grid)
 
-        # Row 1: HPW1 label, value field, slider
-        self.label1 = QtWidgets.QLabel("HPW1")
+        # Row 1: Header
+        self.labelsteps = QtWidgets.QLabel("Steps")
+        self.labelsteps.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+
+        self.labelangle = QtWidgets.QLabel("Angle")
+        self.labelangle.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+
+        self.labelpower = QtWidgets.QLabel("Power")
+        self.labelpower.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+
+        # Row 2: IR label, count, angle value, percent
+        self.label1 = QtWidgets.QLabel("IR")
         self.label1.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
 
         self.val1 = QtWidgets.QSpinBox()
@@ -20,51 +35,66 @@ class HWPWidget(Widget):
         self.val1.setSuffix("°")
         self.val1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.val1.setValue(0)
-        self.val1.setKeyboardTracking(False)  # optional
+        self.val1.setKeyboardTracking(False)
 
-        self.slider1 = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.slider1.setRange(0, 180)
-        self.slider1.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider1.setTickInterval(10)
-        self.slider1.setSingleStep(1)
-        self.slider1.setPageStep(5)
-        self.slider1.setValue(0)
+        self.perc1 = QtWidgets.QSpinBox()
+        self.perc1.setRange(0, 100)
+        self.perc1.setSuffix("%")
+        self.perc1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.perc1.setValue(0)
+        self.perc1.setKeyboardTracking(False)
 
-        # Sync slider and spinbox + emit signal
-        self.slider1.valueChanged.connect(self.val1.setValue)
-        self.val1.valueChanged.connect(self.slider1.setValue)
-        self.slider1.valueChanged.connect(self.sigValueHWP1.emit)
+        self.count1 = QtWidgets.QSpinBox()
+        self.count1.setRange(0, 50000)
+        self.count1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.count1.setValue(0)
+        self.count1.setSingleStep(100)  # adjust as desired
+        self.count1.setKeyboardTracking(False)
 
-        # Row 2: HPW2 label, value field, slider
-        self.label2 = QtWidgets.QLabel("HPW2")
-        self.label2.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        # Row 2: UV label, count, angle value, percent
+        self.label2 = QtWidgets.QLabel("UV")
+        self.label2.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
 
         self.val2 = QtWidgets.QSpinBox()
         self.val2.setRange(0, 180)
         self.val2.setSuffix("°")
-        self.val2.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        self.val2.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.val2.setValue(0)
-        self.val2.setKeyboardTracking(False)  # optional
+        self.val2.setKeyboardTracking(False)
 
-        self.slider2 = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.slider2.setRange(0, 180)
-        self.slider2.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider2.setTickInterval(10)
-        self.slider2.setSingleStep(1)
-        self.slider2.setPageStep(5)
-        self.slider2.setValue(0)
+        self.perc2 = QtWidgets.QSpinBox()
+        self.perc2.setRange(0, 100)
+        self.perc2.setSuffix("%")
+        self.perc2.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.perc2.setValue(0)
+        self.perc2.setKeyboardTracking(False)
 
-        # Sync slider and spinbox
-        self.slider2.valueChanged.connect(self.val2.setValue)
-        self.val2.valueChanged.connect(self.slider2.setValue)
+        self.count2 = QtWidgets.QSpinBox()
+        self.count2.setRange(0, 50000)
+        self.count2.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.count2.setValue(0)
+        self.count2.setSingleStep(10)  # adjust as desired
+        self.count2.setKeyboardTracking(False)
 
-        # Layout: [Label] [SpinBox] [Slider]
-        grid.addWidget(self.label1,  0, 0, 1, 1)
-        grid.addWidget(self.val1,    0, 1, 1, 1)
-        grid.addWidget(self.slider1, 0, 2, 1, 1)
+        # Layout: [Label] [Angle SpinBox] [Slider] [Percent SpinBox] [Count SpinBox]
+        grid.addWidget(self.labelsteps, 0, 1, 1, 1)
+        grid.addWidget(self.labelangle, 0, 2, 1, 1)
+        grid.addWidget(self.labelpower, 0, 3, 1, 1)
 
-        grid.addWidget(self.label2,  1, 0, 1, 1)
-        grid.addWidget(self.val2,    1, 1, 1, 1)
-        grid.addWidget(self.slider2, 1, 2, 1, 1)
+        grid.addWidget(self.label1,   1, 0, 1, 1)
+        grid.addWidget(self.count1,   1, 1, 1, 1)
+        grid.addWidget(self.val1,     1, 2, 1, 1)
+        grid.addWidget(self.perc1,    1, 3, 1, 1)
 
-        grid.setColumnStretch(2, 1)
+
+        grid.addWidget(self.label2,   2, 0, 1, 1)
+        grid.addWidget(self.count2,   2, 1, 1, 1)
+        grid.addWidget(self.val2,     2, 2, 1, 1)
+        grid.addWidget(self.perc2,    2, 3, 1, 1)
+
+        # Optional UI polish
+        # Set minimum widths or tooltips if desired
+        self.perc1.setToolTip("Power/Intensity (%)")
+        self.perc2.setToolTip("Power/Intensity (%)")
+        self.count1.setToolTip("Counts (0–50000)")
+        self.count2.setToolTip("Counts (0–50000)")
