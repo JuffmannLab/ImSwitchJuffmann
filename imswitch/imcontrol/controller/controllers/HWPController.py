@@ -11,11 +11,12 @@ class HWPController(ImConWidgetController):
         self._widget.setIRstarting(self._master.HWPManager.get_starting_position_IR())
 
         # connect signal widgets
-        self._widget.sigCountIR.connect(self.new_count)
-        self._widget.sigCountUV.connect(self.new_count)
+        self._widget.sigCountIR.connect(self.new_count_IR)
+        self._widget.sigCountUV.connect(self.new_count_UV)
 
-    def new_count(self, count: int):
-        print(count)
+    def new_count_IR(self, count: int):
+        self._master.HWPManager.change_position_IR(count)
 
-    def starting_position(self):
-        self._master.HWPManager.get_starting_position()
+    def new_count_UV(self, count: int):
+        self._master.HWPManager.change_position_UV(count)
+

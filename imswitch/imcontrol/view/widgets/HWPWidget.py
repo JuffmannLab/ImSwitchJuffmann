@@ -78,7 +78,7 @@ class HWPWidget(Widget):
         # Emit signals when counts change
         self.count2.valueChanged.connect(self.sigCountUV.emit)
 
-        # Layout: [Label] [Angle SpinBox] [Slider] [Percent SpinBox] [Count SpinBox]
+        # Layout: [Label] [Count SpinBox] [Angle SpinBox] [Percent SpinBox]
         grid.addWidget(self.labelsteps, 0, 1, 1, 1)
         grid.addWidget(self.labelangle, 0, 2, 1, 1)
         grid.addWidget(self.labelpower, 0, 3, 1, 1)
@@ -94,12 +94,6 @@ class HWPWidget(Widget):
         grid.addWidget(self.val2,     2, 2, 1, 1)
         grid.addWidget(self.perc2,    2, 3, 1, 1)
 
-        # Optional UI polish
-        # Set minimum widths or tooltips if desired
-        self.perc1.setToolTip("Power/Intensity (%)")
-        self.perc2.setToolTip("Power/Intensity (%)")
-        self.count1.setToolTip("Counts (0–50000)")
-        self.count2.setToolTip("Counts (0–50000)")
 
     # Methods the controller calls
     def setIRstarting(self, val: int):
