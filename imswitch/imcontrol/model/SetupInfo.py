@@ -13,6 +13,15 @@ class ShuttersInfo:
     """ Properties to be read by the ShuttersManager. """
 
 @dataclass(frozen=True)
+class HWPInfo:
+
+    managerName: str
+    """ Shutters Manager class name. """
+
+    managerProperties: Dict[str, Any]
+    """ Properties to be read by the ShuttersManager. """
+
+@dataclass(frozen=True)
 class DeviceInfo:
     analogChannel: Optional[Union[str, int]]
     """ Channel for analog communication. ``null`` if the device is digital or
@@ -249,7 +258,10 @@ class SetupInfo:
     # default_factory seems to be required for the field to show up in autodocs for deriving classes
 
     SEMdevices: Dict[str, ShuttersInfo] = field(default_factory=dict)
-    """SEM devices, like shutters, HWP """
+    """shutters for Lasercontrol """
+
+    HWPdevices: Dict[str, HWPInfo] = field(default_factory=dict)
+    """shutters for Lasercontrol """
 
     detectors: Dict[str, DetectorInfo] = field(default_factory=dict)
     """ Detectors in this setup. This is a map from unique detector names to

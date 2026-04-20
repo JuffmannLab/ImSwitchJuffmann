@@ -9,10 +9,10 @@ class HWPManager:
     def __init__(self, setupInfo):
         self.__logger = initLogger(self)
         self._setupInfo = setupInfo
-        self._deviceProperties = self._setupInfo['ShuttersArduino'].managerProperties
-        self.ser = None
+        self._deviceProperties_UV = self._setupInfo['UVHWP'].managerProperties
+        self._deviceProperties_IR = self._setupInfo['IRHWP'].managerProperties
 
-        self.connection = ims.ConnectionList(max_discover_timeout_ms=100) #milliseconds
+
 
     def connectDevice(self):
         return
@@ -20,9 +20,16 @@ class HWPManager:
     def newSignal(self, cmd):
         self.ser.write(cmd.encode('ascii'))
 
-    def get_starting_position(self):
-        a = ximc.Axis(r"xi-com:\\.\COM3"); a.open_device()
-        try:
-            print(int(a.get_position().Position))
-        finally:
-            a.close_device()
+    def get_starting_position_UV(self):
+        a = ximc.Axis(rf"xi-com:\\.\{self._deviceProperties_UV['port']}")
+        a.open_device()
+        b = int(a.get_position().Position)
+        a.close_device()
+        return b
+
+    def get_starting_position_IR(self):
+        a = ximc.Axis(rf"xi-com:\\.\{self._deviceProperties_IR['port']}")
+        a.open_device()
+        b = int(a.get_position().Position)
+        a.close_device()
+        return b

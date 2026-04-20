@@ -41,7 +41,7 @@ class HWPWidget(Widget):
         self.perc1.setKeyboardTracking(False)
 
         self.count1 = QtWidgets.QSpinBox()
-        self.count1.setRange(0, 10000)
+        self.count1.setRange(0, 50000)
         self.count1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.count1.setValue(0)
         self.count1.setSingleStep(100)  # adjust as desired
@@ -100,3 +100,11 @@ class HWPWidget(Widget):
         self.perc2.setToolTip("Power/Intensity (%)")
         self.count1.setToolTip("Counts (0–50000)")
         self.count2.setToolTip("Counts (0–50000)")
+
+    # Methods the controller calls
+    def setIRstarting(self, val: int):
+        self.count1.setValue(val)
+
+
+    def setUVstarting(self, val: int):
+        self.count2.setValue(val)

@@ -5,6 +5,8 @@ from imswitch.imcontrol.model import (
     RecordingManager, RS232sManager, ScanManager, SLMManager, ShuttersManager
 )
 
+from ImSwitchJuffmann.imswitch.imcontrol.model.managers.HWPManager import HWPManager
+
 
 class MasterController:
     """
@@ -22,6 +24,7 @@ class MasterController:
         #self.pulseStreamerManager = PulseStreamerManager(self.__setupInfo)
         self.rs232sManager = RS232sManager(self.__setupInfo.rs232devices)
         self.ShuttersManager = ShuttersManager(self.__setupInfo.SEMdevices)
+        self.HWPManager = HWPManager(self.__setupInfo.HWPdevices)
 
         lowLevelManagers = {
             'nidaqManager': self.nidaqManager,
