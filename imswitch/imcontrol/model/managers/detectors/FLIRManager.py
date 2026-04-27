@@ -63,7 +63,7 @@ class FLIRManager(DetectorManager):
         # 5) Now apply initial properties in a safe order
         cfg = dict(detectorInfo.managerProperties.get('flir', {}))
 
-        # 5.1) Binning first (parsing "2x2" or 2)
+        # 5.1) Binning first
         if 'binning' in cfg:
             b = cfg.pop('binning')
             if isinstance(b, str) and 'x' in b:

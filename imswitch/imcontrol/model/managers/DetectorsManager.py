@@ -48,8 +48,16 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._thread.finished.connect(self._lvWorker.stop)
 
     def __del__(self):
-        self._thread.quit()
-        self._thread.wait()
+        try:
+            self.shutdown()
+        except Exception:
+            pass
+        # Keep the original thread cleanup in case shutdown didn’t run
+        try:
+            self._thread.quit()
+            self._thread.wait()
+        except Exception:
+            pass
         if hasattr(super(), '__del__'):
             super().__del__()
 
@@ -181,6 +189,41 @@ class LVWorker(Worker):
 
     def setUpdatePeriod(self, updatePeriod):
         self._updatePeriod = updatePeriod
+
+    def shutdown(self):
+        # 1) Stop LV timer thread first (prevents concurrent GetNextImage during teardown)
+        if self._thread.isRunning():
+            self._thread.quit()
+            self._thread.wait()
+
+        # 2) Stop all detectors’ acquisition (ignore handles)
+        self.execOnAll(lambda c: c.stopAcquisition(), condition=lambda c: c.forAcquisition)
+
+        # 3) Clear handle state
+        self._activeAcqsMutex.lock()
+        try:
+            self._activeAcqHandles.clear()
+            self._activeAcqLVHandles.clear()
+        finally:
+            self._activeAcqsMutex.unlock()
+
+        # 4) Notify
+        self.sigAcquisitionStopped.emit()
+
+    def __del__(self):
+        # Use the explicit shutdown for a clean teardown path
+        try:
+            self.shutdown()
+        except Exception:
+            pass
+        # Keep the original thread cleanup in case shutdown didn’t run
+        try:
+            self._thread.quit()
+            self._thread.wait()
+        except Exception:
+            pass
+        if hasattr(super(), '__del__'):
+            super().__del__()
 
 
 class NoDetectorsError(RuntimeError):
