@@ -12,22 +12,9 @@ except Exception:
     PySpin = None
 
 
-class FlirManager(DetectorManager):
+class FLIRManager(DetectorManager):
     """
-    DetectorManager for a FLIR camera using PySpin directly (no external wrapper).
-
-    Manager properties (detectorInfo.managerProperties):
-    - "cameraListIndex": 0-based index in the PySpin camera list; use "mock" to mock
-    - "flir": dict of initial settings (optional), supports e.g.:
-        {
-          "exposure_time": 0.02,      # seconds
-          "binning": b"1x1",          # or 2, or "2x2"
-          "subarray_hpos": 0,
-          "subarray_vpos": 0,
-          "subarray_hsize": 1024,
-          "subarray_vsize": 768
-        }
-
+    DetectorManager for a FLIR camera using PySpin
     This class mirrors the HamamatsuManager interface and behavior so it
     integrates with DetectorsManager and the rest of IMSwitch.
     """
