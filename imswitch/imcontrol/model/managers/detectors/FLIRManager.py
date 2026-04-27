@@ -1,15 +1,12 @@
 import threading
 import numpy as np
+import PySpin
 
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
     DetectorManager, DetectorNumberParameter, DetectorListParameter
 )
-
-try:
-    import PySpin
-except Exception:
-    PySpin = None
+import PySpin
 
 
 class FLIRManager(DetectorManager):
