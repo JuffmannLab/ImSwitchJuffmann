@@ -12,7 +12,7 @@ except Exception:
     PySpin = None
 
 
-class FlirManager(DetectorManager):
+class FLIRManager(DetectorManager):
     """
     DetectorManager for a FLIR camera using PySpin directly (no external wrapper).
 
@@ -42,17 +42,14 @@ class FlirManager(DetectorManager):
         self._cam = None
         self._mock = False
 
+        # 1) Open camera (no calls into DetectorManager here)
         cam_id = detectorInfo.managerProperties.get('cameraListIndex', 0)
         self._open_camera(cam_id)
 
-        # Apply initial settings if provided
-        for pname, pval in detectorInfo.managerProperties.get('flir', {}).items():
-            self._set_property(pname, pval)
-
-        # Determine full sensor size (Width/Height)
+        # 2) Read current size/model for constructing the base class
         fullShape = self._get_image_size()
-
         model = self._get_model()
+
 
         # Parameters exposed (mirrors HamamatsuManager)
         parameters = {
@@ -79,8 +76,43 @@ class FlirManager(DetectorManager):
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1, 2, 4],
                          model=model, parameters=parameters, croppable=True)
 
-        self._updatePropertiesFromCamera()
-        super().setParameter('Set exposure time', self.parameters['Real exposure time'].value)
+        # 5) Now apply initial properties in a safe order
+        cfg = dict(detectorInfo.managerProperties.get('flir', {}))
+
+        # 5.1) Binning first (parsing "2x2" or 2)
+        if 'binning' in cfg:
+            b = cfg.pop('binning')
+            if isinstance(b, str) and 'x' in b:
+                b = int(b.lower().split('x')[0])
+            else:
+                b = int(b)
+            self.setBinning(b)
+
+        # 5.2) ROI (crop) next: use keys subarray_hpos/vpos/hsize/vsize if provided
+        have_roi = all(k in cfg for k in ('subarray_hpos', 'subarray_vpos', 'subarray_hsize', 'subarray_vsize'))
+        if have_roi:
+            hpos = int(cfg.pop('subarray_hpos'))
+            vpos = int(cfg.pop('subarray_vpos'))
+            hsize = int(cfg.pop('subarray_hsize'))
+            vsize = int(cfg.pop('subarray_vsize'))
+            self.crop(hpos, vpos, hsize, vsize)
+
+        # 5.3) Exposure
+        if 'exposure_time' in cfg:
+            exp_s = float(cfg.pop('exposure_time'))
+            self._setExposure(exp_s)
+
+        # 5.4) Trigger (you may receive trigger_source/trigger_mode from JSON)
+        # trigger_source: 1->internal, 2->external; trigger_mode: 6->AcquisitionStart, 1->FrameStart
+        trig_text = None
+        if 'trigger_source' in cfg or 'trigger_mode' in cfg:
+            src = int(cfg.pop('trigger_source', 1))
+            mode = int(cfg.pop('trigger_mode', 1))
+            if src == 1:
+                trig_text = 'Internal trigger'
+            else:
+                trig_text = 'External "start-trigger"' if mode == 6 else 'External "frame-trigger"'
+            self._setTriggerSource(trig_text)
 
     def __del__(self):
         try:
