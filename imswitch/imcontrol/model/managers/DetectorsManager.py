@@ -48,16 +48,8 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._thread.finished.connect(self._lvWorker.stop)
 
     def __del__(self):
-        try:
-            self.shutdown()
-        except Exception:
-            pass
-        # Keep the original thread cleanup in case shutdown didn’t run
-        try:
-            self._thread.quit()
-            self._thread.wait()
-        except Exception:
-            pass
+        self._thread.quit()
+        self._thread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
 
