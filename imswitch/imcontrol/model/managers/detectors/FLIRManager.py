@@ -97,7 +97,7 @@ class FLIRManager(DetectorManager):
         self._updatePropertiesFromCamera()
         super().setParameter('Set exposure time', self.parameters['Real exposure time'].value)
 
-        atexit.register(self.cleanupfunction())
+        atexit.register(self.cleanupfunction)
 
     def __del__(self):
         # Best-effort cleanup; ignore exceptions on interpreter shutdown
@@ -283,23 +283,24 @@ class FLIRManager(DetectorManager):
 
     def _updatePropertiesFromCamera(self):
         # Exposure time (s)
-        self.setParameter('Real exposure time', self._get_exposure_time_s())
+        super().setParameter('Real exposure time', self._get_exposure_time_s())
 
         # Frame rate and interval
         fps = self._get_frame_rate()
-        self.setParameter('Internal frame rate', fps if fps is not None else 0.0)
+        super().setParameter('Internal frame rate', fps if fps is not None else 0.0)
         if fps and fps > 0:
-            self.setParameter('Internal frame interval', 1.0 / fps)
+            super().setParameter('Internal frame interval', 1.0 / fps)
         else:
-            self.setParameter('Internal frame interval', self.parameters['Real exposure time'].value)
+            super().setParameter('Internal frame interval',
+                                 self.parameters['Real exposure time'].value)
 
-        # Readout time: not directly available; set 0.0 or estimate if desired
-        self.setParameter('Readout time', 0.0)
+        # Readout time (not provided by camera → 0.0 or your estimate)
+        super().setParameter('Readout time', 0.0)
 
-        # Trigger source text
+        # Trigger source text: only push to UI during initial sync (see next step)
         trig_src_text = self._get_trigger_source_text()
-        if trig_src_text:
-            self.setParameter('Trigger source', trig_src_text)
+        if trig_src_text and getattr(self, '_initializing', False):
+            super().setParameter('Trigger source', trig_src_text)
 
     # ---------------------------
     # Camera open/config helpers
@@ -527,6 +528,7 @@ class FLIRManager(DetectorManager):
             elif mode == 1:
                 self._setTriggerSource('External "frame-trigger"')
         # Extend as needed
+
 
     def cleanupfunction(self):
         try:
