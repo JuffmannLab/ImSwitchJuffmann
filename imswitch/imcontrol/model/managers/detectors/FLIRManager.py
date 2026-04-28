@@ -1,19 +1,19 @@
 import threading
 import numpy as np
 import PySpin
+import atexit
 
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
     DetectorManager, DetectorNumberParameter, DetectorListParameter
 )
-import PySpin
 
 
 class FLIRManager(DetectorManager):
     """
-    DetectorManager for a FLIR camera using PySpin
-    This class mirrors the HamamatsuManager interface and behavior so it
-    integrates with DetectorsManager and the rest of IMSwitch.
+    DetectorManager for a FLIR camera using PySpin.
+    Mirrors the HamamatsuManager interface so it integrates with DetectorsManager.
+    No mock camera fallback: failures raise RuntimeError.
     """
 
     def __init__(self, detectorInfo, name, **_lowLevelManagers):
@@ -24,7 +24,6 @@ class FLIRManager(DetectorManager):
         self._system = None
         self._cam_list = None
         self._cam = None
-        self._mock = False
 
         # 1) Open camera (no calls into DetectorManager here)
         cam_id = detectorInfo.managerProperties.get('cameraListIndex', 0)
@@ -33,7 +32,6 @@ class FLIRManager(DetectorManager):
         # 2) Read current size/model for constructing the base class
         fullShape = self._get_image_size()
         model = self._get_model()
-
 
         # Parameters exposed (mirrors HamamatsuManager)
         parameters = {
@@ -60,10 +58,10 @@ class FLIRManager(DetectorManager):
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1, 2, 4],
                          model=model, parameters=parameters, croppable=True)
 
-        # 5) Now apply initial properties in a safe order
+        # Apply initial properties in a safe order
         cfg = dict(detectorInfo.managerProperties.get('flir', {}))
 
-        # 5.1) Binning first (parsing "2x2" or 2)
+        # Binning first (parsing "2x2" or 2)
         if 'binning' in cfg:
             b = cfg.pop('binning')
             if isinstance(b, str) and 'x' in b:
@@ -72,7 +70,7 @@ class FLIRManager(DetectorManager):
                 b = int(b)
             self.setBinning(b)
 
-        # 5.2) ROI (crop) next: use keys subarray_hpos/vpos/hsize/vsize if provided
+        # ROI (crop): use keys subarray_hpos/vpos/hsize/vsize if provided
         have_roi = all(k in cfg for k in ('subarray_hpos', 'subarray_vpos', 'subarray_hsize', 'subarray_vsize'))
         if have_roi:
             hpos = int(cfg.pop('subarray_hpos'))
@@ -81,14 +79,12 @@ class FLIRManager(DetectorManager):
             vsize = int(cfg.pop('subarray_vsize'))
             self.crop(hpos, vpos, hsize, vsize)
 
-        # 5.3) Exposure
+        # Exposure
         if 'exposure_time' in cfg:
             exp_s = float(cfg.pop('exposure_time'))
             self._setExposure(exp_s)
 
-        # 5.4) Trigger (you may receive trigger_source/trigger_mode from JSON)
-        # trigger_source: 1->internal, 2->external; trigger_mode: 6->AcquisitionStart, 1->FrameStart
-        trig_text = None
+        # Trigger (optional): trigger_source (1 internal, 2 external), trigger_mode (6 AcquisitionStart, 1 FrameStart)
         if 'trigger_source' in cfg or 'trigger_mode' in cfg:
             src = int(cfg.pop('trigger_source', 1))
             mode = int(cfg.pop('trigger_mode', 1))
@@ -98,23 +94,30 @@ class FLIRManager(DetectorManager):
                 trig_text = 'External "start-trigger"' if mode == 6 else 'External "frame-trigger"'
             self._setTriggerSource(trig_text)
 
+        # Sync UI parameters with camera and initialize "Set exposure time"
+        self._updatePropertiesFromCamera()
+        super().setParameter('Set exposure time', self.parameters['Real exposure time'].value)
+
+        atexit.register(self.cleanupfunction())
+
     def __del__(self):
+        # Best-effort cleanup; ignore exceptions on interpreter shutdown
         try:
             self.stopAcquisition()
         except Exception:
             pass
         try:
-            if self._cam is not None and not self._mock:
+            if self._cam is not None:
                 self._cam.DeInit()
         except Exception:
             pass
         try:
-            if self._cam_list is not None and not self._mock:
+            if self._cam_list is not None:
                 self._cam_list.Clear()
         except Exception:
             pass
         try:
-            if self._system is not None and not self._mock:
+            if self._system is not None:
                 self._system.ReleaseInstance()
         except Exception:
             pass
@@ -128,22 +131,15 @@ class FLIRManager(DetectorManager):
     # Live acquisition and frames
     # ---------------------------
     def startAcquisition(self):
-        if self._mock:
-            self._acquiring = True
-            return
         with self._lock:
             if self._acquiring:
                 return
-            # Ensure continuous mode and reasonable stream handling
             self._ensure_continuous_mode()
             self._set_stream_handling()
             self._cam.BeginAcquisition()
             self._acquiring = True
 
     def stopAcquisition(self):
-        if self._mock:
-            self._acquiring = False
-            return
         with self._lock:
             if not self._acquiring:
                 return
@@ -153,16 +149,7 @@ class FLIRManager(DetectorManager):
                 self._acquiring = False
 
     def getLatestFrame(self, is_save=True):
-        # Must be non-blocking and always return an ndarray
-        if self._mock:
-            h, w = self.fullShape[1], self.fullShape[0]
-            if self._acquiring:
-                self._last_frame = np.random.randint(0, 255, (h, w), dtype=np.uint8)
-            else:
-                if self._last_frame is None:
-                    self._last_frame = np.zeros((h, w), dtype=np.uint8)
-            return self._last_frame
-
+        # Non-blocking and always returns an ndarray
         with self._lock:
             if not self._acquiring:
                 return self._ensure_last_frame()
@@ -190,10 +177,6 @@ class FLIRManager(DetectorManager):
     def getChunk(self):
         # Grab up to a few frames non-blocking
         frames = []
-        if self._mock:
-            if self._acquiring:
-                frames = [self.getLatestFrame() for _ in range(2)]
-            return frames
         with self._lock:
             if not self._acquiring:
                 return frames
@@ -219,21 +202,17 @@ class FLIRManager(DetectorManager):
     # ---------------------------
     def crop(self, hpos, vpos, hsize, vsize):
         def cropAction():
-            if self._mock:
-                # Just update shape bookkeeping on mock
-                pass
-            else:
-                nm = self._cam.GetNodeMap()
+            nm = self._cam.GetNodeMap()
 
-                # Reset to full FOV by setting offsets to min first
-                self._set_node_int_aligned(nm, 'OffsetX', 0)
-                self._set_node_int_aligned(nm, 'OffsetY', 0)
+            # Reset to offsets 0 first
+            self._set_node_int_aligned(nm, 'OffsetX', 0)
+            self._set_node_int_aligned(nm, 'OffsetY', 0)
 
-                # Set size then offsets; align to increments
-                self._set_node_int_aligned(nm, 'Width', hsize)
-                self._set_node_int_aligned(nm, 'Height', vsize)
-                self._set_node_int_aligned(nm, 'OffsetX', hpos)
-                self._set_node_int_aligned(nm, 'OffsetY', vpos)
+            # Set size then offsets; align to increments
+            self._set_node_int_aligned(nm, 'Width', hsize)
+            self._set_node_int_aligned(nm, 'Height', vsize)
+            self._set_node_int_aligned(nm, 'OffsetX', hpos)
+            self._set_node_int_aligned(nm, 'OffsetY', vpos)
 
         self._performSafeCameraAction(cropAction)
 
@@ -245,8 +224,6 @@ class FLIRManager(DetectorManager):
         super().setBinning(binning)
 
         def setBin():
-            if self._mock:
-                return
             nm = self._cam.GetNodeMap()
             self._set_node_int_aligned(nm, 'BinningHorizontal', int(binning))
             self._set_node_int_aligned(nm, 'BinningVertical', int(binning))
@@ -268,8 +245,6 @@ class FLIRManager(DetectorManager):
     # Internals: parameters -> nodes
     # ---------------------------
     def _setExposure(self, time_s):
-        if self._mock:
-            return
         nm = self._cam.GetNodeMap()
         # Turn off auto exposure when explicitly setting
         self._set_enum_if_available(nm, 'ExposureAuto', 'Off')
@@ -278,9 +253,6 @@ class FLIRManager(DetectorManager):
         self._set_node_float_clamped(nm, 'ExposureTime', us)
 
     def _setTriggerSource(self, source):
-        if self._mock:
-            return
-
         nm = self._cam.GetNodeMap()
         # Internal trigger = free run
         if source == 'Internal trigger':
@@ -302,9 +274,6 @@ class FLIRManager(DetectorManager):
 
     def _performSafeCameraAction(self, function):
         try:
-            if self._mock:
-                function()
-                return
             with self._lock:
                 function()
         except Exception:
@@ -337,23 +306,14 @@ class FLIRManager(DetectorManager):
     # Camera open/config helpers
     # ---------------------------
     def _open_camera(self, cam_id):
-        if isinstance(cam_id, str) and cam_id.lower() == 'mock':
-            self.__logger.warning('Using mock FLIR camera')
-            self._mock = True
-            return
-
         if PySpin is None:
-            self.__logger.warning('PySpin not available, using mock FLIR camera')
-            self._mock = True
-            return
+            raise RuntimeError('PySpin is not available; install FLIR Spinnaker SDK and PySpin')
 
         try:
             self._system = PySpin.System.GetInstance()
             self._cam_list = self._system.GetCameras()
             if self._cam_list.GetSize() <= int(cam_id):
-                self.__logger.warning(f'No FLIR camera at index {cam_id}, using mock')
-                self._mock = True
-                return
+                raise RuntimeError(f'No FLIR camera at index {cam_id}')
 
             self.__logger.debug(f'Trying to initialize FLIR camera {cam_id}')
             self._cam = self._cam_list.GetByIndex(int(cam_id))
@@ -367,18 +327,29 @@ class FLIRManager(DetectorManager):
             self.__logger.info(f'Initialized camera, model: {self._get_model()}')
 
         except Exception as e:
-            self.__logger.warning(f'Failed to initialize FLIR camera {cam_id}: {e}, using mock')
-            self._mock = True
+            # Make sure to release resources if init failed midway
+            try:
+                if self._cam is not None:
+                    self._cam.DeInit()
+            except Exception:
+                pass
+            try:
+                if self._cam_list is not None:
+                    self._cam_list.Clear()
+            except Exception:
+                pass
+            try:
+                if self._system is not None:
+                    self._system.ReleaseInstance()
+            except Exception:
+                pass
+            raise RuntimeError(f'Failed to initialize FLIR camera {cam_id}: {e}') from e
 
     def _ensure_continuous_mode(self):
-        if self._mock:
-            return
         nm = self._cam.GetNodeMap()
         self._set_enum_if_available(nm, 'AcquisitionMode', 'Continuous')
 
     def _set_stream_handling(self):
-        if self._mock:
-            return
         try:
             s_map = self._cam.GetTLStreamNodeMap()
             # Increase buffer count
@@ -395,8 +366,6 @@ class FLIRManager(DetectorManager):
             pass
 
     def _set_pixel_format_mono8(self):
-        if self._mock:
-            return
         nm = self._cam.GetNodeMap()
         try:
             pix = PySpin.CEnumerationPtr(nm.GetNode('PixelFormat'))
@@ -408,17 +377,12 @@ class FLIRManager(DetectorManager):
             pass
 
     def _get_image_size(self):
-        if self._mock:
-            # Default mock size
-            return (1024, 768)
         nm = self._cam.GetNodeMap()
         w = self._get_node_int(nm, 'Width') or 640
         h = self._get_node_int(nm, 'Height') or 480
         return (int(w), int(h))
 
     def _get_model(self):
-        if self._mock:
-            return 'Mock FLIR'
         try:
             return self._cam.DeviceModelName.GetValue()
         except Exception:
@@ -488,23 +452,16 @@ class FLIRManager(DetectorManager):
     # Property helpers used by _updatePropertiesFromCamera
     # ---------------------------
     def _get_exposure_time_s(self):
-        if self._mock:
-            return self.parameters['Set exposure time'].value or 0.0
         nm = self._cam.GetNodeMap()
         us = self._get_node_float(nm, 'ExposureTime')
         return float(us) / 1e6 if us is not None else 0.0
 
     def _get_frame_rate(self):
-        if self._mock:
-            exp = self.parameters['Set exposure time'].value
-            return (1.0 / exp) if exp and exp > 0 else 0.0
         nm = self._cam.GetNodeMap()
         afr = self._get_node_float(nm, 'AcquisitionFrameRate')
         return float(afr) if afr is not None else None
 
     def _get_trigger_source_text(self):
-        if self._mock:
-            return self.parameters['Trigger source'].value
         nm = self._cam.GetNodeMap()
         mode = self._get_enum_name(nm, 'TriggerMode')  # On/Off
         if mode == 'Off':
@@ -546,10 +503,9 @@ class FLIRManager(DetectorManager):
         return self._last_frame
 
     # ---------------------------
-    # Property application facade (for initial "flir" dict)
+    # Property application facade (for potential future use)
     # ---------------------------
     def _set_property(self, name, value):
-        # Allows using the same property names as the wrapper example
         if name == 'exposure_time':
             self._setExposure(float(value))
         elif name == 'binning':
@@ -560,18 +516,36 @@ class FLIRManager(DetectorManager):
                 b = int(b.split('x')[0])
             self.setBinning(int(b))
         elif name in ('subarray_hpos', 'subarray_vpos', 'subarray_hsize', 'subarray_vsize'):
-            # Apply after all ROI keys are known in practice; we accept single sets too
-            # You can call crop() with your desired ROI for a consistent path
+            # Prefer calling crop() once with all ROI params
             pass
         elif name == 'trigger_source':
-            # 1 internal, 2 external (line)
             src_text = 'Internal trigger' if int(value) == 1 else 'External "frame-trigger"'
             self._setTriggerSource(src_text)
         elif name == 'trigger_mode':
-            # 6 AcquisitionStart, 1 FrameStart
             mode = int(value)
             if mode == 6:
                 self._setTriggerSource('External "start-trigger"')
             elif mode == 1:
                 self._setTriggerSource('External "frame-trigger"')
-        # Add more as needed
+        # Extend as needed
+
+    def cleanupfunction(self):
+        try:
+            self.stopAcquisition()
+        except Exception:
+            pass
+        try:
+            if self._cam is not None:
+                self._cam.DeInit()
+        except Exception:
+            pass
+        try:
+            if self._cam_list is not None:
+                self._cam_list.Clear()
+        except Exception:
+            pass
+        try:
+            if self._system is not None:
+                self._system.ReleaseInstance()
+        except Exception:
+            pass
