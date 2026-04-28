@@ -14,6 +14,13 @@ class ShuttersManager:
 
         self.connection = ims.ConnectionList(max_discover_timeout_ms=100) #milliseconds
 
+    def __del__(self):
+        try:
+            self._master.ShuttersManager.newSignal('IR_OFF\n')
+            self._master.ShuttersManager.newSignal('UV_OFF\n')
+        except:
+            print("ERROR: Shutters did not close properly")
+
     def connectDevice(self):
         if self.ser and self.ser.is_open:
             return  # already connected
