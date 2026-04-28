@@ -3,6 +3,7 @@ from imswitch.imcommon.model import initLogger
 from imswitch.imcommon.framework import Signal, SignalInterface, Thread
 import serial
 import time
+import atexit
 
 class ShuttersManager:
 
@@ -13,8 +14,9 @@ class ShuttersManager:
         self.ser = None
 
         self.connection = ims.ConnectionList(max_discover_timeout_ms=100) #milliseconds
+        atexit.register(ShuttersManager._on_exit())
 
-    def __del__(self):
+    def _on_exit(self):
         try:
             self._master.ShuttersManager.newSignal('IR_OFF\n')
             self._master.ShuttersManager.newSignal('UV_OFF\n')
