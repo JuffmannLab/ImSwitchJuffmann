@@ -13,7 +13,6 @@ class FLIRManager(DetectorManager):
     """
     DetectorManager for a FLIR camera using PySpin.
     Mirrors the HamamatsuManager interface so it integrates with DetectorsManager.
-    No mock camera fallback: failures raise RuntimeError.
     """
 
     def __init__(self, detectorInfo, name, **_lowLevelManagers):
