@@ -14,14 +14,18 @@ class ShuttersManager:
         self.ser = None
 
         self.connection = ims.ConnectionList(max_discover_timeout_ms=100) #milliseconds
-        atexit.register(ShuttersManager._on_exit())
+        atexit.register(self._on_exit)
 
     def _on_exit(self):
         try:
-            self._master.ShuttersManager.newSignal('IR_OFF\n')
-            self._master.ShuttersManager.newSignal('UV_OFF\n')
-        except:
-            print("ERROR: Shutters did not close properly")
+            if self.ser and self.ser.is_open:
+                self.newSignal('IR_OFF\n')
+                self.newSignal('UV_OFF\n')
+                self.ser.flush()  # optional, ensure data is sent
+                self.ser.close()
+        except Exception as e:
+            # Avoid relying on complex logging during interpreter shutdown
+            print(f"ERROR: Shutters did not close properly: {e}")
 
     def connectDevice(self):
         if self.ser and self.ser.is_open:
