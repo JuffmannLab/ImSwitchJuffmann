@@ -61,8 +61,7 @@ class ImConMainView(QtWidgets.QMainWindow):
             'Shutters': _DockInfo(name='Shutters', yPosition=1),
             'HWP': _DockInfo(name='HWP - Laser control', yPosition=2),
             'SLM': _DockInfo(name='SLM', yPosition=2),
-            'Scan': _DockInfo(name='Scan', yPosition=2),
-            'DelayStage': _DockInfo(name='Delay Stage', yPosition=2),
+            'DelayStage': _DockInfo(name='Delay Stage', yPosition=3),
             'BeadRec': _DockInfo(name='Bead Rec', yPosition=3),
             'AlignmentLine': _DockInfo(name='Alignment Tool', yPosition=3),
             'AlignAverage': _DockInfo(name='Axial Alignment Tool', yPosition=3),
@@ -70,7 +69,8 @@ class ImConMainView(QtWidgets.QMainWindow):
             'ULenses': _DockInfo(name='uLenses Tool', yPosition=3),
             'FFT': _DockInfo(name='FFT Tool', yPosition=3),
             'Watcher': _DockInfo(name='File Watcher', yPosition=3),
-            'Tiling': _DockInfo(name='Tiling', yPosition=3)
+            'Tiling': _DockInfo(name='Tiling', yPosition=3),
+            'Scan': _DockInfo(name='Scan', yPosition=4),
         }
         leftDockInfos = {
             'Settings': _DockInfo(name='Detector Settings', yPosition=0),
