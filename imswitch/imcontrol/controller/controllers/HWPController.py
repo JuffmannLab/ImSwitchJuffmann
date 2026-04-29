@@ -7,6 +7,7 @@ class HWPController(ImConWidgetController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
+
         self._widget.setUVstarting(self._master.HWPManager.get_starting_position_UV())
         self._widget.setIRstarting(self._master.HWPManager.get_starting_position_IR())
 

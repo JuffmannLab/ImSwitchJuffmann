@@ -21,3 +21,4 @@ from .TilingWidget import TilingWidget
 from .basewidgets import WidgetFactory
 from .ShuttersWidget import ShuttersWidget
 from .HWPWidget import HWPWidget
+from .DelayStageWidget import DelayStageWidget
