@@ -50,6 +50,7 @@ class FLIRManager(DetectorManager):
                                                              'External "start-trigger"',
                                                              'External "frame-trigger"'],
                                                     editable=True),
+            'Gain': DetectorNumberParameter(group='Analog', value=0.0, valueUnits='dB', editable=True),
             'Camera pixel size': DetectorNumberParameter(group='Miscellaneous', value=0.1,
                                                          valueUnits='µm', editable=True)
         }
@@ -78,10 +79,24 @@ class FLIRManager(DetectorManager):
             vsize = int(cfg.pop('subarray_vsize'))
             self.crop(hpos, vpos, hsize, vsize)
 
+        # Pixel format / color mode from JSON (not user-editable)
+        self._pixel_format_name = 'Mono8'  # default
+
+        pf = None
+        if 'pixel_format' in cfg:
+            pf = str(cfg.pop('pixel_format'))
+        if pf:
+            self._set_pixel_format(pf)
+
         # Exposure
         if 'exposure_time' in cfg:
             exp_s = float(cfg.pop('exposure_time'))
             self._setExposure(exp_s)
+
+        # Gain
+        if 'gain' in cfg:
+            gain_val = float(cfg.pop('gain'))
+            self._setGain(gain_val)
 
         # Trigger (optional): trigger_source (1 internal, 2 external), trigger_mode (6 AcquisitionStart, 1 FrameStart)
         if 'trigger_source' in cfg or 'trigger_mode' in cfg:
@@ -237,6 +252,10 @@ class FLIRManager(DetectorManager):
             self._updatePropertiesFromCamera()
         elif name == 'Trigger source':
             self._setTriggerSource(value)
+        elif name == 'Gain':
+            self._setGain(float(value))
+            # Reflect the actual value after clamping
+            super().setParameter('Gain', self._get_gain() or 0.0)
 
         return self.parameters
 
@@ -250,6 +269,13 @@ class FLIRManager(DetectorManager):
         # ExposureTime in microseconds
         us = max(0.0, float(time_s) * 1e6)
         self._set_node_float_clamped(nm, 'ExposureTime', us)
+
+    def _setGain(self, gain_value):
+        nm = self._cam.GetNodeMap()
+        # Turn off auto gain when explicitly setting
+        self._set_enum_if_available(nm, 'GainAuto', 'Off')
+        # Gain is usually in dB on FLIR cameras
+        self._set_node_float_clamped(nm, 'Gain', float(gain_value))
 
     def _setTriggerSource(self, source):
         nm = self._cam.GetNodeMap()
@@ -297,6 +323,11 @@ class FLIRManager(DetectorManager):
         # Readout time (not provided by camera → 0.0 or your estimate)
         super().setParameter('Readout time', 0.0)
 
+        # Gain
+        g = self._get_gain()
+        if g is not None:
+            super().setParameter('Gain', g)
+
         # Trigger source text: only push to UI during initial sync (see next step)
         trig_src_text = self._get_trigger_source_text()
         if trig_src_text and getattr(self, '_initializing', False):
@@ -322,7 +353,7 @@ class FLIRManager(DetectorManager):
             # Basic defaults
             self._ensure_continuous_mode()
             self._set_stream_handling()
-            self._set_pixel_format_mono8()
+            self._set_pixel_format('Mono8')
 
             self.__logger.info(f'Initialized camera, model: {self._get_model()}')
 
@@ -365,16 +396,27 @@ class FLIRManager(DetectorManager):
         except Exception:
             pass
 
-    def _set_pixel_format_mono8(self):
+    def _set_pixel_format(self, fmt_name):
         nm = self._cam.GetNodeMap()
         try:
             pix = PySpin.CEnumerationPtr(nm.GetNode('PixelFormat'))
-            if PySpin.IsAvailable(pix) and PySpin.IsWritable(pix):
-                mono8 = pix.GetEntryByName('Mono8')
-                if PySpin.IsAvailable(mono8) and PySpin.IsReadable(mono8):
-                    pix.SetIntValue(mono8.GetValue())
-        except Exception:
-            pass
+            if not (PySpin.IsAvailable(pix) and PySpin.IsWritable(pix)):
+                raise RuntimeError('PixelFormat node not available/writable')
+            entry = pix.GetEntryByName(fmt_name)
+            if not (PySpin.IsAvailable(entry) and PySpin.IsReadable(entry)):
+                raise RuntimeError(f'PixelFormat "{fmt_name}" not available on this camera')
+            pix.SetIntValue(entry.GetValue())
+            self._pixel_format_name = fmt_name
+            self.__logger.info(f'Set PixelFormat to {fmt_name}')
+        except Exception as e:
+            # Fallback to Mono8
+            self.__logger.warning(f'Failed to set PixelFormat "{fmt_name}" ({e}); falling back to Mono8')
+            try:
+                mono8_entry = PySpin.CEnumerationPtr(nm.GetNode('PixelFormat')).GetEntryByName('Mono8')
+                PySpin.CEnumerationPtr(nm.GetNode('PixelFormat')).SetIntValue(mono8_entry.GetValue())
+                self._pixel_format_name = 'Mono8'
+            except Exception:
+                pass
 
     def _get_image_size(self):
         nm = self._cam.GetNodeMap()
@@ -461,6 +503,11 @@ class FLIRManager(DetectorManager):
         afr = self._get_node_float(nm, 'AcquisitionFrameRate')
         return float(afr) if afr is not None else None
 
+    def _get_gain(self):
+        nm = self._cam.GetNodeMap()
+        g = self._get_node_float(nm, 'Gain')
+        return float(g) if g is not None else None
+
     def _get_trigger_source_text(self):
         nm = self._cam.GetNodeMap()
         mode = self._get_enum_name(nm, 'TriggerMode')  # On/Off
@@ -475,23 +522,58 @@ class FLIRManager(DetectorManager):
     # Image conversion
     # ---------------------------
     def _image_to_numpy(self, img):
-        # Convert to Mono8 numpy array
         try:
-            if img.GetPixelFormat() != PySpin.PixelFormat_Mono8:
-                conv = img.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
-            else:
-                conv = img
+            target_pf = (self._pixel_format_name or 'Mono8').upper()
+
+            # Mono8 output
+            if target_pf == 'MONO8':
+                if img.GetPixelFormat() != PySpin.PixelFormat_Mono8:
+                    conv = img.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
+                else:
+                    conv = img
+                arr = conv.GetNDArray()
+                if arr is None:
+                    h, w = conv.GetHeight(), conv.GetWidth()
+                    arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w))
+                return arr
+
+            # RGB8 output (either native RGB8 or converted from any format)
+            if target_pf == 'RGB8':
+                if img.GetPixelFormat() != PySpin.PixelFormat_RGB8:
+                    conv = img.Convert(PySpin.PixelFormat_RGB8, PySpin.HQ_LINEAR)
+                else:
+                    conv = img
+                arr = conv.GetNDArray()  # shape (H, W, 3)
+                if arr is None:
+                    h, w = conv.GetHeight(), conv.GetWidth()
+                    arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w, 3))
+                return arr
+
+            # If user selected a Bayer format, convert to RGB8 for display
+            if target_pf.startswith('BAYER'):
+                conv = img.Convert(PySpin.PixelFormat_RGB8, PySpin.HQ_LINEAR)
+                arr = conv.GetNDArray()
+                if arr is None:
+                    h, w = conv.GetHeight(), conv.GetWidth()
+                    arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w, 3))
+                return arr
+
+            # Default fallback: try Mono8
+            conv = img.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
             arr = conv.GetNDArray()
             if arr is None:
                 h, w = conv.GetHeight(), conv.GetWidth()
                 arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w))
             return arr
+
         except Exception:
-            # Fallback
+            # Conservative fallback
             h, w = img.GetHeight(), img.GetWidth()
-            data = np.frombuffer(img.GetData(), dtype=np.uint8)
             try:
-                return data.reshape((h, w))
+                raw = np.frombuffer(img.GetData(), dtype=np.uint8)
+                if raw.size == h * w * 3:
+                    return raw.reshape((h, w, 3))
+                return raw.reshape((h, w))
             except Exception:
                 return np.zeros((h, w), dtype=np.uint8)
 
