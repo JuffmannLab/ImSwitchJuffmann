@@ -1,32 +1,38 @@
 from __future__ import annotations
 
 import imslib as ims
-from imswitch.imcommon.model import initLogger
 from imswitch.imcommon.framework import Signal, SignalInterface, Thread
 import atexit
+
 import os
 import sys
 import time
 from ctypes import cdll, CDLL, c_char_p, c_double, c_int, byref
+from typing import Optional
+
+from imswitch.imcommon.model import initLogger
+
 
 class DelayStageManager:
     """
-    Object-oriented wrapper around Thorlabs KDC101 control via Kinesis C API (ctypes).
-    Mirrors the functionality of the provided script.
+    Thorlabs KDC101 delay stage manager via Kinesis C API (ctypes).
 
-    Key methods:
-      - open()
-      - close()
-      - home()
-      - move_mm(pos_mm)           # absolute move in mm
-      - print_pos()               # print position in device units
-      - get_pos() -> int          # return position in device units
-      - step_scanning(stepsize_mm, stepnum, steptime_s, home=True)
+    Reads configuration from:
+        setupInfo['Delaystage'].managerProperties
+
+    Exposes the same functions as the reference script:
+      - Open()
+      - Close()
+      - Home()
+      - Move(pos_mm)              # pos in mm (absolute)
+      - PrintPos()                # prints position in device units
+      - GetPos() -> int           # returns position in device units
+      - Step_Scanning(stepsize_mm, stepnum, steptime_s, serial_num=None, home=False)
 
     Notes:
-      - The example follows your script's conversions: 1 mm = 18 "real units".
-      - For PRM1-Z8, steps_per_rev defaults to 1919.64186, gearbox_ratio=1.0, pitch=1.0.
-      - On Python >= 3.8, we add the Kinesis directory via os.add_dll_directory.
+      - 1 mm = 18 "real units" (same as your script; adjustable via managerProperties)
+      - PRM1-Z8 defaults: stepsPerRev=1919.64186, gearboxRatio=1.0, pitch=1.0
+      - The DLL path is configured via managerProperties.kinesisDir
     """
 
     def __init__(self, setupInfo):
@@ -34,180 +40,192 @@ class DelayStageManager:
         self._setupInfo = setupInfo
         self._deviceProperties = self._setupInfo['Delaystage'].managerProperties
 
-        self.serial_str = serial_number
-        self.serial = c_char_p(serial_number.encode("ascii"))
-        self.kinesis_dir = kinesis_dir
-        self.steps_per_rev = c_double(steps_per_rev)
-        self.gearbox_ratio = c_double(gearbox_ratio)
-        self.pitch = c_double(pitch)
-        self.poll_interval = c_int(int(poll_interval_ms))
-        self.real_units_per_mm = float(real_units_per_mm)
+        # Parse managerProperties (support dict-like or attribute-like access)
+        props = self._deviceProperties
+        getp = props.get if isinstance(props, dict) else (lambda k, d=None: getattr(props, k, d))
 
-        self.lib: CDLL | None = None
+        # Required hardware info
+        serial_str = (
+            getp("serial")
+            or getp("Serial")
+            or getp("SerialNumber")
+        )
+        if not serial_str:
+            raise ValueError("Delaystage.managerProperties must include 'serial' (string).")
+        self._serial_str = str(serial_str)
+        self._serial = c_char_p(self._serial_str.encode("ascii"))
+
+        # Optional/advanced configuration
+        self._kinesis_dir = getp("kinesisDir", r"C:\Program Files\Thorlabs\Kinesis")
+        self._dll_name = getp("dllName", "Thorlabs.MotionControl.KCube.DCServo.dll")
+        self._poll_interval_ms = int(getp("pollIntervalMs", 200))
+
+        # Unit conversion (PRM1-Z8 defaults)
+        self._steps_per_rev = c_double(float(getp("stepsPerRev", 1919.64186)))
+        self._gearbox_ratio = c_double(float(getp("gearboxRatio", 1.0)))
+        self._pitch = c_double(float(getp("pitch", 1.0)))
+
+        # Real <-> mm conversion (same as your script by default)
+        self._real_units_per_mm = float(getp("realUnitsPerMm", 18.0))
+
+        # Homing settle time
+        self._home_settle_s = float(getp("homeSettleTimeS", 5.0))
+
+        # Internal state
+        self._lib: Optional[CDLL] = None
         self._is_open = False
 
-    # ------------------- Internal helpers -------------------
+    # ------------------------------------------------------------------
+    # API identical to the reference script
+    # ------------------------------------------------------------------
 
-    def _load_library(self):
-        # Make sure the DLL directory is available depending on Python version
-        if sys.version_info < (3, 8):
-            # Workdir approach (legacy)
-            os.chdir(self.kinesis_dir)
-        else:
-            # Preferred approach on Python 3.8+
-            os.add_dll_directory(self.kinesis_dir)
-
-        # Load the specific KCube DC Servo library
-        self.lib = cdll.LoadLibrary("Thorlabs.MotionControl.KCube.DCServo.dll")
-
-    def _to_device_units_from_real(self, real_value: float) -> int:
+    def Open(self):
         """
-        Convert a "real units" value to device units using CC_GetDeviceUnitFromRealValue.
-        Returns an int device units value.
-        """
-        assert self.lib is not None, "Library not loaded"
-        new_pos_real = c_double(real_value)
-        new_pos_dev = c_int()
-        self.lib.CC_GetDeviceUnitFromRealValue(self.serial, new_pos_real, byref(new_pos_dev), 0)
-        return int(new_pos_dev.value)
-
-    # ------------------- Public API -------------------
-
-    def open(self):
-        """
-        Build device list, open the device, start polling, and apply motor parameters.
+        Build device list, open device, start polling, and apply motor parameters.
         """
         if self._is_open:
             return
 
+        self.__logger.info(f"Opening KDC101 (SN={self._serial_str}) using Kinesis at '{self._kinesis_dir}'")
         self._load_library()
-        assert self.lib is not None
 
-        # Build device list and open
-        if self.lib.TLI_BuildDeviceList() != 0:
-            raise RuntimeError("TLI_BuildDeviceList failed")
+        # Build USB device list
+        rc = self._lib.TLI_BuildDeviceList()
+        if rc != 0:
+            raise RuntimeError(f"TLI_BuildDeviceList failed (rc={rc})")
 
-        # Open and start polling
-        err = self.lib.CC_Open(self.serial)
-        if err != 0:
-            raise RuntimeError(f"CC_Open failed with code {err}")
+        # Open the device and start polling
+        rc = self._lib.CC_Open(self._serial)
+        if rc != 0:
+            raise RuntimeError(f"CC_Open failed (rc={rc})")
 
-        # Start polling
-        self.lib.CC_StartPolling(self.serial, self.poll_interval)
+        self._lib.CC_StartPolling(self._serial, c_int(self._poll_interval_ms))
 
-        # Apply motor params (needed for real<->device unit conversion)
-        self.lib.CC_SetMotorParamsExt(self.serial, self.steps_per_rev, self.gearbox_ratio, self.pitch)
+        # Set motor parameters for proper unit conversions
+        self._lib.CC_SetMotorParamsExt(self._serial, self._steps_per_rev, self._gearbox_ratio, self._pitch)
 
         self._is_open = True
+        self.__logger.info("Delay stage opened and polling started.")
 
-    def close(self):
+    def Close(self):
         """
-        Close the device.
+        Close the device (optionally stop polling if desired).
         """
         if not self._is_open:
             return
-        assert self.lib is not None
+        try:
+            # Optional (if available in your DLL version):
+            # self._lib.CC_StopPolling(self._serial)
+            self._lib.CC_Close(self._serial)
+            self.__logger.info("Delay stage closed.")
+        finally:
+            self._is_open = False
 
-        # Optionally stop polling if available in your DLL version:
-        # self.lib.CC_StopPolling(self.serial)
-
-        self.lib.CC_Close(self.serial)
-        self._is_open = False
-
-    def home(self, settle_time_s: float = 5.0):
+    def Home(self):
         """
-        Move to zero (absolute position 0 in "real units").
-        Mirrors the script logic (0 -> device units, set absolute, move).
+        Move the stage to zero (absolute 0.0 real-units), like in your script.
         """
-        assert self._is_open and self.lib is not None, "Call open() first"
+        self._ensure_open()
+        print("KDC101 going to zero...")  # keep same console behavior as your script
 
-        # Convert 0.0 real to device units
-        dev_units = self._to_device_units_from_real(0.0)
+        # Convert 0.0 real-units to device units
+        new_pos_real = c_double(0.0)
+        new_pos_dev = c_int()
+        self._lib.CC_GetDeviceUnitFromRealValue(self._serial, new_pos_real, byref(new_pos_dev), 0)
 
-        # Set absolute position and move
-        self.lib.CC_SetMoveAbsolutePosition(self.serial, c_int(dev_units))
+        # Issue absolute move
+        self._lib.CC_SetMoveAbsolutePosition(self._serial, new_pos_dev)
         time.sleep(0.25)
-        self.lib.CC_MoveAbsolute(self.serial)
+        self._lib.CC_MoveAbsolute(self._serial)
 
-        # Wait a bit to settle (matches your script)
-        time.sleep(settle_time_s)
+        time.sleep(self._home_settle_s)
 
-    def move_mm(self, pos_mm: float):
+    def Move(self, pos_mm: float):
         """
-        Absolute move to pos_mm in millimeters.
-        Uses the same conversion as your script: real = pos_mm * 18.
+        Absolute move to pos_mm (millimeters), using the same 1 mm -> 18 real units conversion.
         """
-        assert self._is_open and self.lib is not None, "Call open() first"
+        self._ensure_open()
+        real_val = c_double(float(pos_mm) * self._real_units_per_mm)
+        new_pos_dev = c_int()
+        self._lib.CC_GetDeviceUnitFromRealValue(self._serial, real_val, byref(new_pos_dev), 0)
+        self._lib.CC_SetMoveAbsolutePosition(self._serial, new_pos_dev)
+        self._lib.CC_MoveAbsolute(self._serial)
 
-        real_value = pos_mm * self.real_units_per_mm
-        dev_units = self._to_device_units_from_real(real_value)
-        self.lib.CC_SetMoveAbsolutePosition(self.serial, c_int(dev_units))
-        self.lib.CC_MoveAbsolute(self.serial)
+    def PrintPos(self):
+        """
+        Print the current position in device units, same as your script.
+        """
+        self._ensure_open()
+        self._lib.CC_RequestPosition(self._serial)
+        time.sleep(0.2)
+        pos = self._lib.CC_GetPosition(self._serial)
+        print("Position device units: ", pos)
 
-    def request_position(self):
+    def GetPos(self) -> int:
         """
-        Request the device to update its position reading.
+        Return the current position in device units, same as your script.
         """
-        assert self._is_open and self.lib is not None, "Call open() first"
-        self.lib.CC_RequestPosition(self.serial)
+        self._ensure_open()
+        self._lib.CC_RequestPosition(self._serial)
+        time.sleep(0.2)
+        pos = int(self._lib.CC_GetPosition(self._serial))
+        return pos
 
-    def get_pos(self) -> int:
+    def Step_Scanning(self, stepsize: float, stepnum: int, steptime: float, serial_num=None, home: bool = False):
         """
-        Return the current position in device units.
-        Mirrors your script (requests, sleeps, then reads).
-        """
-        assert self._is_open and self.lib is not None, "Call open() first"
-        self.request_position()
-        time.sleep(0.2)  # allow controller to update reply buffer
-        return int(self.lib.CC_GetPosition(self.serial))
+        Perform step scanning, mirroring the original function's signature and behavior.
 
-    def print_pos(self):
+        stepsize: step size in mm
+        stepnum: number of steps
+        steptime: wait between steps (seconds)
+        serial_num: ignored (kept for API compatibility with your script)
+        home: if True, home at the end
         """
-        Print current position in device units (for debugging/compat).
-        """
-        pos = self.get_pos()
-        print("Position device units:", pos)
+        self._ensure_open()
+        print("Start scanning: ")
 
-    def step_scanning(self, stepsize_mm: float, stepnum: int, steptime_s: float, home: bool = True):
-        """
-        Perform step scanning, moving in absolute steps (starting from 0 real units) and printing positions.
-        Mirrors your script’s behavior:
-          - pos starts at 0 real units
-          - stepnum is inclusive in the loop (range(stepnum+1))
-          - prints mm and device units each step
-          - optional homing at the end
-
-        stepsize_mm: step size in millimeters
-        stepnum: number of steps (inclusive loop)
-        steptime_s: pause between steps in seconds
-        home: if True, go back to 0 at the end
-        """
-        assert self._is_open and self.lib is not None, "Call open() first"
-
-        print("Start scanning:")
-
-        # Convert step size to "real units"
-        step_real = stepsize_mm * self.real_units_per_mm
-        pos_real = 0.0
+        # Convert step size (mm) to real units
+        step_real = stepsize * self._real_units_per_mm
+        pos_real = 0.0  # start from 0 real-units
 
         for i in range(stepnum + 1):
-            print(f" Position [mm]: {pos_real / self.real_units_per_mm:.6f}", end="  ")
+            print(" Position [mm]: ", pos_real / self._real_units_per_mm, end="  ")
 
-            # Convert current pos_real to device units and move
-            dev_units = self._to_device_units_from_real(pos_real)
-            self.lib.CC_SetMoveAbsolutePosition(self.serial, c_int(dev_units))
-            self.lib.CC_MoveAbsolute(self.serial)
+            # Convert real-units position to device units
+            new_pos_real = c_double(pos_real)
+            new_pos_dev = c_int()
+            self._lib.CC_GetDeviceUnitFromRealValue(self._serial, new_pos_real, byref(new_pos_dev), 0)
 
-            time.sleep(steptime_s)
+            # Move to absolute position
+            self._lib.CC_SetMoveAbsolutePosition(self._serial, new_pos_dev)
+            self._lib.CC_MoveAbsolute(self._serial)
+            time.sleep(steptime)
 
-            # Read and print device units
-            self.request_position()
+            # Request and print device-units position
+            self._lib.CC_RequestPosition(self._serial)
             time.sleep(0.2)
-            print("In device units:", int(self.lib.CC_GetPosition(self.serial)))
+            print("In device units: ", self._lib.CC_GetPosition(self._serial))
 
-            # Increment
+            # Advance to next target
             pos_real += step_real
 
         if home:
-            self.home()
+            self.Home()
 
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_open(self):
+        if not self._is_open:
+            raise RuntimeError("DelayStageManager: device not opened. Call Open() first.")
+
+    def _load_library(self):
+        # Add DLL directory (Python 3.8+) or temporarily cd into it (older Pythons)
+        if sys.version_info < (3, 8):
+            os.chdir(self._kinesis_dir)
+        else:
+            os.add_dll_directory(self._kinesis_dir)
+
+        # Load KCube DC Servo DLL
+        self._lib = cdll.LoadLibrary(self._dll_name)
