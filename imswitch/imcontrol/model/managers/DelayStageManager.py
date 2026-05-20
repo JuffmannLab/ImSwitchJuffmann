@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 import imslib as ims
 from imswitch.imcommon.model import initLogger
 from imswitch.imcommon.framework import Signal, SignalInterface, Thread
-import time
 import atexit
 import os
 import sys

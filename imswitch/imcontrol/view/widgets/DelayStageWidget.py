@@ -3,7 +3,7 @@ from qtpy import QtWidgets, QtCore
 from imswitch.imcontrol.view import guitools as guitools
 
 class DelayStageWidget(Widget):
-    sigNEWposition = QtCore.Signal(int)
+    sigDelayposition = QtCore.Signal(int)
 
 
     def __init__(self, *args, **kwargs):
@@ -44,9 +44,7 @@ class DelayStageWidget(Widget):
 
 
     # Methods the controller calls
-    def setIRstarting(self, val: int):
-        self.count1.setValue(val)
+    def setDelaystarting(self, val: int):
+        self.val1.setValue(val)
 
 
-    def setUVstarting(self, val: int):
-        self.count2.setValue(val)

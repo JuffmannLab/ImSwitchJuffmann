@@ -8,6 +8,9 @@ class DelayStageController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+        self._widget.setDelaystarting(self._master.DelayStageManager.get_pos())
+
+
         # connect signal widgets
 
 
