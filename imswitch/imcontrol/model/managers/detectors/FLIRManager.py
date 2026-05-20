@@ -383,16 +383,28 @@ class FLIRManager(DetectorManager):
     def _set_stream_handling(self):
         try:
             s_map = self._cam.GetTLStreamNodeMap()
-            # Increase buffer count
-            cnt = PySpin.CIntegerPtr(s_map.GetNode('StreamDefaultBufferCount'))
-            if PySpin.IsAvailable(cnt) and PySpin.IsWritable(cnt):
-                cnt.SetValue(max(cnt.GetValue(), 16))
-            # OldestFirstOverwrite
+
+            # Prefer explicit manual buffer count if supported
+            mode = PySpin.CEnumerationPtr(s_map.GetNode('StreamBufferCountMode'))
+            if PySpin.IsAvailable(mode) and PySpin.IsWritable(mode):
+                manual = mode.GetEntryByName('Manual')
+                if PySpin.IsAvailable(manual) and PySpin.IsReadable(manual):
+                    mode.SetIntValue(manual.GetValue())
+                    cnt = PySpin.CIntegerPtr(s_map.GetNode('StreamBufferCount'))
+                    if PySpin.IsAvailable(cnt) and PySpin.IsWritable(cnt):
+                        cnt.SetValue(4)  # small ring for live view
+
+            # Fallback if only the default-count node is exposed
+            cnt_def = PySpin.CIntegerPtr(s_map.GetNode('StreamDefaultBufferCount'))
+            if PySpin.IsAvailable(cnt_def) and PySpin.IsWritable(cnt_def):
+                cnt_def.SetValue(4)
+
+            # Deliver the newest frame for LV (drop older ones)
             handling = PySpin.CEnumerationPtr(s_map.GetNode('StreamBufferHandlingMode'))
             if PySpin.IsAvailable(handling) and PySpin.IsWritable(handling):
-                val = handling.GetEntryByName('OldestFirstOverwrite')
-                if PySpin.IsAvailable(val) and PySpin.IsReadable(val):
-                    handling.SetIntValue(val.GetValue())
+                newest_only = handling.GetEntryByName('NewestOnly')
+                if PySpin.IsAvailable(newest_only) and PySpin.IsReadable(newest_only):
+                    handling.SetIntValue(newest_only.GetValue())
         except Exception:
             pass
 
