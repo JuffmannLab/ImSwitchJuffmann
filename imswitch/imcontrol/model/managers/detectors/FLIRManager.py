@@ -163,30 +163,32 @@ class FLIRManager(DetectorManager):
                 self._acquiring = False
 
     def getLatestFrame(self, is_save=True):
-        # Non-blocking and always returns an ndarray
         with self._lock:
             if not self._acquiring:
                 return self._ensure_last_frame()
 
-            try:
-                img = self._cam.GetNextImage(0)  # non-blocking
-            except Exception:
-                return self._ensure_last_frame()
-
-            if img.IsIncomplete():
+            last = None
+            # Drain any queued frames (non-blocking) and keep the most recent
+            for _ in range(32):
+                try:
+                    img = self._cam.GetNextImage(0)  # non-blocking
+                except Exception:
+                    break
+                if not img.IsIncomplete():
+                    try:
+                        arr = self._image_to_numpy(img)
+                        last = arr
+                    except Exception:
+                        pass
                 try:
                     img.Release()
                 except Exception:
                     pass
-                return self._ensure_last_frame()
 
-            arr = self._image_to_numpy(img)
-            try:
-                img.Release()
-            except Exception:
-                pass
-            self._last_frame = arr
-            return arr
+            if last is not None:
+                self._last_frame = last
+                return last
+            return self._ensure_last_frame()
 
     def getChunk(self):
         # Grab up to a few frames non-blocking
