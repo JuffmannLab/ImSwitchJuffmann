@@ -36,7 +36,7 @@ class DelayStageWidget(Widget):
 
 
         # Emit signals when counts change
-        self.val1.valueChanged.connect(self.sigNEWposition.emit)
+        self.val1.valueChanged.connect(self.sigDelayposition.emit)
 
 
         # Layout:

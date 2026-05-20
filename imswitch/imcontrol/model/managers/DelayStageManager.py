@@ -29,16 +29,11 @@ class DelayStageManager:
       - On Python >= 3.8, we add the Kinesis directory via os.add_dll_directory.
     """
 
-    def __init__(
-        self,
-        serial_number: str,
-        kinesis_dir: str = r"C:\Program Files\Thorlabs\Kinesis",
-        steps_per_rev: float = 1919.64186,  # PRM1-Z8
-        gearbox_ratio: float = 1.0,
-        pitch: float = 1.0,
-        poll_interval_ms: int = 200,
-        real_units_per_mm: float = 18.0,    # matches your script: 1 mm = 18 "real units"
-    ):
+    def __init__(self, setupInfo):
+        self.__logger = initLogger(self)
+        self._setupInfo = setupInfo
+        self._deviceProperties = self._setupInfo['Delaystage'].managerProperties
+
         self.serial_str = serial_number
         self.serial = c_char_p(serial_number.encode("ascii"))
         self.kinesis_dir = kinesis_dir
