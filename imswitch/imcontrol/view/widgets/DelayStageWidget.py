@@ -3,7 +3,7 @@ from qtpy import QtWidgets, QtCore
 from imswitch.imcontrol.view import guitools as guitools
 
 class DelayStageWidget(Widget):
-    sigDelayposition = QtCore.Signal(int)
+    sigDelayposition = QtCore.Signal(float)
     sigHome = QtCore.Signal(bool)
 
 
@@ -15,6 +15,7 @@ class DelayStageWidget(Widget):
 
 
         self.label1 = QtWidgets.QLabel("at rest")
+        self.label1.setStyleSheet("background-color:green")
         self.label1.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
 
         self.val1 = QtWidgets.QDoubleSpinBox(self)
@@ -45,5 +46,9 @@ class DelayStageWidget(Widget):
     # Methods the controller calls
     def setDelaystarting(self, val: int):
         self.val1.setValue(val)
+
+    def setLabel(self, text: str, color: str):
+        self.label1.setText(text)
+        self.label1.setStyleSheet(f"background-color: {color};")
 
 

@@ -172,7 +172,7 @@ class DelayStageManager:
         dev_units = int(self._lib.CC_GetPosition(self._serial))
         return self._device_units_to_mm(dev_units)
 
-    def Step_Scanning(self, stepsize: float, stepnum: int, steptime: float, serial_num=None, home: bool = False):
+    def Step_Scanning(self, stepsize: float, stepnum: int, steptime: float, serial_num=None, home: bool = True):
         """
         Perform step scanning:
 
