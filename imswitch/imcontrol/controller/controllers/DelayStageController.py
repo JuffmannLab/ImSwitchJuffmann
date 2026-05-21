@@ -31,19 +31,22 @@ class DelayStageController(ImConWidgetController):
         self._widget.setDelaystarting(self._master.DelayStageManager.GetPos())
 
     def updateLabel(self, value: float):
-        pos = self._master.DelayStageManager.GetPos()
-        delay = int(abs((value - pos)*1000)+1000)
         self._widget.setLabel("Stage moving", "red")
-        QtCore.QTimer.singleShot(delay, lambda: self._widget.setLabel("at rest", "green"))
+        QtCore.QTimer.singleShot(value, lambda: self._widget.setLabel("at rest", "green"))
 
 
     def moveStage(self, value):
         self._master.DelayStageManager.Move(value)
-        self.updateLabel(value)
+        pos = self._master.DelayStageManager.GetPos()
+        delay = int(abs((value - pos)*1000)+1000)
+        self.updateLabel(delay)
 
     def moveHome(self):
+        delay = int(abs((self._master.DelayStageManager.GetPos())*1000)+1000)
+        self.updateLabel(delay)
+        time.sleep(0.5)
         self._master.DelayStageManager.Home()
-        self.updateLabel(0)
+        self._widget.setDelaystarting(0.0)
 
 
     def cleanupfunction(self):

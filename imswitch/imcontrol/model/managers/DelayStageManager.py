@@ -126,7 +126,6 @@ class DelayStageManager:
         Move the stage to zero (absolute 0.0 real-units), like in your script.
         """
         self._ensure_open()
-        print("KDC101 going to zero...")  # keep same console behavior as your script
 
         # Convert 0.0 real-units to device units
         new_pos_real = c_double(0.0)
@@ -138,7 +137,6 @@ class DelayStageManager:
         time.sleep(0.25)
         self._lib.CC_MoveAbsolute(self._serial)
 
-        time.sleep(self._home_settle_s)
 
     def Move(self, pos_mm: float):
         """
@@ -168,7 +166,7 @@ class DelayStageManager:
         """
         self._ensure_open()
         self._lib.CC_RequestPosition(self._serial)
-        time.sleep(0.2)
+        time.sleep(0.1)
         dev_units = int(self._lib.CC_GetPosition(self._serial))
         return self._device_units_to_mm(dev_units)
 
