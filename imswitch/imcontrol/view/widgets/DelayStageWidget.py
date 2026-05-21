@@ -18,8 +18,8 @@ class DelayStageWidget(Widget):
         self.label1.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
 
         self.val1 = QtWidgets.QDoubleSpinBox(self)
-        self.val1.setRange(0.0, 100.0)
-        self.val1.setDecimals(3)  # number of decimal places to show
+        self.val1.setRange(0.0, 25.0)
+        self.val1.setDecimals(4)  # number of decimal places to show
         self.val1.setSingleStep(0.1)  # step size
         self.val1.setSuffix(" mm")
         self.val1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -38,6 +38,7 @@ class DelayStageWidget(Widget):
         # Layout:
         grid.addWidget(self.label1,     0, 0, 1, 1)
         grid.addWidget(self.val1,     0, 1, 1, 1)
+        grid.addWidget(self.button1, 0, 2, 1, 1)
 
 
 

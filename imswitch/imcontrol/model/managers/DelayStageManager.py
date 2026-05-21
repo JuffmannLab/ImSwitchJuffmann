@@ -31,7 +31,7 @@ class DelayStageManager:
 
     Notes:
       - 1 mm = 18 "real units" (adjustable via managerProperties)
-      - PRM1-Z8 defaults: stepsPerRev=1919.64186, gearboxRatio=1.0, pitch=1.0
+      - defaults: stepsPerRev=512, gearboxRatio=1.0, pitch=1.0
       - The DLL path is configured via managerProperties.kinesisDir
     """
 
@@ -60,16 +60,16 @@ class DelayStageManager:
         self._dll_name = getp("dllName", "Thorlabs.MotionControl.KCube.DCServo.dll")
         self._poll_interval_ms = int(getp("pollIntervalMs", 200))
 
-        # Unit conversion (PRM1-Z8 defaults)
-        self._steps_per_rev = c_double(float(getp("stepsPerRev", 1919.64186)))
+        # Unit conversion (Z825 defaults)
+        self._steps_per_rev = c_double(float(getp("stepsPerRev", 512)))
         self._gearbox_ratio = c_double(float(getp("gearboxRatio", 1.0)))
         self._pitch = c_double(float(getp("pitch", 1.0)))
 
         # Real <-> mm conversion (same as your script by default)
-        self._real_units_per_mm = float(getp("realUnitsPerMm", 18.0))
+        self._real_units_per_mm = float(getp("realUnitsPerMm", 67.0))
 
         # Homing settle time
-        self._home_settle_s = float(getp("homeSettleTimeS", 5.0))
+        self._home_settle_s = float(getp("homeSettleTimeS", 2.0))
 
         # Internal state
         self._lib: Optional[CDLL] = None
