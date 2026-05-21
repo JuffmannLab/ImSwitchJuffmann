@@ -24,7 +24,7 @@ class MasterController:
         self.rs232sManager = RS232sManager(self.__setupInfo.rs232devices)
         self.ShuttersManager = ShuttersManager(self.__setupInfo.SEMdevices)
         self.HWPManager = HWPManager(self.__setupInfo.HWPdevices)
-        #self.DelayStageManager = DelayStageManager(self.__setupInfo.SEMdevices)
+        self.DelayStageManager = DelayStageManager(self.__setupInfo.SEMdevices)
 
         lowLevelManagers = {
             'nidaqManager': self.nidaqManager,

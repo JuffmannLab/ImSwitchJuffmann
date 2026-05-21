@@ -28,9 +28,8 @@ class DelayStageWidget(Widget):
 
         self.val1 = QtWidgets.QSpinBox()
         self.val1.setRange(0, 180)
-        self.val1.setSuffix("steps")
+        self.val1.setSuffix(" mm")
         self.val1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.val1.setValue(0)
         self.val1.setKeyboardTracking(False)
 
 
@@ -44,7 +43,7 @@ class DelayStageWidget(Widget):
 
 
     # Methods the controller calls
-    def setDelaystarting(self, val: int):
+    def setDelaystarting(self, val: float):
         self.val1.setValue(val)
 
 

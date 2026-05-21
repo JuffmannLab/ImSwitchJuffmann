@@ -30,7 +30,7 @@ class DelayStageManager:
       - Step_Scanning(stepsize_mm, stepnum, steptime_s, serial_num=None, home=False)
 
     Notes:
-      - 1 mm = 18 "real units" (same as your script; adjustable via managerProperties)
+      - 1 mm = 18 "real units" (adjustable via managerProperties)
       - PRM1-Z8 defaults: stepsPerRev=1919.64186, gearboxRatio=1.0, pitch=1.0
       - The DLL path is configured via managerProperties.kinesisDir
     """
@@ -153,27 +153,28 @@ class DelayStageManager:
 
     def PrintPos(self):
         """
-        Print the current position in device units, same as your script.
+        Print the current position in millimeters.
         """
         self._ensure_open()
         self._lib.CC_RequestPosition(self._serial)
         time.sleep(0.2)
-        pos = self._lib.CC_GetPosition(self._serial)
-        print("Position device units: ", pos)
+        dev_units = int(self._lib.CC_GetPosition(self._serial))
+        pos_mm = self._device_units_to_mm(dev_units)
+        print(f"Position: {pos_mm:.6f} mm")
 
-    def GetPos(self) -> int:
+    def GetPos(self) -> float:
         """
-        Return the current position in device units, same as your script.
+        Return the current position in millimeters.
         """
         self._ensure_open()
         self._lib.CC_RequestPosition(self._serial)
         time.sleep(0.2)
-        pos = int(self._lib.CC_GetPosition(self._serial))
-        return pos
+        dev_units = int(self._lib.CC_GetPosition(self._serial))
+        return self._device_units_to_mm(dev_units)
 
     def Step_Scanning(self, stepsize: float, stepnum: int, steptime: float, serial_num=None, home: bool = False):
         """
-        Perform step scanning, mirroring the original function's signature and behavior.
+        Perform step scanning:
 
         stepsize: step size in mm
         stepnum: number of steps
@@ -229,3 +230,10 @@ class DelayStageManager:
 
         # Load KCube DC Servo DLL
         self._lib = cdll.LoadLibrary(self._dll_name)
+
+    def _device_units_to_mm(self, dev_units: int) -> float:
+        """Convert device units -> real units -> millimeters."""
+        real = c_double(0.0)
+        self._lib.CC_GetRealValueFromDeviceUnit(self._serial, c_int(int(dev_units)), byref(real), 0)
+        # real.value is in "real units"; 1 mm = self._real_units_per_mm
+        return float(real.value) / self._real_units_per_mm
