@@ -20,6 +20,7 @@ class DelayStageController(ImConWidgetController):
 
         # connect signal widgets
         self._widget.sigDelayposition.connect(self.moveStage)
+        self._widget.sigHome.connect(self.moveHome)
 
     def __del__(self):
         self._master.DelayStageManager.Close()
@@ -40,9 +41,9 @@ class DelayStageController(ImConWidgetController):
         self._master.DelayStageManager.Move(value)
         self.updateLabel(value)
 
-    def moveHome(self, value):
-        self._master.DelayStageManager.Home
-        self.updateLabel(value)
+    def moveHome(self):
+        self._master.DelayStageManager.Home()
+        self.updateLabel(0)
 
 
     def cleanupfunction(self):
