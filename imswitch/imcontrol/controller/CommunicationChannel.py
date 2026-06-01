@@ -28,6 +28,8 @@ class CommunicationChannel(SignalInterface):
 
     sigGridToggled = Signal(bool)  # (enabled)
 
+    sigCrosshairPlaced = Signal(object)  # (position)
+
     sigCrosshairToggled = Signal(bool)  # (enabled)
 
     sigAddItemToVb = Signal(object)  # (item)
@@ -77,12 +79,12 @@ class CommunicationChannel(SignalInterface):
     sigStartRecordingExternal = Signal()
 
     sigRequestScanFreq = Signal()
-    
+
     sigSendScanFreq = Signal(float)  # (scanPeriod)
 
-    #sigRequestScannersInScan = Signal()
+    # sigRequestScannersInScan = Signal()
 
-    #sigSendScannersInScan = Signal(object)  # (scannerList)
+    # sigSendScannersInScan = Signal(object)  # (scannerList)
 
     sigSaveFocus = Signal()
 
@@ -162,7 +164,6 @@ class CommunicationChannel(SignalInterface):
             'scanEnded': self.sigScanEnded,
             'saveFocus': self.sigSaveFocus
         })
-
 
 # Copyright (C) 2020-2022 ImSwitch developers
 # This file is part of ImSwitch.

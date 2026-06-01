@@ -19,6 +19,8 @@ class ImageController(LiveUpdatedController):
         self._widget.setLiveViewLayers(
             self._master.detectorsManager.getAllDeviceNames(lambda c: c.forAcquisition)
         )
+        # Connect widget signals
+        self._widget.sigCrosshairPlaced.connect(self.sendPos)
 
         # Connect CommunicationChannel signals
         self._commChannel.sigUpdateImage.connect(self.update)
@@ -29,6 +31,10 @@ class ImageController(LiveUpdatedController):
         self._commChannel.sigRemoveItemFromVb.connect(self.removeItemFromVb)
         self._commChannel.sigMemorySnapAvailable.connect(self.memorySnapAvailable)
         self._commChannel.sigSetExposure.connect(lambda t: self.setExposure(t))
+
+    def sendPos(self, pos):
+        """ Sends current crosshair position to communication channel. """
+        self._commChannel.sigCrosshairPlaced.emit(pos)
 
     def autoLevels(self, detectorNames=None, im=None):
         """ Set histogram levels automatically with current detector image."""

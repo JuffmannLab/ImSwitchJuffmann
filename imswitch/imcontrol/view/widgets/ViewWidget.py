@@ -35,17 +35,33 @@ class ViewWidget(Widget):
                                           QtWidgets.QSizePolicy.Expanding)
         self.liveviewButton.setEnabled(True)
 
+        #crosshair position
+        self.yInfoLabel = QtWidgets.QLabel("")
+        self.InfoLabel = QtWidgets.QLabel("")
+        self.yInfoLabel.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+        self.InfoLabel.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+
         # Add elements to GridLayout
         self.viewCtrlLayout = QtWidgets.QGridLayout()
         self.setLayout(self.viewCtrlLayout)
         self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 2)
         self.viewCtrlLayout.addWidget(self.gridButton, 1, 0)
         self.viewCtrlLayout.addWidget(self.crosshairButton, 1, 1)
+        self.viewCtrlLayout.addWidget(self.yInfoLabel, 2, 0)
+        self.viewCtrlLayout.addWidget(self.InfoLabel, 2, 1)
 
         # Connect signals
         self.gridButton.toggled.connect(self.sigGridToggled)
         self.crosshairButton.toggled.connect(self.sigCrosshairToggled)
         self.liveviewButton.toggled.connect(self.sigLiveviewToggled)
+
+    def currentCrosshair(self, pos):
+        # Format each value in pos with 2 decimal places; handle scalar fallback
+        try:
+            formatted = "(" + ", ".join(f"{float(v):.2f}" for v in pos) + ")"
+        except TypeError:
+            formatted = f"{float(pos):.2f}"
+        self.InfoLabel.setText(formatted)
 
     def getLiveViewActive(self):
         return self.liveviewButton.isChecked()
@@ -77,20 +93,3 @@ class ViewWidget(Widget):
     @shortcut('Ctrl+H', "Crosshair")
     def toggleCrosshairButton(self):
         self.crosshairButton.toggle()
-
-
-# Copyright (C) 2020-2021 ImSwitch developers
-# This file is part of ImSwitch.
-#
-# ImSwitch is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ImSwitch is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.

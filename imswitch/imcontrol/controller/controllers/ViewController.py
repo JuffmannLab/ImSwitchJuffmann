@@ -16,6 +16,9 @@ class ViewController(ImConWidgetController):
         self._widget.sigCrosshairToggled.connect(self.crosshairToggle)
         self._widget.sigLiveviewToggled.connect(self.liveview)
 
+        # Connect CommunicationChannel signals
+        self._commChannel.sigCrosshairPlaced.connect(self.setCrosshairPosition)
+
     def liveview(self, enabled):
         """ Start liveview and activate detector acquisition. """
         if enabled and self._acqHandle is None:
@@ -42,6 +45,10 @@ class ViewController(ImConWidgetController):
             return self._master.detectorsManager.execOnCurrent(lambda c: c.getLatestFrame())
         else:
             return self._master.detectorsManager[detectorName].getLatestFrame()
+
+    def setCrosshairPosition(self, position) -> None:
+        """ Sets LiveView crosshair to a specific position. """
+        self._widget.currentCrosshair(position)
 
     @APIExport(runOnUIThread=True)
     def setLiveViewActive(self, active: bool) -> None:

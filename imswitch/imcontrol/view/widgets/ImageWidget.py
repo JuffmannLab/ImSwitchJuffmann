@@ -1,12 +1,13 @@
 import numpy as np
-from qtpy import QtWidgets
+from qtpy import QtWidgets, QtCore
 
 from imswitch.imcommon.model import shortcut
 from imswitch.imcommon.view.guitools import naparitools
 
 
 class ImageWidget(QtWidgets.QWidget):
-    """ Widget containing viewbox that displays the new detector frames. """
+    """Widget containing viewbox that displays the new detector frames."""
+    sigCrosshairPlaced = QtCore.Signal(object)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,6 +31,15 @@ class ImageWidget(QtWidgets.QWidget):
         self.crosshair = naparitools.VispyCrosshairVisual(color='yellow')
         self.crosshair.hide()
         self.addItem(self.crosshair)
+
+        # Track crosshair visibility so we only react to clicks when it's on
+        self._crosshairVisible = False
+
+        # Print crosshair position on mouse release when crosshair is visible
+        # Note: left mouse button is event.button == 1 in vispy
+        self.napariViewer.window.qt_viewer.canvas.events.mouse_release.connect(
+            self._on_canvas_mouse_release
+        )
 
     def setLiveViewLayers(self, names):
         for name, img in self.imgLayers.items():
@@ -71,7 +81,7 @@ class ImageWidget(QtWidgets.QWidget):
         self.imgLayers[name].contrast_limits = (minimum, maximum)
 
     def getCenterViewbox(self):
-        """ Returns the center point of the viewbox, as an (x, y) tuple. """
+        """Returns the center point of the viewbox, as an (x, y) tuple."""
         return (
             self.napariViewer.window.qt_viewer.camera.center[2],
             self.napariViewer.window.qt_viewer.camera.center[1]
@@ -84,6 +94,7 @@ class ImageWidget(QtWidgets.QWidget):
         self.grid.setVisible(visible)
 
     def setCrosshairVisible(self, visible):
+        self._crosshairVisible = visible
         self.crosshair.setVisible(visible)
 
     def resetView(self):
@@ -103,19 +114,16 @@ class ImageWidget(QtWidgets.QWidget):
     def updateLevelsButton(self):
         self.updateLevelsWidget.updateLevelsButton.click()
 
+    def _on_canvas_mouse_release(self, event):
+        """Print crosshair position on left-click when crosshair is visible."""
+        if not self._crosshairVisible:
+            return
+        # Left mouse button is 1 in vispy
+        if getattr(event, "button", None) != 1:
+            return
 
-# Copyright (C) 2020-2021 ImSwitch developers
-# This file is part of ImSwitch.
-#
-# ImSwitch is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# ImSwitch is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+        try:
+            pos = self.napariViewer.window.qt_viewer.viewer.cursor.position
+            self.sigCrosshairPlaced.emit(pos)
+        except AttributeError:
+            return
