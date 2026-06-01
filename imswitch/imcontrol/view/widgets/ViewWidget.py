@@ -11,6 +11,8 @@ class ViewWidget(Widget):
     sigGridToggled = QtCore.Signal(bool)  # (enabled)
     sigCrosshairToggled = QtCore.Signal(bool)  # (enabled)
     sigLiveviewToggled = QtCore.Signal(bool)  # (enabled)
+    sigSetCrosshair = QtCore.Signal(int)
+    sigCountUV = QtCore.Signal(int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -36,10 +38,20 @@ class ViewWidget(Widget):
         self.liveviewButton.setEnabled(True)
 
         #crosshair position
-        self.yInfoLabel = QtWidgets.QLabel("")
         self.InfoLabel = QtWidgets.QLabel("")
-        self.yInfoLabel.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
         self.InfoLabel.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+
+        self.val1 = QtWidgets.QSpinBox()
+        self.val1.setRange(-1000, 3000)
+        self.val1.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.val1.setValue(0)
+        self.val1.setKeyboardTracking(False)
+
+        self.val2 = QtWidgets.QSpinBox()
+        self.val2.setRange(-1000, 3000)
+        self.val2.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.val2.setValue(0)
+        self.val2.setKeyboardTracking(False)
 
         # Add elements to GridLayout
         self.viewCtrlLayout = QtWidgets.QGridLayout()
@@ -47,8 +59,9 @@ class ViewWidget(Widget):
         self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 2)
         self.viewCtrlLayout.addWidget(self.gridButton, 1, 0)
         self.viewCtrlLayout.addWidget(self.crosshairButton, 1, 1)
-        self.viewCtrlLayout.addWidget(self.yInfoLabel, 2, 0)
-        self.viewCtrlLayout.addWidget(self.InfoLabel, 2, 1)
+        self.viewCtrlLayout.addWidget(self.val1, 2, 0, 1, 1)
+        self.viewCtrlLayout.addWidget(self.val2, 2, 1, 1, 1)
+        self.viewCtrlLayout.addWidget(self.InfoLabel, 2, 2, 1, 2)
 
         # Connect signals
         self.gridButton.toggled.connect(self.sigGridToggled)
