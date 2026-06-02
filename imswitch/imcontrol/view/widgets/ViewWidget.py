@@ -56,9 +56,9 @@ class ViewWidget(Widget):
         # Add elements to GridLayout
         self.viewCtrlLayout = QtWidgets.QGridLayout()
         self.setLayout(self.viewCtrlLayout)
-        self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 2)
-        self.viewCtrlLayout.addWidget(self.gridButton, 1, 0)
-        self.viewCtrlLayout.addWidget(self.crosshairButton, 1, 1)
+        self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 4)
+        self.viewCtrlLayout.addWidget(self.gridButton, 1, 0,1,2)
+        self.viewCtrlLayout.addWidget(self.crosshairButton, 1, 2,1,2)
         self.viewCtrlLayout.addWidget(self.val1, 2, 0, 1, 1)
         self.viewCtrlLayout.addWidget(self.val2, 2, 1, 1, 1)
         self.viewCtrlLayout.addWidget(self.InfoLabel, 2, 2, 1, 2)

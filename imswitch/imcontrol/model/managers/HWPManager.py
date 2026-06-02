@@ -26,22 +26,18 @@ class HWPManager:
         a.close_device()
         return b
 
-    def change_position_UV(self, new_position: int, *, wait: bool = True, timeout_ms: int = 1000):
+    def change_position_UV(self, new_position: int, *, wait: bool = True, timeout_ms: int = 100):
         a = ximc.Axis(rf"xi-com:\\.\{self._deviceProperties_UV['port']}")
         a.open_device()
         try:
             a.command_move(int(new_position), 0)  # absolute move in steps
-            if wait:
-                a.command_wait_for_stop(timeout_ms)
         finally:
             a.close_device()
 
-    def change_position_IR(self, new_position: int, *, wait: bool = True, timeout_ms: int = 1000):
+    def change_position_IR(self, new_position: int, *, wait: bool = True, timeout_ms: int = 100):
         a = ximc.Axis(rf"xi-com:\\.\{self._deviceProperties_IR['port']}")
         a.open_device()
         try:
             a.command_move(int(new_position), 0)
-            if wait:
-                a.command_wait_for_stop(timeout_ms)
         finally:
             a.close_device()
