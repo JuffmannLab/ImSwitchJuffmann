@@ -168,7 +168,7 @@ class FLIRManager(DetectorManager):
                 return self._ensure_last_frame()
 
             last = None
-            # Drain any queued frames (non-blocking) and keep the most recent
+            # Drain any queued frames and keep the most recent
             for _ in range(32):
                 try:
                     img = self._cam.GetNextImage(0)  # non-blocking
