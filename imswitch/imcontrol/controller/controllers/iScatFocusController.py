@@ -25,6 +25,9 @@ class iScatFocusController(ImConWidgetController):
         self._widget.sigAutoTune.connect(self.autoTune)
         self._widget.sigPIDValuesChanged.connect(self.updatePIDParameters)
         self._widget.sigCalibrate.connect(self.runCalibration)
+        self._widget.sigSledEnable.connect(self.sledEnable)
+        self._widget.sigSledAIEnable.connect(self.sledEnableAI)
+        self._widget.sigSledControlUpdate.connect(self.updateSledControl)
 
         # Reads the specific values from the configuration file. 
         if self._setupInfo.iScatFocus is None:
@@ -37,6 +40,10 @@ class iScatFocusController(ImConWidgetController):
                           self._setupInfo.iScatFocus.frameCropy,
                           self._setupInfo.iScatFocus.frameCropw,
                           self._setupInfo.iScatFocus.frameCroph)
+        self.sledEnableLine = self._setupInfo.iScatFocus.sledEnableLine
+        self.sledAIEnableLine = self._setupInfo.iScatFocus.sledAIEnableLine
+        self.sledControlChannel = self._setupInfo.iScatFocus.sledControlChannel
+
         self._master.detectorsManager[self.camera].crop(*self.cropFrame)
 
         # Connect FocusLockWidget buttons
@@ -73,6 +80,8 @@ class iScatFocusController(ImConWidgetController):
         self.iTermData = np.zeros(self.buffer)
         self.dTermData = np.zeros(self.buffer)
 
+        #Disable SLED on startup
+
         # Starts acquisition. I don't know if this can cause problems if, the camera of interest is also used for acquisition
         self._master.detectorsManager[self.camera].startAcquisition()
         self.__processDataThread = ProcessDataThread(self)
@@ -88,6 +97,16 @@ class iScatFocusController(ImConWidgetController):
         self.__processDataThread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
+
+    def sledEnable(self, clicked):
+        isChecked = self._widget.sledEnable.isChecked()
+
+
+    def sledEnableAI(self, clicked):
+        pass
+
+    def updateSledControl(self, value):
+        pass
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
         try:

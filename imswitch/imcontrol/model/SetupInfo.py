@@ -176,6 +176,15 @@ class iScatFocusInfo:
     frameCroph: int
     """ Height of frame crop. """
 
+    sledEnableLine: str
+    """ NiDAQ Digital Line e.g. Dev1/Port0/Line6 """
+
+    sledAIEnableLine: str
+    """ NiDAQ Digital Line e.g. Dev1/Port0/Line6 """
+
+    sledControlChannel: str
+    """ NiDAQ Analog output channel e.g. Dev1/ao3"""
+
 @dataclass(frozen=True)
 class AutofocusInfo:
     camera: str
@@ -309,7 +318,7 @@ class SetupInfo:
     """ Focus lock settings. Required to be defined to use focus lock
     functionality. """
     
-    iScatFocus: Optional[FocusLockInfo] = field(default_factory=lambda: None)
+    iScatFocus: Optional[iScatFocusInfo] = field(default_factory=lambda: None)
     """ Focus lock settings. Required to be defined to use focus lock
     functionality. """
     

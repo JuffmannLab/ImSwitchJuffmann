@@ -12,6 +12,10 @@ class iScatFocusWidget(Widget):
     sigAutoTune = QtCore.Signal()
     sigCalibrate = QtCore.Signal(float, float, int)
 
+    sigSledEnable = QtCore.Signal(bool)
+    sigSledAIEnable = QtCore.Signal(bool)
+    sigSledControlUpdate = QtCore.Signal(float)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -95,7 +99,34 @@ class iScatFocusWidget(Widget):
         self.focusPlot.setLabels(left=('Position', 'px'), bottom=('Time', 's'))
         self.focusCurve = self.focusPlot.plot(pen='y')
         self.setpointLine = pg.InfiniteLine(angle=0, pen='r')
-        
+
+
+        # ---- SLED Control ----
+        self.sledGroup = QtWidgets.QGroupBox("SLED Control")
+        sledLayout = QtWidgets.QGridLayout()
+
+        self.sledEnable = guitools.BetterPushButton('SLED Enable')
+        self.sledEnable.setCheckable(True)
+
+        self.sledAIEnable = guitools.BetterPushButton('SLED Current Enable')
+        self.sledAIEnable.setCheckable(True)
+
+        self.sledSpinBox = QtWidgets.QDoubleSpinBox()
+        self.sledSpinBox.setRange(0, 5)
+        self.sledSpinBox.setValue(0)
+        self.sledSpinBox.setSingleStep(0.1)
+
+        self.sledControlUpdate = guitools.BetterPushButton('Update Control Voltage')
+
+
+        sledLayout.addWidget(self.sledEnable, 0, 0)
+        sledLayout.addWidget(self.sledAIEnable, 0, 1)
+        sledLayout.addWidget(self.sledSpinBox, 1, 0)
+        sledLayout.addWidget(self.sledControlUpdate, 1, 1)
+
+        self.sledGroup.setLayout(sledLayout)
+
+
 
         # ---- Camera View ----
         self.camView = pg.GraphicsLayoutWidget()
@@ -108,8 +139,9 @@ class iScatFocusWidget(Widget):
         self.layout().addWidget(self.pidControlGroup, 0, 0, 1, 2)
         self.layout().addWidget(self.positionGroup, 1, 0)
         self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
-        self.layout().addWidget(self.camView, 2, 2)
+        self.layout().addWidget(self.camView, 2, 2, 2, 1)
         self.layout().addWidget(self.calibGroup, 2, 0, 1, 2)
+        self.layout().addWidget(self.sledGroup, 3, 0, 1, 2)
 
         # ---- Signal Connections ----
         self.lockButton.toggled.connect(self.sigPIDToggled)
@@ -118,9 +150,16 @@ class iScatFocusWidget(Widget):
         self.autoTuneButton.clicked.connect(self.sigAutoTune)
         self.calibButton.clicked.connect(self._emitCalibrate)
         self.positionSlider.valueChanged.connect(self._onSliderMove)
+
+        self.sledEnable.clicked.connect(self.sigSledEnable)
+        self.sledAIEnable.clicked.connect(self.sigSledAIEnable)
+        self.sledControlUpdate.clicked.connect(
+            lambda: self.sigSledControlUpdate.emit(float(self.sledSpinBox.value())))
         
         for edit in (self.kpEdit, self.kiEdit, self.kdEdit):
             edit.editingFinished.connect(self.emitPIDValues)
+
+
 
     def _emitCalibrate(self):
         """Handle calibration signal emission with validation"""
