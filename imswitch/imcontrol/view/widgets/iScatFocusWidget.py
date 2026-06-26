@@ -108,11 +108,11 @@ class iScatFocusWidget(Widget):
         self.sledEnable = guitools.BetterPushButton('SLED Enable')
         self.sledEnable.setCheckable(True)
 
-        self.sledAIEnable = guitools.BetterPushButton('SLED Current Enable')
-        self.sledAIEnable.setCheckable(True)
+        self.sledEnableAI = guitools.BetterPushButton('SLED Current Enable')
+        self.sledEnableAI.setCheckable(True)
 
         self.sledSpinBox = QtWidgets.QDoubleSpinBox()
-        self.sledSpinBox.setRange(0, 5)
+        self.sledSpinBox.setRange(0, 2.5)
         self.sledSpinBox.setValue(0)
         self.sledSpinBox.setSingleStep(0.1)
 
@@ -120,7 +120,7 @@ class iScatFocusWidget(Widget):
 
 
         sledLayout.addWidget(self.sledEnable, 0, 0)
-        sledLayout.addWidget(self.sledAIEnable, 0, 1)
+        sledLayout.addWidget(self.sledEnableAI, 0, 1)
         sledLayout.addWidget(self.sledSpinBox, 1, 0)
         sledLayout.addWidget(self.sledControlUpdate, 1, 1)
 
@@ -152,7 +152,7 @@ class iScatFocusWidget(Widget):
         self.positionSlider.valueChanged.connect(self._onSliderMove)
 
         self.sledEnable.clicked.connect(self.sigSledEnable)
-        self.sledAIEnable.clicked.connect(self.sigSledAIEnable)
+        self.sledEnableAI.clicked.connect(self.sigSledAIEnable)
         self.sledControlUpdate.clicked.connect(
             lambda: self.sigSledControlUpdate.emit(float(self.sledSpinBox.value())))
         
