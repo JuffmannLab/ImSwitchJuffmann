@@ -104,10 +104,11 @@ class iScatFocusController(ImConWidgetController):
 
 
     def sledEnableAI(self, clicked):
-        pass
+        isChecked = self._widget.sledEnableAI.isChecked()
+        self._master.nidaqManager.setDigital(self._setupInfo.iScatFocus, isChecked, line=self.sledAIEnableLine)
 
-    def updateSledControl(self, value):
-        pass
+    def updateSledControl(self, voltage):
+        self._master.nidaqManager.setAnalog(self._setupInfo.iScatFocus, voltage, min_val=0, max_val=5, channel=self.sledControlChannel)
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
         try:

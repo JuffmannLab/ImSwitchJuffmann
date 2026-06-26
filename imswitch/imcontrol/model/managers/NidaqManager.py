@@ -229,12 +229,13 @@ class NidaqManager(SignalInterface):
                 finally:
                     self.busy = False
 
-    def setAnalog(self, target, voltage, min_val=-1, max_val=1):
+    def setAnalog(self, target, voltage, min_val=-1, max_val=1, channel=None):
         """ Function to set the analog channel to a specific target
         to a certain voltage """
-        channel = self.__setupInfo.getDevice(target).getAnalogChannel()
         if channel is None:
-            raise NidaqManagerError('Target has no analog output assigned to it')
+            channel = self.__setupInfo.getDevice(target).getAnalogChannel()
+            if channel is None:
+                raise NidaqManagerError('Target has no analog output assigned to it')
         else:
             if not self.busy:
                 self.busy = True
