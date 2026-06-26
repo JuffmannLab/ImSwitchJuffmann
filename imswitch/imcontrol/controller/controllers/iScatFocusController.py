@@ -100,6 +100,7 @@ class iScatFocusController(ImConWidgetController):
 
     def sledEnable(self, clicked):
         isChecked = self._widget.sledEnable.isChecked()
+        self._master.nidaqManager.setDigital(self._setupInfo.iScatFocus, isChecked, line=self.sledEnableLine)
 
 
     def sledEnableAI(self, clicked):

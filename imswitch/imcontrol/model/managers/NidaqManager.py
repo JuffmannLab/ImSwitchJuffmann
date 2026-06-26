@@ -191,12 +191,14 @@ class NidaqManager(SignalInterface):
         else:
             return self.tasks[taskName].read(samples, timeout)
 
-    def setDigital(self, target, enable, line=""):
+    def setDigital(self, target, enable, line=None):
         """ Function to set the digital line to a specific target
         to either "high" or "low" voltage """
-        line = self.__setupInfo.getDevice(target).getDigitalLine()
+
         if line is None:
-            raise NidaqManagerError('Target has no digital output assigned to it')
+            line = self.__setupInfo.getDevice(target).getDigitalLine()
+            if line is None:
+                raise NidaqManagerError('Target has no digital output assigned to it')
         else:
             if not self.busy:
                 self.busy = True
