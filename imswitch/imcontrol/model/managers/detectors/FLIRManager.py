@@ -551,8 +551,8 @@ class FLIRManager(DetectorManager):
                     arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w))
                 return arr
 
-            # RGB8 output (either native RGB8 or converted from any format)
-            if target_pf == 'RGB8':
+            # BGR8 output
+            if target_pf == 'BGR8':
                 if img.GetPixelFormat() != PySpin.PixelFormat_RGB8:
                     conv = img.Convert(PySpin.PixelFormat_RGB8, PySpin.HQ_LINEAR)
                 else:
