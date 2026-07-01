@@ -61,6 +61,7 @@ class ImConMainView(QtWidgets.QMainWindow):
             'Shutters': _DockInfo(name='Shutters', yPosition=1),
             'HWP': _DockInfo(name='HWP - Laser control', yPosition=2),
             'SLM': _DockInfo(name='SLM', yPosition=2),
+            'SemSLM': _DockInfo(name='SemSLM', yPosition=2),
             'DelayStage': _DockInfo(name='Delay Stage', yPosition=3),
             'BeadRec': _DockInfo(name='Bead Rec', yPosition=3),
             'AlignmentLine': _DockInfo(name='Alignment Tool', yPosition=3),

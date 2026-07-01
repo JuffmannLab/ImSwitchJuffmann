@@ -22,3 +22,4 @@ from .basewidgets import WidgetFactory
 from .ShuttersWidget import ShuttersWidget
 from .HWPWidget import HWPWidget
 from .DelayStageWidget import DelayStageWidget
+from .SemSLMWidget import SemSLMWidget

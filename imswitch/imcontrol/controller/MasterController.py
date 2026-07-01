@@ -1,10 +1,10 @@
 from imswitch.imcommon.model import VFileItem
 from imswitch.imcontrol.model import (
     DetectorsManager, LasersManager, MultiManager, NidaqManager, PositionersManager,
-    RecordingManager, RS232sManager, ScanManager, SLMManager, ShuttersManager, DelayStageManager
+    RecordingManager, RS232sManager, ScanManager, SLMManager, ShuttersManager, DelayStageManager, HWPManager
 )
 
-from ImSwitchJuffmann.imswitch.imcontrol.model.managers.HWPManager import HWPManager
+#from ImSwitchJuffmann.imswitch.imcontrol.model.managers.HWPManager import HWPManager
 
 
 class MasterController:
