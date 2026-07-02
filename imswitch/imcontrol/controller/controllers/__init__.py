@@ -21,3 +21,4 @@ from .WatcherController import WatcherController
 from .ShuttersController import ShuttersController
 from .HWPController import HWPController
 from .DelayStageController import DelayStageController
+from .SemSLMController import SemSLMController
