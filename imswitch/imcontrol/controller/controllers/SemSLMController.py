@@ -9,3 +9,15 @@ class SemSLMController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
+        self._widget.sigSetPresetClicked.connect(self.applyMask)
+        self._widget.sigPresetChanged.connect(self.presetChanged)
+
+
+    def presetChanged(self, bpm_file):
+        presetPath = self._widget.getPresetPath()
+        mask = str(presetPath) + "/" + bpm_file
+        self._widget.updatePixmap(mask)
+
+    def applyMask(self, clicked):
+        #manager needs to apply mask to slm
+        pass

@@ -6,6 +6,8 @@ from imswitch.imcontrol.view import guitools as guitools
 
 
 class SemSLMWidget(Widget):
+    sigSetPresetClicked = QtCore.Signal(bool)
+    sigPresetChanged = QtCore.Signal(str)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -28,6 +30,9 @@ class SemSLMWidget(Widget):
 
         self._loadPresets(self.maskSelect, self.maskPreview)
 
+        self.applyBtn.clicked.connect(self.sigSetPresetClicked)
+        self.maskSelect.currentTextChanged.connect(self.sigPresetChanged)
+
     def _loadPresets(self, combobox, label):
         for preset in self.presetPath.glob("*.bmp"):
             combobox.addItem(preset.name)
@@ -39,9 +44,19 @@ class SemSLMWidget(Widget):
                 400,
                 240,
                 QtCore.Qt.KeepAspectRatio,
-                QtCore.Qt.SmoothTransformation,
+                QtCore.Qt.SmoothTransformation
             )
         )
+
+    def updatePixmap(self, mask):
+        pixmap = QPixmap(mask)
+        self.maskPreview.setPixmap(pixmap.scaled(
+            400, 240, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+        ))
+
+
+    def getPresetPath(self):
+        return self.presetPath
 
 
 
