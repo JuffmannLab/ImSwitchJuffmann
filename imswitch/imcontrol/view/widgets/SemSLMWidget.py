@@ -8,6 +8,7 @@ from imswitch.imcontrol.view import guitools as guitools
 class SemSLMWidget(Widget):
     sigSetPresetClicked = QtCore.Signal(bool)
     sigPresetChanged = QtCore.Signal(str)
+    sigFValueChanged = QtCore.Signal(float)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -18,20 +19,34 @@ class SemSLMWidget(Widget):
 
 
 
-        self.applyBtn = guitools.BetterPushButton("Set selected mask")
-        self.maskSelect = QtWidgets.QComboBox()
-        self.maskPreview = QtWidgets.QLabel()
-        self.fSlider = guitools.BetterSlider(orientation=QtCore.Qt.Horizontal)
+        self.applyBtn = guitools.BetterPushButton("Set mask")
+        self.enableFValue = guitools.BetterPushButton("Enable f-value optimization")
+        self.enableFValue.isCheckable()
 
-        grid.addWidget(self.maskSelect, 0, 0)
-        grid.addWidget(self.applyBtn, 0, 1)
-        grid.addWidget(self.maskPreview, 0, 2, 2, 2)
-        grid.addWidget(self.fSlider, 1, 0, 1, 2)
+        self.saveMaskBtn = guitools.BetterPushButton("Save current mask")
+        self.maskSelect = QtWidgets.QComboBox()
+        self.maskSelect.view().setTextElideMode(QtCore.Qt.ElideRight)
+        self.maskSelect.setFixedWidth(200)
+
+        self.maskPreview = QtWidgets.QLabel()
+        self.fLabel = QtWidgets.QLabel("f-value:")
+        self.fSpinbox = QtWidgets.QDoubleSpinBox()
+        self.fSpinbox.setSingleStep(0.001)
+        self.fSpinbox.setDecimals(3)
+
+        grid.addWidget(self.maskSelect, 0, 0, 1, 1)
+        grid.addWidget(self.applyBtn, 0, 1, 1, 1)
+        grid.addWidget(self.maskPreview, 0, 2, 3, 2)
+        grid.addWidget(self.fLabel, 1, 0, 1, 1)
+        grid.addWidget(self.fSpinbox, 1, 1, 1, 1)
+        grid.addWidget(self.enableFValue, 2, 0, 1, 1)
+        grid.addWidget(self.saveMaskBtn, 2, 1, 1, 1)
 
         self._loadPresets(self.maskSelect, self.maskPreview)
 
         self.applyBtn.clicked.connect(self.sigSetPresetClicked)
         self.maskSelect.currentTextChanged.connect(self.sigPresetChanged)
+        self.fSpinbox.valueChanged.connect(self.sigFValueChanged)
 
     def _loadPresets(self, combobox, label):
         for preset in self.presetPath.glob("*.bmp"):
