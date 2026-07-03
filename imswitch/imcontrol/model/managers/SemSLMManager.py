@@ -18,5 +18,11 @@ class SemSLMManager():
     def writeMask(self, mask):
         self.slm.write(mask)
 
+    def getSLM(self):
+        return self.slm
+
+    def getWavUm(self):
+        return self.wav_um
+
 
 

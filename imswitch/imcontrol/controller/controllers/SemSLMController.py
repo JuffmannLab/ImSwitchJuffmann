@@ -1,6 +1,8 @@
 from imswitch.imcommon.model import initLogger
 from ..basecontrollers import ImConWidgetController
-
+from slmsuite.holography.toolbox import phase
+from PIL import Image
+import numpy as np
 
 class SemSLMController(ImConWidgetController):
     """Linked to SemSLMWidget."""
@@ -19,5 +21,18 @@ class SemSLMController(ImConWidgetController):
         self._widget.updatePixmap(mask)
 
     def applyMask(self, clicked):
-        #manager needs to apply mask to slm
-        pass
+
+        #---- load current selected mask ----
+        maskPath = str(self._widget.getPresetPath()) + "/" + self._widget.getCurrentMask()
+        mask = Image.open(maskPath)
+        mask = np.array(mask)[:, :, 0]
+
+        if self._widget.enableFValue.isChecked():
+            f = self._widget.getFValue()
+            slm = self._master.SemSLMManager.getSLM()
+            wav_um = self._master.SemSLMManager.getWavUm()
+            f_eff = f / (wav_um * 1e-6)
+            lens = phase.lens(slm, f_eff)
+            mask = mask + lens
+
+        self._master.SemSLMManager.writeMask(mask)

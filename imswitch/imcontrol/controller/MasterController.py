@@ -1,7 +1,8 @@
 from imswitch.imcommon.model import VFileItem
 from imswitch.imcontrol.model import (
     DetectorsManager, LasersManager, MultiManager, NidaqManager, PositionersManager,
-    RecordingManager, RS232sManager, ScanManager, SLMManager, ShuttersManager, DelayStageManager, HWPManager
+    RecordingManager, RS232sManager, ScanManager, SLMManager, ShuttersManager, DelayStageManager, HWPManager,
+    SemSLMManager
 )
 
 #from ImSwitchJuffmann.imswitch.imcontrol.model.managers.HWPManager import HWPManager
@@ -25,6 +26,7 @@ class MasterController:
         self.ShuttersManager = ShuttersManager(self.__setupInfo.SEMdevices)
         self.HWPManager = HWPManager(self.__setupInfo.HWPdevices)
         self.DelayStageManager = DelayStageManager(self.__setupInfo.SEMdevices)
+        self.SemSLMManager = SemSLMManager(self.__setupInfo)
 
         lowLevelManagers = {
             'nidaqManager': self.nidaqManager,

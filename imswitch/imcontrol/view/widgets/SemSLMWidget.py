@@ -21,7 +21,7 @@ class SemSLMWidget(Widget):
 
         self.applyBtn = guitools.BetterPushButton("Set mask")
         self.enableFValue = guitools.BetterPushButton("Enable f-value optimization")
-        self.enableFValue.isCheckable()
+        self.enableFValue.setCheckable(True)
 
         self.saveMaskBtn = guitools.BetterPushButton("Save current mask")
         self.maskSelect = QtWidgets.QComboBox()
@@ -72,6 +72,12 @@ class SemSLMWidget(Widget):
 
     def getPresetPath(self):
         return self.presetPath
+
+    def getFValue(self):
+        return self.fSpinbox.value()
+
+    def getCurrentMask(self):
+        return self.maskSelect.currentText()
 
 
 

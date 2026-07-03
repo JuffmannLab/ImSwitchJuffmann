@@ -11,3 +11,4 @@ from .ScanManager import ScanManager
 from .ShuttersManager import ShuttersManager
 from .DelayStageManager import DelayStageManager
 from .HWPManager import HWPManager
+from .SemSLMManager import SemSLMManager
