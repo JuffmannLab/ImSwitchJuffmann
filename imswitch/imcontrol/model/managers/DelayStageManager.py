@@ -66,7 +66,7 @@ class DelayStageManager:
         self._pitch = c_double(float(getp("pitch", 1.0)))
 
         # Real <-> mm conversion (same as your script by default)
-        self._real_units_per_mm = float(getp("realUnitsPerMm", 67.0))
+        self._real_units_per_mm = float(getp("realUnitsPerMm", 67.49))
 
         # Homing settle time
         self._home_settle_s = float(getp("homeSettleTimeS", 2.0))
