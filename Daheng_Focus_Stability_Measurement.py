@@ -16,18 +16,18 @@ from imswitch.imcontrol.model.interfaces.gxipyCamera import CameraGXIPY  # adjus
 
 # CAM Settings
 CAMERA_NO       = 1          
-EXPOSURE_TIME   = 10000      
+EXPOSURE_TIME   = 50      
 GAIN            = 0
 BINNING         = 1
 
 # ROI
-ROI_HPOS = 0
-ROI_VPOS = 0
-ROI_HSIZE = 1024
-ROI_VSIZE = 1024
+ROI_HPOS = 1512
+ROI_VPOS = 1730
+ROI_HSIZE = 864
+ROI_VSIZE = 442
 
 INTERVAL_S      = 10.0        # seconds between frames
-DURATION_HOURS  = 6.0         # total recording duration
+DURATION_HOURS  = 12         # total recording duration
 
 OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "Desktop")
 

@@ -236,34 +236,33 @@ class NidaqManager(SignalInterface):
             channel = self.__setupInfo.getDevice(target).getAnalogChannel()
             if channel is None:
                 raise NidaqManagerError('Target has no analog output assigned to it')
-        else:
-            if not self.busy:
-                self.busy = True
-                try:
-                    acquisitionTypeFinite = nidaqmx.constants.AcquisitionType.FINITE
-                    tasklen = 10
-                    aotask = self.__createChanAOTask('setAnalogTask',
+
+        if not self.busy:
+            self.busy = True
+            try:
+                acquisitionTypeFinite = nidaqmx.constants.AcquisitionType.FINITE
+                tasklen = 10
+                aotask = self.__createChanAOTask('setAnalogTask',
                                                      channel,
                                                      acquisitionTypeFinite,
                                                      r'100kHzTimebase',
                                                      100000, min_val, max_val, tasklen, False)
 
-                    signal = voltage * np.ones(tasklen, dtype=float)
-                    try:
-                        aotask.write(signal, auto_start=True)
-                    except Exception:
-                        self.__logger.error(
+                signal = voltage * np.ones(tasklen, dtype=float)
+                try:
+                    aotask.write(signal, auto_start=True)
+                except Exception:
+                    self.__logger.error(
                             'Attempted writing analog data that is too large or too small, or other'
                             ' error when writing the task.'
-                        )
+                    )
                     aotask.wait_until_done()
                     aotask.stop()
                     aotask.close()
-                except (nidaqmx._lib.DaqNotFoundError, nidaqmx._lib.DaqFunctionNotSupportedError,
-                        nidaqmx.DaqError) as e:
+            except (nidaqmx._lib.DaqNotFoundError, nidaqmx._lib.DaqFunctionNotSupportedError, nidaqmx.DaqError) as e:
                     warnings.warn(str(e), RuntimeWarning)
-                finally:
-                    self.busy = False
+            finally:
+                self.busy = False
 
     def runScan(self, signalDic, scanInfoDict):
         """ Function assuming that the user wants to run a full scan with a stage
