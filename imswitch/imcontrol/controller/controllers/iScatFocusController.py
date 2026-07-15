@@ -502,9 +502,9 @@ class ProcessDataThread(Thread):
         img = self.grabCameraFrame()
         return self.analyzeFrame(img)
 
-
+"""
 class KalmanFilter:
-    """Simple 1D Kalman filter for position and velocity estimation."""
+    #Simple 1D Kalman filter for position and velocity estimation.
     def __init__(self, initial_pos, initial_vel, dt=0.001, process_noise=0.1, measurement_noise=1.0):
         # State vector: [position, velocity]
         self.state = np.array([initial_pos, initial_vel])
@@ -547,7 +547,7 @@ class KalmanFilter:
         self.P = (I - K @ self.H) @ self.P
         
         return self.state[0], self.state[1]  # Return position and velocity
-
+"""
 import numpy as np
 
 class PID:
@@ -570,27 +570,27 @@ class PID:
         self._last_error = 0
         self._last_derivative = 0 
         self._output = 0
-        
-        # Anti-windup and limits
-        self.integral_min = -5  # Conservative limits
-        self.integral_max = 5
-        self.output_min = -10
-        self.output_max = 10
-        
-        # Kalman filter setup
-        self._kf = None
-        self.last_position = 0
-        self.last_velocity = 0
-        
-        # Stability monitoring
-        self.error_history = []
-        self.stability_counter = 0
-        self.max_unstable_count = 10
-        self.stable_threshold = 1.0  # px RMS error for stability
-        
-        # Dynamic control parameters
-        self.derivative_alpha = 0.3  # Smoothing factor for derivative
-        self.error_scaling = 1.0     # Dynamic error scaling
+
+        # # Anti-windup and limits
+        # self.integral_min = -5  # Conservative limits
+        # self.integral_max = 5
+        # self.output_min = -10
+        # self.output_max = 10
+        #
+        # # Kalman filter setup
+        # self._kf = None
+        # self.last_position = 0
+        # self.last_velocity = 0
+        #
+        # # Stability monitoring
+        # self.error_history = []
+        # self.stability_counter = 0
+        # self.max_unstable_count = 10
+        # self.stable_threshold = 1.0  # px RMS error for stability
+        #
+        # # Dynamic control parameters
+        # self.derivative_alpha = 0.3  # Smoothing factor for derivative
+        # self.error_scaling = 1.0     # Dynamic error scaling
 
     def setCalibration(self, volts_per_px):
         """Update calibration values with validation"""
@@ -604,110 +604,100 @@ class PID:
         Returns control output in volts.
         """
         # Initialize Kalman filter if needed
-        if self._kf is None:
-            self._init_kalman(current_px)
+        #if self._kf is None:
+            #self._init_kalman(current_px)
         
         # Get filtered position and velocity estimates
-        filtered_pos, filtered_vel = self._update_kalman(current_px)
+        #filtered_pos, filtered_vel = self._update_kalman(current_px)
         
         # Calculate error with dynamic scaling
-        error_px, error = self._calculate_error(filtered_pos)
+        error_px, error = self._calculate_error(current_px)
         
         # Calculate PID terms
-        p_term, i_term, d_term = self._calculate_terms(error, filtered_vel)
+        p_term, i_term, d_term = self._calculate_terms(error, current_px)
         
         # Combine terms with output limiting
-        self._output = self._limit_output(p_term + i_term + d_term)
+        self._output = p_term + i_term + d_term
         
         # Monitor stability
-        self._check_stability(error_px)
+        #self._check_stability(error_px)
         
         return self._output
 
-    def _init_kalman(self, current_px):
-        """Initialize Kalman filter with reasonable defaults"""
-        self._kf = KalmanFilter(
-            initial_pos=current_px,
-            initial_vel=0,
-            dt=self._dt,
-            process_noise=0.1,  # Adjust based on your system dynamics
-            measurement_noise=1.0  # Should match your measurement variance
-        )
-        self.last_position = current_px
-        self.last_velocity = 0
-
-    def _update_kalman(self, current_px):
-        """Update Kalman filter and return filtered estimates"""
-        self._kf.predict()
-        filtered_pos, filtered_vel = self._kf.update(current_px)
-        self.last_position = filtered_pos
-        self.last_velocity = filtered_vel
-        return filtered_pos, filtered_vel
+    # def _init_kalman(self, current_px):
+    #     """Initialize Kalman filter with reasonable defaults"""
+    #     self._kf = KalmanFilter(
+    #         initial_pos=current_px,
+    #         initial_vel=0,
+    #         dt=self._dt,
+    #         process_noise=0.1,  # Adjust based on your system dynamics
+    #         measurement_noise=1.0  # Should match your measurement variance
+    #     )
+    #     self.last_position = current_px
+    #     self.last_velocity = 0
+    #
+    # def _update_kalman(self, current_px):
+    #     """Update Kalman filter and return filtered estimates"""
+    #     self._kf.predict()
+    #     filtered_pos, filtered_vel = self._kf.update(current_px)
+    #     self.last_position = filtered_pos
+    #     self.last_velocity = filtered_vel
+    #     return filtered_pos, filtered_vel
 
     def _calculate_error(self, filtered_pos):
         """Calculate error with dynamic scaling"""
         error_px = self._setpoint - filtered_pos
-        
+        error_volts = error_px * self.volts_per_px
+        return error_px, error_volts
         # Dynamic error scaling - reduces aggression for large errors
-        self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
-        
-        if self.volts_per_px:
-            error = error_px * self.error_scaling * self.volts_per_px
-        else:
-            error = error_px * self.error_scaling
-            
-        return error_px, error
+        # self.error_scaling = min(1.0, abs(error_px)/5.0)  # Scale down large errors
+        #
+        # if self.volts_per_px:
+        #     error = error_px * self.error_scaling * self.volts_per_px
+        # else:
+        #     error = error_px * self.error_scaling
+        #
+        # return error_px, error
 
     def _calculate_terms(self, error, filtered_vel):
-        """Calculate PID terms with anti-windup and filtering"""
-        # Proportional term
+
         p_term = self._kp * error
-        
-        # Integral term with conditional integration and anti-windup
-        if abs(error) < 5:  # Only integrate when close to target
-            self._integral += error * self._dt
-        else:
-            self._integral *= 0.95  # Leaky integration
-        
-        self._integral = np.clip(self._integral, self.integral_min, self.integral_max)
+
+        self._integral += error * self._dt
         i_term = self._ki * self._integral
-        
-        # Derivative term using filtered velocity
-        if self.volts_per_px:
-            d_term = self._kd * (-filtered_vel * self.volts_per_px)
-        else:
-            d_term = self._kd * (-filtered_vel)
-            
-        # Apply low-pass filtering to derivative term
-        d_term = self.derivative_alpha * d_term + (1 - self.derivative_alpha) * self._last_derivative
+
+        derivative = (error - self._last_error) / self._dt
+        d_term = self._kd * derivative
+
         self._last_derivative = d_term
-        
+        self._last_error = error
+
         return p_term, i_term, d_term
 
-    def _limit_output(self, output):
-        """Apply output limits with anti-windup compensation"""
-        limited_output = np.clip(output, self.output_min, self.output_max)
-        
-        # Anti-windup: only integrate if not saturating
-        if output != limited_output:
-            self._integral -= (output - limited_output) * self._dt
-            
-        return limited_output
-
-    def _check_stability(self, error_px):
-        """Monitor stability and detect oscillations"""
-        self.error_history.append(abs(error_px))
-        if len(self.error_history) > 100:
-            self.error_history.pop(0)
-            
-        if len(self.error_history) == 100:
-            rms_error = np.sqrt(np.mean(np.array(self.error_history)**2))
-            if rms_error > self.stable_threshold:
-                self.stability_counter += 1
-                if self.stability_counter > self.max_unstable_count:
-                    raise RuntimeError("PID controller unstable - needs retuning")
-            else:
-                self.stability_counter = 0
+    # def _limit_output(self, output):
+    #     """Apply output limits with anti-windup compensation"""
+    #     limited_output = np.clip(output, self.output_min, self.output_max)
+    #
+    #     # Anti-windup: only integrate if not saturating
+    #     if output != limited_output:
+    #         self._integral -= (output - limited_output) * self._dt
+    #
+    #     return limited_output
+    #
+    # def _check_stability(self, error_px):
+    #     """Monitor stability and detect oscillations"""
+    #     self.error_history.append(abs(error_px))
+    #     if len(self.error_history) > 100:
+    #         self.error_history.pop(0)
+    #
+    #     if len(self.error_history) == 100:
+    #         rms_error = np.sqrt(np.mean(np.array(self.error_history)**2))
+    #         if rms_error > self.stable_threshold:
+    #             self.stability_counter += 1
+    #             if self.stability_counter > self.max_unstable_count:
+    #                 raise RuntimeError("PID controller unstable - needs retuning")
+    #         else:
+    #             self.stability_counter = 0
 
     def reset(self):
         """Reset controller state while preserving calibration"""
@@ -717,12 +707,12 @@ class PID:
         self.error_history = []
         self.stability_counter = 0
         
-        if self._kf is not None:
-            self._kf = KalmanFilter(
-                self.last_position,
-                self.last_velocity,
-                self._dt
-            )
+        # if self._kf is not None:
+        #     self._kf = KalmanFilter(
+        #         self.last_position,
+        #         self.last_velocity,
+        #         self._dt
+        #     )
 
     def restart(self):
         self._started = False

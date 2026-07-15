@@ -256,9 +256,9 @@ class NidaqManager(SignalInterface):
                             'Attempted writing analog data that is too large or too small, or other'
                             ' error when writing the task.'
                     )
-                    aotask.wait_until_done()
-                    aotask.stop()
-                    aotask.close()
+                aotask.wait_until_done()
+                aotask.stop()
+                aotask.close()
             except (nidaqmx._lib.DaqNotFoundError, nidaqmx._lib.DaqFunctionNotSupportedError, nidaqmx.DaqError) as e:
                     warnings.warn(str(e), RuntimeWarning)
             finally:
