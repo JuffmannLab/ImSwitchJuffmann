@@ -127,10 +127,10 @@ class iScatFocusController(ImConWidgetController):
             # 3. Enhanced measurement collection
             for i, v in enumerate(test_voltages):
                 # Move with overshoot compensation
-                if i > 0:
-                    overshoot = 0.1 * (v - test_voltages[i-1])
-                    self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
-                    time.sleep(0.1)
+                #if i > 0:
+                    #overshoot = 0.1 * (v - test_voltages[i-1])
+                    #self._master.positionersManager[self.positioner].setPosition(v + overshoot, 0)
+                    #time.sleep(0.1)
                 
                 # Final precise positioning
                 self._master.positionersManager[self.positioner].setPosition(v, 0)
@@ -497,6 +497,12 @@ class ProcessDataThread(Thread):
         """1D Gaussian model for fitting"""
         return a * np.exp(-((x - x0) ** 2) / (2 * sigma ** 2)) + offset
 
+    def gaussian_2d(self, xy, a, x0, y0, sigma_x, sigma_y, offset):
+        x, y = xy
+        g = a * np.exp(-( ((x - x0) ** 2) / (2 * sigma_x ** 2)
+                    + ((y - y0) ** 2) / (2 * sigma_y ** 2))) + offset
+
+        return g.ravel()
     def update(self):
         """Interface-compatible update method"""
         img = self.grabCameraFrame()
