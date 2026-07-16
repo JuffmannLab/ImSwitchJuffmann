@@ -3,6 +3,7 @@ import time
 import numpy as np
 from time import perf_counter
 import scipy.ndimage as ndi
+import scipy.optimize
 from lantz import Q_
 from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
@@ -417,15 +418,17 @@ class ProcessDataThread(Thread):
                 roi = img
             
             # Adaptive thresholding
-            threshold = np.percentile(roi, 95)  # Use top 5% pixels
-            mask = roi > threshold
+            #threshold = np.percentile(roi, 95)  # Use top 5% pixels
+            #mask = roi > threshold
             
             # Check if we have enough signal
-            if np.sum(mask) < 10:
-                return self._last_valid_position
+            #if np.sum(mask) < 10:
+                #return self._last_valid_position
                 
             # Weighted center of mass
-            y, x = ndi.center_of_mass(roi * mask)
+            beamfit = self._beamFit(roi)
+            x = beamfit[0]
+            #y, x = ndi.center_of_mass(roi * mask)
             global_x = x + x_start if 'x_start' in locals() else x
             
             # Validate position
@@ -433,14 +436,35 @@ class ProcessDataThread(Thread):
                 return self._last_valid_position
                 
             # Low-pass filter to reduce jumps
-            filtered_x = 0.8 * global_x + 0.2 * self._last_valid_position
-            self._last_valid_position = filtered_x
-            return filtered_x
+            #filtered_x = 0.8 * global_x + 0.2 * self._last_valid_position
+            self._last_valid_position = global_x
+            return global_x
             
         except Exception as e:
             self.__logger.warning(f"Position detection error: {str(e)}")
             return self._last_valid_position
-        
+
+
+    def analyzeFrame2(self,img):
+        """Main analysis method with calibration support"""
+        if img is None:
+            return self._last_valid_position
+
+        try:
+            # Gaussian filter with dynamic sigma based on image size
+            sigma = min(img.shape) * 0.02  # ~2% of image size
+            img_filtered = ndi.gaussian_filter(img, sigma=sigma)
+
+            fitted_x = self.getBeamPosition(img_filtered)
+
+
+            return fitted_x
+
+        except Exception as e:
+            self._controller._logger.warning(f"Analysis error: {str(e)}")
+            return self._last_valid_position
+
+
     def analyzeFrame(self, img):
         """Main analysis method with calibration support"""
         if img is None:
@@ -487,11 +511,46 @@ class ProcessDataThread(Thread):
             self._fit_fail_count += 1
             if self._fit_fail_count >= self._max_fit_fails:
                 # Fallback to center of mass
-                com = ndi.center_of_mass(img[max(0,approx_y-30):approx_y+30, 
+                com = ndi.center_of_mass(img[max(0,approx_y-30):approx_y+30,
                                            max(0,approx_x-30):approx_x+30])
                 self._last_valid_position = approx_x - 30 + com[1]
                 return self._last_valid_position
             return self._last_valid_position
+
+    def _beamFit(self, roi):
+        width, height = roi.shape
+        x, y = np.indices((width, height))
+
+        #find the brightest pixel coordinate as initial guess for the curve fit
+        y0, x0 = np.unravel_index(np.argmax(roi), roi.shape)
+
+        p0 = (
+            roi.max() - roi.min(),
+            x0,
+            y0,
+            5.0,
+            5.0,
+            roi.min()
+        )
+        try:
+            params, covariance = scipy.optimize.curve_fit(
+                self.gaussian_2d,
+                x,y,
+                roi.ravel(),
+                p0=p0,
+            )
+            return params
+
+        except Exception as e:
+            self._fit_fail_count += 1
+            if self._fit_fail_count >= self._max_fit_fails:
+                # Fallback to center of mass
+                com = ndi.center_of_mass(roi)
+                self._last_valid_position = com[0]
+                return com
+            else:
+                return None
+
 
     def gaussian_1d(self, x, a, x0, sigma, offset):
         """1D Gaussian model for fitting"""
@@ -506,7 +565,7 @@ class ProcessDataThread(Thread):
     def update(self):
         """Interface-compatible update method"""
         img = self.grabCameraFrame()
-        return self.analyzeFrame(img)
+        return self.analyzeFrame2(img)
 
 """
 class KalmanFilter:
