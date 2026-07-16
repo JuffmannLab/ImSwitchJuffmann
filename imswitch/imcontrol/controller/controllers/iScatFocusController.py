@@ -7,6 +7,8 @@ import scipy.optimize
 from lantz import Q_
 from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
+from matplotlib import pyplot as plt
+from matplotlib.patches import Rectangle
 
 from imswitch.imcommon.framework import Thread, Timer
 from imswitch.imcommon.model import initLogger
@@ -385,7 +387,7 @@ class ProcessDataThread(Thread):
     def __init__(self, controller, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._controller = controller
-        self._last_valid_position = 0  # Fallback position
+        self._last_valid_position = (0, 0)  # Fallback position
         self._fit_fail_count = 0
         self._max_fit_fails = 3  # Allow 3 consecutive failures before fallback
 
@@ -408,12 +410,29 @@ class ProcessDataThread(Thread):
         
         try:
             # Dynamic ROI based on last valid position
-            if np.isfinite(self._last_valid_position):
-                x_center = int(self._last_valid_position)
-                roi_width = min(100, img.shape[1]//3)
-                x_start = max(0, x_center - roi_width//2)
-                x_end = min(img.shape[1], x_center + roi_width//2)
-                roi = img[:, x_start:x_end]
+            res = np.isfinite(self._last_valid_position)
+            if self._last_valid_position != (0,0):
+                x_center, y_center = map(int, self._last_valid_position)
+
+                roi_half_width = 100
+                roi_half_height = 100
+
+                x_start = max(0, x_center - roi_half_width)
+                x_end = min(img.shape[0], x_center + roi_half_width)
+
+                y_start = max(0, y_center - roi_half_height)
+                y_end = min(img.shape[1], y_center + roi_half_height)
+
+                roi = img[x_start:x_end, y_start:y_end]
+
+                # fig, ax = plt.subplots()
+                # ax.imshow(img, cmap="gray")
+                # ax.add_patch(Rectangle((x_start, y_start),
+                #                        x_end - x_start,
+                #                        y_end - y_start,
+                #                        edgecolor="red",
+                #                        fill=False))
+                # plt.show()
             else:
                 roi = img
             
@@ -424,25 +443,32 @@ class ProcessDataThread(Thread):
             # Check if we have enough signal
             #if np.sum(mask) < 10:
                 #return self._last_valid_position
-                
-            # Weighted center of mass
-            beamfit = self._beamFit(roi)
-            x = beamfit[0]
+            sigma = min(roi.shape) * 0.02  # ~2% of image size
+            roi_filtered = ndi.gaussian_filter(roi, sigma=sigma)
+            #Don't do a fit on noisy data
+            if roi_filtered.min() == roi_filtered.max():
+                self._last_valid_position = (0, 0)
+                return 0
+            beamfit = self._beamFit(roi_filtered)
+            x = beamfit[1]
+            y = beamfit[2]
             #y, x = ndi.center_of_mass(roi * mask)
             global_x = x + x_start if 'x_start' in locals() else x
+            global_y = y + y_start if 'y_start' in locals() else y
             
             # Validate position
-            if not 0 <= global_x < img.shape[1]:
-                return self._last_valid_position
+            if not 0 <= global_x < img.shape[0]:
+                return self._last_valid_position[0]
                 
             # Low-pass filter to reduce jumps
             #filtered_x = 0.8 * global_x + 0.2 * self._last_valid_position
-            self._last_valid_position = global_x
+            self._last_valid_position = global_x, global_y
             return global_x
             
         except Exception as e:
             self.__logger.warning(f"Position detection error: {str(e)}")
-            return self._last_valid_position
+            self.__logger.error(f"Getting position failed: {str(e)}, beamfit: {beamfit}")
+            return self._last_valid_position[0]
 
 
     def analyzeFrame2(self,img):
@@ -452,17 +478,17 @@ class ProcessDataThread(Thread):
 
         try:
             # Gaussian filter with dynamic sigma based on image size
-            sigma = min(img.shape) * 0.02  # ~2% of image size
-            img_filtered = ndi.gaussian_filter(img, sigma=sigma)
+            #sigma = min(img.shape) * 0.02  # ~2% of image size
+            #img_filtered = ndi.gaussian_filter(img, sigma=sigma)
 
-            fitted_x = self.getBeamPosition(img_filtered)
+            fitted_x = self.getBeamPosition(img)
 
 
             return fitted_x
 
         except Exception as e:
             self._controller._logger.warning(f"Analysis error: {str(e)}")
-            return self._last_valid_position
+            return self._last_valid_position[0]
 
 
     def analyzeFrame(self, img):
@@ -522,7 +548,7 @@ class ProcessDataThread(Thread):
         x, y = np.indices((width, height))
 
         #find the brightest pixel coordinate as initial guess for the curve fit
-        y0, x0 = np.unravel_index(np.argmax(roi), roi.shape)
+        x0, y0 = np.unravel_index(np.argmax(roi), roi.shape)
 
         p0 = (
             roi.max() - roi.min(),
@@ -535,9 +561,9 @@ class ProcessDataThread(Thread):
         try:
             params, covariance = scipy.optimize.curve_fit(
                 self.gaussian_2d,
-                x,y,
+                (x,y),
                 roi.ravel(),
-                p0=p0,
+                p0=p0
             )
             return params
 
@@ -546,7 +572,7 @@ class ProcessDataThread(Thread):
             if self._fit_fail_count >= self._max_fit_fails:
                 # Fallback to center of mass
                 com = ndi.center_of_mass(roi)
-                self._last_valid_position = com[0]
+                self._last_valid_position = com
                 return com
             else:
                 return None
