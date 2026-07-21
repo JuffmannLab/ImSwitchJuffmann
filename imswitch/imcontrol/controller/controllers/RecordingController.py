@@ -28,7 +28,7 @@ class RecordingController(ImConWidgetController):
         self.lapseCurrent = -1
         self.lapseTotal = 0
 
-        self._widget.setsaveFormat(SaveFormat.HDF5.value)
+        self._widget.setsaveFormat(SaveFormat.TIFF.value)
         self._widget.setSnapSaveMode(SaveMode.Disk.value)
         self._widget.setSnapSaveModeVisible(self._setupInfo.hasWidget('Image'))
 
@@ -320,7 +320,7 @@ class RecordingController(ImConWidgetController):
         """ Gets the filename of the data to save. """
         filename = self._widget.getCustomFilename()
         if filename is None:
-            filename = time.strftime('%Hh%Mm%Ss')
+            filename = time.strftime('%d-%m-%Y_%Hh%Mm%Ss')
         return filename
 
     def attrChanged(self, key, value):

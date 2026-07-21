@@ -151,7 +151,7 @@ class BlackflyManager(DetectorManager):
         width, height = self._fullShape
         return np.zeros((height, width), dtype=np.uint16)
 
-    def getLatestFrame(self):
+    def getLatestFrame(self, is_save=False):
         """Return the latest frame from the Blackfly camera."""
         self.imageAcqLastFailed = False
 
@@ -179,7 +179,7 @@ class BlackflyManager(DetectorManager):
             if self._image is not None:
                 self._image.Release()
         return self.frame.copy()
-    
+
     def getChunk(self):
         """Return frames collected since the previous getChunk call."""
         if len(self._chunk_buffer) == 0:
