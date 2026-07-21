@@ -152,16 +152,20 @@ class BlackflyManager(DetectorManager):
         return np.zeros((height, width), dtype=np.uint16)
 
     def getLatestFrame(self):
-        """Temporary synthetic frame test."""
+        """Return the latest frame from the Blackfly camera."""
         self.imageAcqLastFailed = False
+
         try:
             if not self.cam.IsStreaming() : # normally should not happen but if acquisition stopped, restart it
                 self.startAcquisition()
+
             self._image = self.cam.GetNextImage(int(1000*self.timeout))
+
             if self._image.IsIncomplete():
                 print('ERROR ! : Image incomplete with image status %d ...' % self._image.GetImageStatus())
                 self.imageAcqLastFailed = True
                 return False
+
             else:
                 self.frame = np.array(self._image.GetNDArray())
 
@@ -170,11 +174,12 @@ class BlackflyManager(DetectorManager):
             print('Failed to grab array from camera : probably Timeout')
             self.imageAcqLastFailed = True
             return False
+
+        finally:
+            if self._image is not None:
+                self._image.Release()
         return self.frame.copy()
-
-
-
-        return frame
+    
     def getChunk(self):
         """Return frames collected since the previous getChunk call."""
         if len(self._chunk_buffer) == 0:
