@@ -1,4 +1,5 @@
 import numpy as np
+import PySpin
 
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
@@ -18,17 +19,21 @@ class BlackflyManager(DetectorManager):
         props = detectorInfo.managerProperties
 
         self._camera_index = props.get("cameraListIndex", 0)
-        self._timeout_ms = props.get("timeout_ms", 5000)
+        self._timeout_ms = props.get("timeout_ms", 1000)
         self._pixel_size = props.get("cameraEffPixelsize", 1.0)
 
         self.PySpin = None
         self.system = None
         self.cam_list = None
         self.cam = None
+        self.imageAcqLastFailed = False
+        self.frame = None
 
         self._running = False
         self._latest_frame = None
         self._chunk_buffer = []
+        self._image = None
+        self.timeout = 5
 
         self._model = "FLIR Blackfly"
         self._fullShape = (
@@ -89,9 +94,6 @@ class BlackflyManager(DetectorManager):
         )
 
     def _open_camera(self):
-        import PySpin
-
-        self.PySpin = PySpin
 
         self.system = PySpin.System.GetInstance()
         self.cam_list = self.system.GetCameras()
@@ -141,31 +143,38 @@ class BlackflyManager(DetectorManager):
         exposure_ms = self.parameters["exposure"].value
         return int(exposure_ms * 1000)
 
+    def _getFallbackFrame(self):
+        """Return a valid fallback frame so ImSwitch never receives None."""
+        if self._latest_frame is not None:
+            return self._latest_frame
+
+        width, height = self._fullShape
+        return np.zeros((height, width), dtype=np.uint16)
+
     def getLatestFrame(self):
-        """Return latest frame as numpy array with shape (height, width)."""
-        if not self._running:
-            self.startAcquisition()
-
-        image = None
-
+        """Temporary synthetic frame test."""
+        self.imageAcqLastFailed = False
         try:
-            image = self.cam.GetNextImage(self._timeout_ms)
+            if not self.cam.IsStreaming() : # normally should not happen but if acquisition stopped, restart it
+                self.startAcquisition()
+            self._image = self.cam.GetNextImage(int(1000*self.timeout))
+            if self._image.IsIncomplete():
+                print('ERROR ! : Image incomplete with image status %d ...' % self._image.GetImageStatus())
+                self.imageAcqLastFailed = True
+                return False
+            else:
+                self.frame = np.array(self._image.GetNDArray())
 
-            if image.IsIncomplete():
-                status = image.GetImageStatus()
-                raise RuntimeError(f"Image incomplete. Status: {status}")
+        except PySpin.SpinnakerException as ex:
+            print('ERROR : %s' % ex)
+            print('Failed to grab array from camera : probably Timeout')
+            self.imageAcqLastFailed = True
+            return False
+        return self.frame.copy()
 
-            frame = image.GetNDArray().copy()
 
-            self._latest_frame = frame
-            self._chunk_buffer.append(frame)
 
-            return frame
-
-        finally:
-            if image is not None:
-                image.Release()
-
+        return frame
     def getChunk(self):
         """Return frames collected since the previous getChunk call."""
         if len(self._chunk_buffer) == 0:
@@ -181,17 +190,32 @@ class BlackflyManager(DetectorManager):
 
     def startAcquisition(self):
         """Start image acquisition."""
-        if not self._running:
+        if self._running:
+            return
+
+        try:
             self.cam.BeginAcquisition()
             self._running = True
             self.__logger.info("Blackfly acquisition started")
 
+        except Exception as e:
+            self._running = False
+            self.__logger.warning(f"Could not start Blackfly acquisition: {e}")
+
     def stopAcquisition(self):
         """Stop image acquisition."""
-        if self._running:
+        if not self._running:
+            return
+
+        try:
             self.cam.EndAcquisition()
-            self._running = False
             self.__logger.info("Blackfly acquisition stopped")
+
+        except Exception as e:
+            self.__logger.warning(f"Could not stop Blackfly acquisition: {e}")
+
+        finally:
+            self._running = False
 
     def finalize(self):
         """Safely disconnect the camera."""
