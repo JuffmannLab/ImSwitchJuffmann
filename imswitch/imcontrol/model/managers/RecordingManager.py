@@ -113,14 +113,32 @@ class NPYStorer(Storer):
                 logger.info(f"Saved image to npy file {path}")
 
 class TiffStorer(Storer):
-    """ A storer that stores the images in a series of tiff files """
+    """A storer that stores the images in a series of tiff files."""
 
     def snap(self, images: Dict[str, np.ndarray], attrs: Dict[str, str] = None):
         for channel, image in images.items():
+            # Save original image
             with AsTemporayFile(f'{self.filepath}_{channel}.tiff') as path:
-                tiff.imwrite(path, image,) # TODO: Parse metadata to tiff meta data
+                tiff.imwrite(path, image)
 
+            # Save contrast-stretched preview image for quick visual inspection
+            image_float = image.astype(np.float32)
 
+            lo, hi = np.percentile(image_float, [1, 99.8])
+
+            if hi > lo:
+                preview = np.clip((image_float - lo) / (hi - lo), 0, 1)
+                preview = (preview * 255).astype(np.uint8)
+            else:
+                preview = np.zeros_like(image, dtype=np.uint8)
+
+            with AsTemporayFile(f'{self.filepath}_{channel}_preview.tiff') as preview_path:
+                tiff.imwrite(preview_path, preview)
+
+            logger.info(
+                f"Saved TIFF image and preview for {channel}; "
+                f"preview contrast limits: lo={lo}, hi={hi}"
+            )
 
 class SaveMode(enum.Enum):
     Disk = 1

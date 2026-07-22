@@ -172,6 +172,41 @@ class BlackflyManager(DetectorManager):
         except PySpin.SpinnakerException as ex:
             self.__logger.warning(f"Could not set Blackfly exposure: {ex}")
 
+    def _setGain(self, gain):
+        """Set Blackfly gain."""
+        gain_value = float(gain)
+
+        try:
+            self.cam.GainAuto.SetValue(PySpin.GainAuto_Off)
+        except PySpin.SpinnakerException as ex:
+            self.__logger.warning(f"Could not disable auto gain: {ex}")
+
+        try:
+            min_gain = self.cam.Gain.GetMin()
+            max_gain = self.cam.Gain.GetMax()
+
+            try:
+                unit = self.cam.Gain.GetUnit()
+            except Exception:
+                unit = "unknown"
+
+            self.__logger.info(
+                f"Blackfly gain range: min={min_gain:.3f}, max={max_gain:.3f}, unit={unit}"
+            )
+
+            gain_value = max(min_gain, min(gain_value, max_gain))
+
+            self.cam.Gain.SetValue(gain_value)
+
+            actual_gain = self.cam.Gain.GetValue()
+
+            self.__logger.info(
+                f"Blackfly gain requested {float(gain):.3f}, set to {actual_gain:.3f} {unit}"
+            )
+
+        except PySpin.SpinnakerException as ex:
+            self.__logger.warning(f"Could not set Blackfly gain: {ex}")
+
     def setParameter(self, name, value):
         """Update an ImSwitch detector parameter and apply it to the camera."""
         parameters = super().setParameter(name, value)
@@ -181,8 +216,10 @@ class BlackflyManager(DetectorManager):
         if name == "exposure":
             self._setExposureMs(value)
 
-        return parameters
+        elif name == "gain":
+            self._setGain(value)
 
+        return parameters
 
 
     def _getFallbackFrame(self):
@@ -196,32 +233,85 @@ class BlackflyManager(DetectorManager):
     def getLatestFrame(self, is_save=False):
         """Return the latest frame from the Blackfly camera."""
         self.imageAcqLastFailed = False
+        image = None
+
+        # If Snap is requested while LiveView is running, save the last good
+        # LiveView frame instead of asking the camera for a new frame.
+        if is_save and self._latest_frame is not None:
+            self.__logger.info(
+                "Saving latest live frame: "
+                f"min={self._latest_frame.min()}, "
+                f"max={self._latest_frame.max()}, "
+                f"mean={self._latest_frame.mean():.2f}"
+            )
+            return self._latest_frame.copy()
 
         try:
-            if not self.cam.IsStreaming() : # normally should not happen but if acquisition stopped, restart it
+            if not self.cam.IsStreaming():
                 self.startAcquisition()
 
-            self._image = self.cam.GetNextImage(int(1000*self.timeout))
+            image = self.cam.GetNextImage(int(1000 * self.timeout))
 
-            if self._image.IsIncomplete():
-                print('ERROR ! : Image incomplete with image status %d ...' % self._image.GetImageStatus())
+            if image.IsIncomplete():
+                print(
+                    "ERROR ! : Image incomplete with image status %d ..."
+                    % image.GetImageStatus()
+                )
                 self.imageAcqLastFailed = True
                 return False
 
-            else:
-                self.frame = np.array(self._image.GetNDArray())
+            self.frame = image.GetNDArray().copy()
+            self._latest_frame = self.frame
+
+            # Temporary diagnostic log, only every 200 frames
+            if not hasattr(self, "_frame_counter"):
+                self._frame_counter = 0
+
+            self._frame_counter += 1
+
+            if self._frame_counter % 200 == 0:
+                try:
+                    exposure_ms = self.cam.ExposureTime.GetValue() / 1000.0
+                except PySpin.SpinnakerException:
+                    exposure_ms = None
+
+                try:
+                    gain_value = self.cam.Gain.GetValue()
+                except PySpin.SpinnakerException:
+                    gain_value = None
+
+                try:
+                    exposure_auto = self.cam.ExposureAuto.GetValue()
+                except PySpin.SpinnakerException:
+                    exposure_auto = None
+
+                try:
+                    gain_auto = self.cam.GainAuto.GetValue()
+                except PySpin.SpinnakerException:
+                    gain_auto = None
+
+                self.__logger.info(
+                    "Frame stats: "
+                    f"min={self.frame.min()}, "
+                    f"max={self.frame.max()}, "
+                    f"mean={self.frame.mean():.1f}, "
+                    f"exposure={exposure_ms} ms, "
+                    f"gain={gain_value}, "
+                    f"ExposureAuto={exposure_auto}, "
+                    f"GainAuto={gain_auto}"
+                )
+
+            return self.frame
 
         except PySpin.SpinnakerException as ex:
-            print('ERROR : %s' % ex)
-            print('Failed to grab array from camera : probably Timeout')
+            print("ERROR : %s" % ex)
+            print("Failed to grab array from camera : probably Timeout")
             self.imageAcqLastFailed = True
             return False
 
         finally:
-            if self._image is not None:
-                self._image.Release()
-        return self.frame.copy()
-
+            if image is not None:
+                image.Release()
     def getChunk(self):
         """Return frames collected since the previous getChunk call."""
         if len(self._chunk_buffer) == 0:
