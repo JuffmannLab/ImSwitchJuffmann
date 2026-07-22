@@ -143,6 +143,48 @@ class BlackflyManager(DetectorManager):
         exposure_ms = self.parameters["exposure"].value
         return int(exposure_ms * 1000)
 
+    def getExposure(self):
+        """Return exposure time in microseconds."""
+        exposure_ms = self.parameters["exposure"].value
+        return int(exposure_ms * 1000)
+
+    def _setExposureMs(self, exposure_ms):
+        """Set Blackfly exposure time from milliseconds."""
+        exposure_us = float(exposure_ms) * 1000.0
+
+        try:
+            self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
+        except PySpin.SpinnakerException as ex:
+            self.__logger.warning(f"Could not disable auto exposure: {ex}")
+
+        try:
+            min_us = self.cam.ExposureTime.GetMin()
+            max_us = self.cam.ExposureTime.GetMax()
+
+            exposure_us = max(min_us, min(exposure_us, max_us))
+
+            self.cam.ExposureTime.SetValue(exposure_us)
+
+            self.__logger.info(
+                f"Blackfly exposure set to {exposure_us / 1000.0:.3f} ms"
+            )
+
+        except PySpin.SpinnakerException as ex:
+            self.__logger.warning(f"Could not set Blackfly exposure: {ex}")
+
+    def setParameter(self, name, value):
+        """Update an ImSwitch detector parameter and apply it to the camera."""
+        parameters = super().setParameter(name, value)
+
+        self.__logger.info(f"Blackfly parameter changed: {name} = {value}")
+
+        if name == "exposure":
+            self._setExposureMs(value)
+
+        return parameters
+
+
+
     def _getFallbackFrame(self):
         """Return a valid fallback frame so ImSwitch never receives None."""
         if self._latest_frame is not None:
