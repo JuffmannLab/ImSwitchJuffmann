@@ -130,13 +130,35 @@ class BlackflyManager(DetectorManager):
         return [1, um_per_pixel, um_per_pixel]
 
     def crop(self, hpos, vpos, hsize, vsize):
-        """Set the camera ROI. First version: only update ImSwitch shape."""
-        self.__logger.debug(
+        """Set the current software ROI."""
+        self.__logger.info(
             f"Requested ROI: {hsize}x{vsize} at ({hpos}, {vpos})"
         )
 
-        self._frameStart = (hpos, vpos)
-        self._shape = (hsize, vsize)
+        self._frameStart = (int(hpos), int(vpos))
+        self._shape = (int(hsize), int(vsize))
+
+    def _applySoftwareCrop(self, frame):
+        """Apply the current ImSwitch ROI as a software crop.
+
+        The camera still acquires the full frame. This only crops the numpy array
+        before sending it to LiveView/Snap.
+        """
+        if not hasattr(self, "_frameStart") or not hasattr(self, "_shape"):
+            return frame
+
+        hpos, vpos = self._frameStart
+        hsize, vsize = self._shape
+
+        height, width = frame.shape[:2]
+
+        hpos = max(0, min(int(hpos), width - 1))
+        vpos = max(0, min(int(vpos), height - 1))
+
+        hsize = max(1, min(int(hsize), width - hpos))
+        vsize = max(1, min(int(vsize), height - vpos))
+
+        return frame[vpos:vpos + vsize, hpos:hpos + hsize]
 
     def getExposure(self):
         """Return exposure time in microseconds."""
@@ -235,20 +257,23 @@ class BlackflyManager(DetectorManager):
 
         During LiveView, frames are continuously acquired from the camera.
         During Snap, ImSwitch calls this method with is_save=True. In that case,
-        we return the latest good LiveView frame, so the saved snap matches what
-        the user sees in LiveView.
+        we return the latest good LiveView frame, cropped to the current ROI.
         """
         self.imageAcqLastFailed = False
         image = None
 
         if is_save and self._latest_frame is not None:
+            frame_to_save = self._applySoftwareCrop(self._latest_frame)
+
             self.__logger.info(
                 "Saving latest live frame: "
-                f"min={self._latest_frame.min()}, "
-                f"max={self._latest_frame.max()}, "
-                f"mean={self._latest_frame.mean():.2f}"
+                f"shape={frame_to_save.shape}, "
+                f"min={frame_to_save.min()}, "
+                f"max={frame_to_save.max()}, "
+                f"mean={frame_to_save.mean():.2f}"
             )
-            return self._latest_frame.copy()
+
+            return frame_to_save.copy()
 
         try:
             if not self.cam.IsStreaming():
@@ -264,7 +289,8 @@ class BlackflyManager(DetectorManager):
                 self.imageAcqLastFailed = True
                 return False
 
-            self.frame = image.GetNDArray().copy()
+            full_frame = image.GetNDArray().copy()
+            self.frame = self._applySoftwareCrop(full_frame)
             self._latest_frame = self.frame
 
             return self.frame
