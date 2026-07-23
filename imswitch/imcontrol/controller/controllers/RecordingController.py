@@ -320,7 +320,7 @@ class RecordingController(ImConWidgetController):
         """ Gets the filename of the data to save. """
         filename = self._widget.getCustomFilename()
         if filename is None:
-            filename = time.strftime('%d-%m-%Y_%Hh%Mm%Ss')
+            filename = time.strftime('%d%m%Y_%H%M%S')
         return filename
 
     def attrChanged(self, key, value):

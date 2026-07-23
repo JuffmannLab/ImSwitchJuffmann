@@ -231,12 +231,16 @@ class BlackflyManager(DetectorManager):
         return np.zeros((height, width), dtype=np.uint16)
 
     def getLatestFrame(self, is_save=False):
-        """Return the latest frame from the Blackfly camera."""
+        """Return the latest frame from the Blackfly camera.
+
+        During LiveView, frames are continuously acquired from the camera.
+        During Snap, ImSwitch calls this method with is_save=True. In that case,
+        we return the latest good LiveView frame, so the saved snap matches what
+        the user sees in LiveView.
+        """
         self.imageAcqLastFailed = False
         image = None
 
-        # If Snap is requested while LiveView is running, save the last good
-        # LiveView frame instead of asking the camera for a new frame.
         if is_save and self._latest_frame is not None:
             self.__logger.info(
                 "Saving latest live frame: "
@@ -263,44 +267,6 @@ class BlackflyManager(DetectorManager):
             self.frame = image.GetNDArray().copy()
             self._latest_frame = self.frame
 
-            # Temporary diagnostic log, only every 200 frames
-            if not hasattr(self, "_frame_counter"):
-                self._frame_counter = 0
-
-            self._frame_counter += 1
-
-            if self._frame_counter % 200 == 0:
-                try:
-                    exposure_ms = self.cam.ExposureTime.GetValue() / 1000.0
-                except PySpin.SpinnakerException:
-                    exposure_ms = None
-
-                try:
-                    gain_value = self.cam.Gain.GetValue()
-                except PySpin.SpinnakerException:
-                    gain_value = None
-
-                try:
-                    exposure_auto = self.cam.ExposureAuto.GetValue()
-                except PySpin.SpinnakerException:
-                    exposure_auto = None
-
-                try:
-                    gain_auto = self.cam.GainAuto.GetValue()
-                except PySpin.SpinnakerException:
-                    gain_auto = None
-
-                self.__logger.info(
-                    "Frame stats: "
-                    f"min={self.frame.min()}, "
-                    f"max={self.frame.max()}, "
-                    f"mean={self.frame.mean():.1f}, "
-                    f"exposure={exposure_ms} ms, "
-                    f"gain={gain_value}, "
-                    f"ExposureAuto={exposure_auto}, "
-                    f"GainAuto={gain_auto}"
-                )
-
             return self.frame
 
         except PySpin.SpinnakerException as ex:
@@ -312,6 +278,7 @@ class BlackflyManager(DetectorManager):
         finally:
             if image is not None:
                 image.Release()
+
     def getChunk(self):
         """Return frames collected since the previous getChunk call."""
         if len(self._chunk_buffer) == 0:
