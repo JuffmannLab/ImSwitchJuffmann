@@ -263,7 +263,9 @@ class BlackflyManager(DetectorManager):
         image = None
 
         if is_save and self._latest_frame is not None:
-            frame_to_save = self._applySoftwareCrop(self._latest_frame)
+            # The latest live frame has already been cropped if an ROI is active.
+            # Do not apply the software crop again here, otherwise Snap crops twice.
+            frame_to_save = self._latest_frame
 
             self.__logger.info(
                 "Saving latest live frame: "
