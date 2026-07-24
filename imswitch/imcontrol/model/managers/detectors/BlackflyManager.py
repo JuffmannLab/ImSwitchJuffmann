@@ -1,9 +1,13 @@
 import numpy as np
 import PySpin
+from pathlib import Path
+import csv
+import time
 
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
     DetectorManager,
+    DetectorAction,
     DetectorNumberParameter,
     DetectorListParameter,
 )
@@ -81,6 +85,16 @@ class BlackflyManager(DetectorManager):
                 editable=True,
             ),
         }
+        actions = {
+            "Save horizontal profile": DetectorAction(
+                group="Profiles",
+                func=self.saveHorizontalProfile,
+            ),
+            "Save vertical profile": DetectorAction(
+                group="Profiles",
+                func=self.saveVerticalProfile,
+            ),
+        }
 
         super().__init__(
             detectorInfo,
@@ -89,7 +103,7 @@ class BlackflyManager(DetectorManager):
             supportedBinnings=[1],
             model=self._model,
             parameters=parameters,
-            actions=None,
+            actions=actions,
             croppable=True,
         )
 
@@ -349,6 +363,113 @@ class BlackflyManager(DetectorManager):
         finally:
             self._running = False
 
+    def saveHorizontalProfile(self):
+        """Save a horizontal averaged intensity profile from the latest frame."""
+        self._saveLatestProfile(mode="horizontal")
+
+    def saveVerticalProfile(self):
+        """Save a vertical averaged intensity profile from the latest frame."""
+        self._saveLatestProfile(mode="vertical")
+
+    def _saveLatestProfile(self, mode):
+        """Save a 1D intensity profile from the latest displayed frame.
+
+        The latest frame already includes the current software ROI, so this uses
+        exactly what is shown in LiveView/Snap.
+        """
+        if self._latest_frame is None:
+            self.__logger.warning("Cannot save profile: no latest frame available.")
+            return
+
+        image = np.asarray(self._latest_frame)
+
+        if image.ndim == 3 and image.shape[-1] in (3, 4):
+            image = image[..., :3].mean(axis=2)
+
+        if image.ndim != 2:
+            self.__logger.warning(
+                f"Cannot save profile: unsupported image shape {image.shape}."
+            )
+            return
+
+        height, width = image.shape
+
+        if mode == "horizontal":
+            # Average all rows. One gray value per x pixel.
+            pixels = np.arange(width)
+            profile = image.mean(axis=0)
+            x_label = "x pixel"
+            title = "Horizontal averaged profile"
+
+        elif mode == "vertical":
+            # Average all columns. One gray value per y pixel.
+            pixels = np.arange(height)
+            profile = image.mean(axis=1)
+            x_label = "y pixel"
+            title = "Vertical averaged profile"
+
+        else:
+            self.__logger.warning(f"Unknown profile mode: {mode}")
+            return
+
+        output_dir = self._getProfileOutputDir()
+        timestamp = time.strftime("%d%m%Y_%H%M%S")
+        safe_name = self.name.replace(" ", "_")
+
+        csv_path = output_dir / f"{timestamp}_{safe_name}_profile_{mode}.csv"
+        png_path = output_dir / f"{timestamp}_{safe_name}_profile_{mode}.png"
+
+        self._writeProfileCsv(csv_path, pixels, profile)
+        self._writeProfilePlot(
+            png_path=png_path,
+            pixels=pixels,
+            profile=profile,
+            image_shape=image.shape,
+            x_label=x_label,
+            title=title,
+        )
+
+        self.__logger.info(
+            f"Saved {mode} profile from frame shape {image.shape}: "
+            f"CSV={csv_path}, PNG={png_path}"
+        )
+
+    def _getProfileOutputDir(self):
+        """Return the profile output directory inside ImSwitch recordings."""
+        imswitch_root = Path(__file__).resolve().parents[4]
+        output_dir = imswitch_root / "ImSwitch" / "recordings" / time.strftime("%Y-%m-%d")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    def _writeProfileCsv(self, csv_path, pixels, profile):
+        """Write profile data as pixel, gray_value CSV."""
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["pixel", "gray_value"])
+
+            for pixel, value in zip(pixels, profile):
+                writer.writerow([int(pixel), float(value)])
+
+    def _writeProfilePlot(self, png_path, pixels, profile, image_shape, x_label, title):
+        """Write profile plot as PNG."""
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as ex:
+            self.__logger.warning(
+                f"Could not save profile plot because matplotlib is unavailable: {ex}"
+            )
+            return
+
+        plt.figure(figsize=(9, 4.5))
+        plt.plot(pixels, profile)
+        plt.xlabel(x_label)
+        plt.ylabel("gray value")
+        plt.title(f"{title}, frame shape={image_shape}")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(png_path, dpi=150)
+        plt.close()
+        
     def finalize(self):
         """Safely disconnect the camera."""
         super().finalize()
