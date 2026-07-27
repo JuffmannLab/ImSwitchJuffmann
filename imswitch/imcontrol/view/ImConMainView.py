@@ -65,6 +65,7 @@ class ImConMainView(QtWidgets.QMainWindow):
             'AlignmentLine': _DockInfo(name='Alignment Tool', yPosition=3),
             'AlignAverage': _DockInfo(name='Axial Alignment Tool', yPosition=3),
             'AlignXY': _DockInfo(name='Rotational Alignment Tool', yPosition=3),
+            'LiveProfile': _DockInfo(name='Live Profile', yPosition=3),
             'ULenses': _DockInfo(name='uLenses Tool', yPosition=3),
             'FFT': _DockInfo(name='FFT Tool', yPosition=3),
             'Watcher': _DockInfo(name='File Watcher', yPosition=3),
