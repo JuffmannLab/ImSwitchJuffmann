@@ -36,28 +36,34 @@ class LiveProfileController(LiveUpdatedController):
         if image.ndim == 3:
             image = image.mean(axis=2)
 
-        height, width = image.shape[:2]
+        cropped = self.getCroppedImage(
+            image,
+            self._widget.getROIGraphicsItem()
+        )
+
+        if cropped.size == 0:
+            return
+
+        height, width = cropped.shape[:2]
 
         # Average over a thin central band to reduce noise slightly.
         band_half_width = 2
 
         if self.profileMode == "horizontal":
-            # Horizontal line profile:
-            # x-axis = x pixel, y-axis = gray value around the central row.
+            # Horizontal profile inside the ROI.
             center_y = height // 2
             y0 = max(0, center_y - band_half_width)
             y1 = min(height, center_y + band_half_width + 1)
 
-            profile = np.mean(image[y0:y1, :], axis=0)
+            profile = np.mean(cropped[y0:y1, :], axis=0)
 
         else:
-            # Vertical line profile:
-            # x-axis = y pixel, y-axis = gray value around the central column.
+            # Vertical profile inside the ROI.
             center_x = width // 2
             x0 = max(0, center_x - band_half_width)
             x1 = min(width, center_x + band_half_width + 1)
 
-            profile = np.mean(image[:, x0:x1], axis=1)
+            profile = np.mean(cropped[:, x0:x1], axis=1)
 
         self._widget.updateGraph(profile)
 
@@ -70,33 +76,44 @@ class LiveProfileController(LiveUpdatedController):
             self.roiAdded = True
 
     def toggleROI(self, show):
-        """Enable or disable the live profile plot."""
-        self.active = show
+        """Enable or disable the live profile plot and show the ROI."""
+        if show:
+            self.addROI()
 
+            roiSize = (256, 256)
+            roiCenter = self._commChannel.getCenterViewbox()
+
+            roiPos = (
+                roiCenter[0] - 0.5 * roiSize[0],
+                roiCenter[1] - 0.5 * roiSize[1],
+            )
+
+            self._widget.showROI(roiPos, roiSize)
+        else:
+            self._widget.hideROI()
+
+        self.active = show
     def setProfileMode(self, mode):
         """Set horizontal or vertical profile mode."""
         self.profileMode = mode
 
     def getCroppedImage(self, image, roiItem):
-        """Return the cropped image within the ROI.
-
-        This follows the existing ImSwitch AlignXY/AlignAverage ROI convention.
-        """
+        """Return the cropped image within the LiveProfile ROI."""
         x0, y0, x1, y1 = roiItem.bounds
 
-        x0 = int(x0)
-        y0 = int(y0)
-        x1 = int(x1)
-        y1 = int(y1)
+        x0 = int(round(x0))
+        y0 = int(round(y0))
+        x1 = int(round(x1))
+        y1 = int(round(y1))
 
         height, width = image.shape[:2]
 
-        x0 = max(0, min(x0, height))
-        x1 = max(0, min(x1, height))
-        y0 = max(0, min(y0, width))
-        y1 = max(0, min(y1, width))
+        x0 = max(0, min(x0, width))
+        x1 = max(0, min(x1, width))
+        y0 = max(0, min(y0, height))
+        y1 = max(0, min(y1, height))
 
         if x1 <= x0 or y1 <= y0:
             return image[0:0, 0:0]
 
-        return image[x0:x1, y0:y1]
+        return image[y0:y1, x0:x1]
