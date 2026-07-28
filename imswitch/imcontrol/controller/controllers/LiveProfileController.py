@@ -1,7 +1,6 @@
 import numpy as np
-
 from ..basecontrollers import LiveUpdatedController
-
+from imswitch.imcontrol.model.liveprofile_state import liveprofile_state
 
 class LiveProfileController(LiveUpdatedController):
     """Controller for the live intensity profile widget."""
@@ -65,6 +64,12 @@ class LiveProfileController(LiveUpdatedController):
 
             profile = np.mean(cropped[:, x0:x1], axis=1)
 
+        liveprofile_state.update(
+            profile=profile,
+            roi_image=cropped,
+            profile_mode=self.profileMode
+        )
+        
         self._widget.updateGraph(profile)
 
     def addROI(self):
