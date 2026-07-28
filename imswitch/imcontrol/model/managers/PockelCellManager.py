@@ -18,7 +18,6 @@ class PockelCellManager(SignalInterface):
 
         self.hv = False
         self.reset = False
-
         self.samplesWritten = pd.int32()
         self.analogOutTask = pd.Task()
         self.digitalOutTask = pd.Task()

@@ -2,6 +2,12 @@ import logging
 import os
 import sys
 import traceback
+import ctypes
+
+try:
+    ctypes.WinDLL("nicaiu.dll")
+except OSError:
+    pass
 
 from qtpy import QtCore, QtGui, QtWidgets
 
