@@ -4,6 +4,7 @@ from pathlib import Path
 import csv
 import time
 
+from imswitch.imcontrol.model.liveprofile_state import liveprofile_state
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
     DetectorManager,
@@ -93,6 +94,14 @@ class BlackflyManager(DetectorManager):
             "Save vertical profile": DetectorAction(
                 group="Profiles",
                 func=self.saveVerticalProfile,
+            ),
+            "Save LiveProfile profile": DetectorAction(
+                group="LiveProfile",
+                func=lambda: self.saveLiveProfileProfile(),
+            ),
+            "Save LiveProfile ROI image": DetectorAction(
+                group="LiveProfile",
+                func=lambda: self.saveLiveProfileROIImage(),
             ),
         }
 
@@ -490,3 +499,84 @@ class BlackflyManager(DetectorManager):
         if self.system is not None:
             self.system.ReleaseInstance()
             self.system = None
+
+    def _getLiveProfileOutputDir(self):
+        """Return output directory for LiveProfile files."""
+        output_dir = Path("ImSwitch") / "ImSwitch" / "recordings" / time.strftime("%Y-%m-%d")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    def saveLiveProfileProfile(self):
+        """Save the latest LiveProfile curve as CSV and PNG."""
+        profile = liveprofile_state.profile
+        mode = liveprofile_state.profile_mode or "unknown"
+
+        if profile is None or profile.size == 0:
+            self.__logger.warning("No LiveProfile profile available to save.")
+            print("LiveProfile: no profile available to save.")
+            return
+
+        output_dir = self._getLiveProfileOutputDir()
+        timestamp = liveprofile_state.timestamp or time.strftime("%d%m%Y_%H%M%S")
+
+        base_name = f"{timestamp}_liveprofile_{mode}"
+        csv_path = output_dir / f"{base_name}.csv"
+        png_path = output_dir / f"{base_name}.png"
+
+        pixels = np.arange(profile.size)
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["pixel", "gray_value"])
+            for pixel, value in zip(pixels, profile):
+                writer.writerow([int(pixel), float(value)])
+
+        try:
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots()
+            ax.plot(pixels, profile)
+            ax.set_xlabel("Pixel")
+            ax.set_ylabel("Gray value / a.u.")
+            ax.set_title(f"LiveProfile {mode}")
+            fig.tight_layout()
+            fig.savefig(png_path, dpi=150)
+            plt.close(fig)
+
+            self.__logger.info(f"Saved LiveProfile CSV to {csv_path}")
+            self.__logger.info(f"Saved LiveProfile PNG to {png_path}")
+            print(f"LiveProfile: saved CSV to {csv_path}")
+            print(f"LiveProfile: saved PNG to {png_path}")
+
+        except Exception as exc:
+            self.__logger.warning(f"Saved CSV but could not save LiveProfile PNG: {exc}")
+            print(f"LiveProfile: saved CSV to {csv_path}")
+            print(f"LiveProfile: could not save PNG: {exc}")
+
+    def saveLiveProfileROIImage(self):
+        """Save the latest LiveProfile ROI image as TIFF."""
+        roi_image = liveprofile_state.roi_image
+
+        if roi_image is None or roi_image.size == 0:
+            self.__logger.warning("No LiveProfile ROI image available to save.")
+            print("LiveProfile: no ROI image available to save.")
+            return
+
+        output_dir = self._getLiveProfileOutputDir()
+        timestamp = liveprofile_state.timestamp or time.strftime("%d%m%Y_%H%M%S")
+
+        tiff_path = output_dir / f"{timestamp}_liveprofile_roi.tiff"
+
+        try:
+            import tifffile
+
+            tifffile.imwrite(tiff_path, roi_image)
+
+            self.__logger.info(f"Saved LiveProfile ROI image to {tiff_path}")
+            print(f"LiveProfile: saved ROI image to {tiff_path}")
+
+        except Exception as exc:
+            self.__logger.warning(f"Could not save LiveProfile ROI image: {exc}")
+            print(f"LiveProfile: could not save ROI image: {exc}")
+
+
