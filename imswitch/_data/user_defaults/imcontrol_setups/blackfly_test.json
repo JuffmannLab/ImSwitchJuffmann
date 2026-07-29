@@ -78,43 +78,26 @@
         }
     },
     "positioners": {
-        "X": {
-            "analogChannel": "Dev1/ao0",
-            "digitalLine": null,
-            "managerName": "NidaqPositionerManager",
+        "BPC303": {
+            "managerName": "ThorlabsBPC303Manager",
             "managerProperties": {
-                "conversionFactor": 1.75,
+                "serialNumber": "71877822",
+                "kinesisPath": "C:\\Program Files\\Thorlabs\\Kinesis",
+                "channels": {
+                    "PX": 1,
+                    "PY": 2,
+                    "PZ": 3
+                },
                 "minVolt": 0,
-                "maxVolt": 10
+                "maxVolt": 75,
+                "pollingIntervalMs": 250
             },
-            "axes": ["X"],
-            "forScanning": true,
-            "forPositioning": true
-        },
-        "Y": {
-            "analogChannel": "Dev1/ao1",
-            "digitalLine": null,
-            "managerName": "NidaqPositionerManager",
-            "managerProperties": {
-                "conversionFactor": 1.75,
-                "minVolt": 0,
-                "maxVolt": 10
-            },
-            "axes": ["Y"],
-            "forScanning": true,
-            "forPositioning": true
-        },
-        "Z": {
-            "analogChannel": "Dev1/ao2",
-            "digitalLine": null,
-            "managerName": "NidaqPositionerManager",
-            "managerProperties": {
-                "conversionFactor": 1.75,
-                "minVolt": 0,
-                "maxVolt": 10
-            },
-            "axes": ["Z"],
-            "forScanning": true,
+            "axes": [
+                "PX",
+                "PY",
+                "PZ"
+            ],
+            "forScanning": false,
             "forPositioning": true
         }
     },
@@ -168,15 +151,7 @@
         "View",
         "Recording",
         "Image",
-        "Laser",
         "Positioner",
-        "Scan",
-        "AlignXY",
-        "AlignAverage",
-        "AlignmentLine",
-        "LiveProfile",
-        "BeadRec",
-        "FFT",
-        "ULenses"
+        "LiveProfile"
     ]
 }
