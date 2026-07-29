@@ -23,16 +23,17 @@ class PositionerWidget(Widget):
             axis = axes[i]
             parNameSuffix = self._getParNameSuffix(positionerName, axis)
             label = f'{positionerName} -- {axis}' if positionerName != axis else positionerName
+            unit = self._getUnit(positionerName, axis)
 
             self.pars['Label' + parNameSuffix] = QtWidgets.QLabel(f'<strong>{label}</strong>')
             self.pars['Label' + parNameSuffix].setTextFormat(QtCore.Qt.RichText)
-            self.pars['Position' + parNameSuffix] = QtWidgets.QLabel(f'<strong>{0:.2f} µm</strong>')
+            self.pars['Position' + parNameSuffix] = QtWidgets.QLabel(f'<strong>{0:.2f} {unit}</strong>')
             self.pars['Position' + parNameSuffix].setTextFormat(QtCore.Qt.RichText)
             self.pars['UpButton' + parNameSuffix] = guitools.BetterPushButton('+')
             self.pars['DownButton' + parNameSuffix] = guitools.BetterPushButton('-')
-            self.pars['StepEdit' + parNameSuffix] = QtWidgets.QLineEdit('0.05')
-            self.pars['StepUnit' + parNameSuffix] = QtWidgets.QLabel(' µm')
-
+            self.pars['StepEdit' + parNameSuffix] = QtWidgets.QLineEdit('0.5')
+            self.pars['StepUnit' + parNameSuffix] = QtWidgets.QLabel(unit)
+            
             self.grid.addWidget(self.pars['Label' + parNameSuffix], self.numPositioners, 0)
             self.grid.addWidget(self.pars['Position' + parNameSuffix], self.numPositioners, 1)
             self.grid.addWidget(self.pars['UpButton' + parNameSuffix], self.numPositioners, 2)
@@ -89,7 +90,15 @@ class PositionerWidget(Widget):
 
     def updatePosition(self, positionerName, axis, position):
         parNameSuffix = self._getParNameSuffix(positionerName, axis)
-        self.pars['Position' + parNameSuffix].setText(f'<strong>{position:.2f} µm</strong>')
+        unit = self._getUnit(positionerName, axis)
+        self.pars['Position' + parNameSuffix].setText(
+            f'<strong>{position:.2f} {unit}</strong>'
+        )
+
+    def _getUnit(self, positionerName, axis):
+        if positionerName == "BPC303" or axis in ["PX", "PY", "PZ"]:
+            return "V"
+        return "µm"
 
     def _getParNameSuffix(self, positionerName, axis):
         return f'{positionerName}--{axis}'
