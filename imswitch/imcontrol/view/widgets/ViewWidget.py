@@ -50,7 +50,7 @@ class ViewWidget(Widget):
         self.sliderLabel = QtWidgets.QLabel("Batch Size:")
         self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.slider.setRange(1, 250)
-        self.slider.setValue(1)  
+        self.slider.setValue(5)  
         self.slider.setTickInterval(1)  
         self.slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
         self.inputField = QtWidgets.QLineEdit(str(self.slider.value()))

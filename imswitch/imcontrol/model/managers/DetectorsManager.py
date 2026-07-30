@@ -318,6 +318,7 @@ class LVWorker(Worker):
     def setUpdatePeriod(self, updatePeriod):
         self._updatePeriod = updatePeriod
 
+
 class DVWorker(Worker):
     sigSetBatchSize = Signal(int)
 
@@ -365,7 +366,7 @@ class DVWorker(Worker):
             batch1_avg = self._frames[-2]  # Older batch
             batch2_avg = self._frames[-1]  # Newer batch
 
-            diff_image = batch2_avg - batch1_avg
+            diff_image = (batch1_avg / (batch2_avg + 1e-6)) - 1
             self.emit_diff_image(detector, diff_image)
 
             # Keep only the latest batch

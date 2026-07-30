@@ -386,7 +386,9 @@ class iScatFocusController(ImConWidgetController):
 class ProcessDataThread(Thread):
     def __init__(self, controller, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.__logger = initLogger(self)
         self._controller = controller
+        self._fallback_fit = True
         self._last_valid_position = (0, 0)  # Fallback position
         self._fit_fail_count = 0
         self._max_fit_fails = 3  # Allow 3 consecutive failures before fallback
@@ -410,8 +412,8 @@ class ProcessDataThread(Thread):
         
         try:
             # Dynamic ROI based on last valid position
-            res = np.isfinite(self._last_valid_position)
-            if self._last_valid_position != (0,0):
+
+            if not self._fallback_fit:
                 x_center, y_center = map(int, self._last_valid_position)
 
                 roi_half_width = 100
@@ -446,18 +448,16 @@ class ProcessDataThread(Thread):
             sigma = min(roi.shape) * 0.02  # ~2% of image size
             roi_filtered = ndi.gaussian_filter(roi, sigma=sigma)
             #Don't do a fit on noisy data
-            if roi_filtered.min() == roi_filtered.max():
-                self._last_valid_position = (0, 0)
-                return 0
-            beamfit = self._beamFit(roi_filtered)
-            x = beamfit[1]
-            y = beamfit[2]
+            if roi_filtered.min() >= roi_filtered.max()-5:
+                return self._last_valid_position[0]
+
+            x,y  = self._beamFit(roi_filtered)
             #y, x = ndi.center_of_mass(roi * mask)
             global_x = x + x_start if 'x_start' in locals() else x
             global_y = y + y_start if 'y_start' in locals() else y
             
             # Validate position
-            if not 0 <= global_x < img.shape[0]:
+            if not (0 <= global_x < img.shape[0] and 0 <= global_y < img.shape[1]):
                 return self._last_valid_position[0]
                 
             # Low-pass filter to reduce jumps
@@ -467,7 +467,7 @@ class ProcessDataThread(Thread):
             
         except Exception as e:
             self.__logger.warning(f"Position detection error: {str(e)}")
-            self.__logger.error(f"Getting position failed: {str(e)}, beamfit: {beamfit}")
+            self.__logger.error(f"Getting position failed: {str(e)}")
             return self._last_valid_position[0]
 
 
@@ -565,17 +565,20 @@ class ProcessDataThread(Thread):
                 roi.ravel(),
                 p0=p0
             )
-            return params
+            self._fallback_fit = False
+            return params[1], params[2]
 
         except Exception as e:
             self._fit_fail_count += 1
             if self._fit_fail_count >= self._max_fit_fails:
                 # Fallback to center of mass
                 com = ndi.center_of_mass(roi)
+                self._fallback_fit = True
                 self._last_valid_position = com
+                print(f"fit error, using fallback (with {self._fit_fail_count} fails)")
                 return com
             else:
-                return None
+                return self._last_valid_position
 
 
     def gaussian_1d(self, x, a, x0, sigma, offset):
