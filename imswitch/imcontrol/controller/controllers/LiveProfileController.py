@@ -1,6 +1,7 @@
 import numpy as np
 from ..basecontrollers import LiveUpdatedController
 from imswitch.imcontrol.model.liveprofile_state import liveprofile_state
+from scipy.ndimage import map_coordinates
 
 class LiveProfileController(LiveUpdatedController):
     """Controller for the live intensity profile widget."""
@@ -103,22 +104,46 @@ class LiveProfileController(LiveUpdatedController):
         self.profileMode = mode
 
     def getCroppedImage(self, image, roiItem):
-        """Return the cropped image within the LiveProfile ROI."""
-        x0, y0, x1, y1 = roiItem.bounds
+        """Return the image data inside the possibly rotated LiveProfile ROI.
 
-        x0 = int(round(x0))
-        y0 = int(round(y0))
-        x1 = int(round(x1))
-        y1 = int(round(y1))
+        The returned image is expressed in the local coordinate system of the
+        ROI. This means that horizontal/vertical profiles are taken along the
+        rotated ROI axes, not along the camera x/y axes.
+        """
+        roi_position = np.asarray(roiItem.position, dtype=float)
+        roi_size = np.asarray(roiItem.size, dtype=float)
+        roi_center = np.asarray(roiItem.center, dtype=float)
+        roi_angle = float(getattr(roiItem, "angle", 0.0))
 
-        height, width = image.shape[:2]
+        width = int(round(roi_size[0]))
+        height = int(round(roi_size[1]))
 
-        x0 = max(0, min(x0, width))
-        x1 = max(0, min(x1, width))
-        y0 = max(0, min(y0, height))
-        y1 = max(0, min(y1, height))
-
-        if x1 <= x0 or y1 <= y0:
+        if width <= 0 or height <= 0:
             return image[0:0, 0:0]
 
-        return image[y0:y1, x0:x1]
+        # Coordinates in the local, unrotated ROI system.
+        local_x = roi_position[0] + np.arange(width) + 0.5
+        local_y = roi_position[1] + np.arange(height) + 0.5
+        local_x_grid, local_y_grid = np.meshgrid(local_x, local_y)
+
+        # Rotate local ROI coordinates into image coordinates.
+        angle_rad = np.deg2rad(roi_angle)
+        cos_a = np.cos(angle_rad)
+        sin_a = np.sin(angle_rad)
+
+        shifted_x = local_x_grid - roi_center[0]
+        shifted_y = local_y_grid - roi_center[1]
+
+        image_x = shifted_x * cos_a - shifted_y * sin_a + roi_center[0]
+        image_y = shifted_x * sin_a + shifted_y * cos_a + roi_center[1]
+
+        # map_coordinates expects coordinates in row/column order: y, x.
+        cropped = map_coordinates(
+            image,
+            [image_y, image_x],
+            order=1,
+            mode="constant",
+            cval=0.0
+        )
+
+        return cropped

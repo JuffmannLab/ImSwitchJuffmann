@@ -46,6 +46,19 @@ class LiveProfileWidget(Widget):
 
         self.profileCurve = self.plot.plot(pen="y")
 
+        self.maxMarker = self.plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="o"
+        )
+
+        self.maxText = pg.TextItem(
+            "",
+            anchor=(0, 1)
+        )
+        self.plot.addItem(self.maxText)
+
         # Layout
         grid = QtWidgets.QGridLayout()
         self.setLayout(grid)
@@ -81,15 +94,27 @@ class LiveProfileWidget(Widget):
 
         if profile.size == 0:
             self.profileCurve.setData([], [])
+            self.maxMarker.setData([], [])
+            self.maxText.setText("")
             self.statsLabel.setText("Empty profile")
             return
 
         pixels = np.arange(profile.size)
         self.profileCurve.setData(pixels, profile)
 
+        maxPixel = int(np.nanargmax(profile))
+        maxValue = float(profile[maxPixel])
+
+        self.maxMarker.setData([maxPixel], [maxValue])
+        self.maxText.setText(
+            f"max = {maxValue:.1f}\n"
+            f"pixel = {maxPixel}"
+        )
+        self.maxText.setPos(maxPixel, maxValue)
+
         self.statsLabel.setText(
             f"points={profile.size}, "
-            f"min={profile.min():.1f}, "
-            f"max={profile.max():.1f}, "
-            f"mean={profile.mean():.1f}"
+            f"min={np.nanmin(profile):.1f}, "
+            f"max={maxValue:.1f} at pixel {maxPixel}, "
+            f"mean={np.nanmean(profile):.1f}"
         )
