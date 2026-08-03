@@ -224,6 +224,8 @@ class iScatFocusController(ImConWidgetController):
         """Toggle focus lock state with proper PID initialization."""
         if self._widget.lockButton.isChecked():
             try:
+                if self.volts_per_px is None:
+                    raise ValueError("Calibration not yet performed.")
                 # Get current position and PID parameters
                 current_voltage = self._master.positionersManager[self.positioner].get_abs()
                 kp = float(self._widget.kpEdit.text())
@@ -331,10 +333,15 @@ class iScatFocusController(ImConWidgetController):
             self._widget.kdEdit.setText(f"{kd:.4f}")
 
     def lockFocus(self, kp, ki, kd, current_voltage):
+        if self.volts_per_px is None:
+            self.__logger.info("Calibration required before initializing PID.")
+            return
+
         if not self.locked:
             self.pid = PID(self.setPointSignal, 
                           dt=self.focusTime/1000, 
                           kp=kp, ki=ki, kd=kd)
+            self.pid.setCalibration(self.volts_per_px)
             self.lockPosition = current_voltage
             self.locked = True
     
@@ -642,7 +649,7 @@ class KalmanFilter:
         
         return self.state[0], self.state[1]  # Return position and velocity
 """
-import numpy as np
+
 
 class PID:
     """Enhanced discrete PID controller with Kalman filtering and stability monitoring."""

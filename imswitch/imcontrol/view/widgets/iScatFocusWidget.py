@@ -27,11 +27,11 @@ class iScatFocusWidget(Widget):
         pidLayout = QtWidgets.QGridLayout()
         
         # PID Parameters
-        self.kpEdit = QtWidgets.QLineEdit('0.0350')
+        self.kpEdit = QtWidgets.QLineEdit('0.4')
         self.kpEdit.setValidator(QtGui.QDoubleValidator())
-        self.kiEdit = QtWidgets.QLineEdit('0.0005')
+        self.kiEdit = QtWidgets.QLineEdit('0.02')
         self.kiEdit.setValidator(QtGui.QDoubleValidator())
-        self.kdEdit = QtWidgets.QLineEdit('0.0035')
+        self.kdEdit = QtWidgets.QLineEdit('0.03')
         self.kdEdit.setValidator(QtGui.QDoubleValidator())
         
         # Control Buttons
