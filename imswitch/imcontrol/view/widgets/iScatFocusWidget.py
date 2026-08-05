@@ -27,11 +27,11 @@ class iScatFocusWidget(Widget):
         pidLayout = QtWidgets.QGridLayout()
         
         # PID Parameters
-        self.kpEdit = QtWidgets.QLineEdit('0.4')
+        self.kpEdit = QtWidgets.QLineEdit('0')
         self.kpEdit.setValidator(QtGui.QDoubleValidator())
-        self.kiEdit = QtWidgets.QLineEdit('0.02')
+        self.kiEdit = QtWidgets.QLineEdit('0')
         self.kiEdit.setValidator(QtGui.QDoubleValidator())
-        self.kdEdit = QtWidgets.QLineEdit('0.03')
+        self.kdEdit = QtWidgets.QLineEdit('0')
         self.kdEdit.setValidator(QtGui.QDoubleValidator())
         
         # Control Buttons
@@ -229,3 +229,8 @@ class iScatFocusWidget(Widget):
     def updateCameraImage(self, img):
         """Update camera display"""
         self.camImg.setImage(img)
+
+    def setPIDparams(self, params):
+        self.kpEdit.setText(str(params["p"]))
+        self.kiEdit.setText(str(params["i"]))
+        self.kdEdit.setText(str(params["d"]))

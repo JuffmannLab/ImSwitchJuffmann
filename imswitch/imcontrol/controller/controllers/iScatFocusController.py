@@ -4,7 +4,7 @@ import numpy as np
 from time import perf_counter
 import scipy.ndimage as ndi
 import scipy.optimize
-from lantz import Q_
+import atexit
 from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
 from matplotlib import pyplot as plt
@@ -48,6 +48,8 @@ class iScatFocusController(ImConWidgetController):
         self.sledControlChannel = self._setupInfo.iScatFocus.sledControlChannel
 
         self._master.detectorsManager[self.camera].crop(*self.cropFrame)
+
+        self._widget.setPIDparams(self._setupInfo.iScatFocus.pidParams)
 
         # Connect FocusLockWidget buttons
         self._widget.kpEdit.textChanged.connect(self.unlockFocus)
@@ -93,6 +95,9 @@ class iScatFocusController(ImConWidgetController):
         self.timer.timeout.connect(self.update)
         self.timer.start(int(self.focusTime))
         self.startTime = perf_counter()
+
+        atexit.register(self.cleanup)
+
     
     # Following functions are just for controlling and setting different parameters
     def __del__(self):
@@ -100,6 +105,11 @@ class iScatFocusController(ImConWidgetController):
         self.__processDataThread.wait()
         if hasattr(super(), '__del__'):
             super().__del__()
+
+    def cleanup(self):
+        self._master.nidaqManager.setDigital(self._setupInfo.iScatFocus, False, line=self.sledEnableLine)
+        self._master.nidaqManager.setDigital(self._setupInfo.iScatFocus, False, line=self.sledAIEnableLine)
+        self._master.nidaqManager.setAnalog(self._setupInfo.iScatFocus, 0, min_val=0, max_val=2.5, channel=self.sledControlChannel)
 
     def sledEnable(self, clicked):
         isChecked = self._widget.sledEnable.isChecked()
@@ -572,6 +582,7 @@ class ProcessDataThread(Thread):
                 roi.ravel(),
                 p0=p0
             )
+            #self.__logger.info(f"Params: {params}")
             self._fallback_fit = False
             return params[1], params[2]
 
@@ -582,7 +593,7 @@ class ProcessDataThread(Thread):
                 com = ndi.center_of_mass(roi)
                 self._fallback_fit = True
                 self._last_valid_position = com
-                print(f"fit error, using fallback (with {self._fit_fail_count} fails)")
+                self.__logger.info(f"fit error, using fallback (with {self._fit_fail_count} fails)")
                 return com
             else:
                 return self._last_valid_position

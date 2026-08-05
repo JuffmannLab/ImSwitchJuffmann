@@ -6,6 +6,7 @@ import imslib
 class SynthControlWidget(Widget):
     sigStartPlayerClicked = QtCore.Signal(bool)
     sigStopPlayerClicked = QtCore.Signal(bool)
+    sigDownloadClicked = QtCore.Signal(bool)
     sigRepeatOptionChanged = QtCore.Signal(int)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -21,6 +22,8 @@ class SynthControlWidget(Widget):
         self.clockRateEdit = QtWidgets.QSpinBox()
         self.clockRateEdit.setRange(1, 5000)
         self.clockRateEdit.setValue(100)
+
+        self.downloadButton = guitools.BetterPushButton("Download images")
 
         self.triggerRadioButtonCon = QtWidgets.QRadioButton("Continuous Trigger")
         self.triggerRadioButtonExt = QtWidgets.QRadioButton("External Trigger")
@@ -53,6 +56,8 @@ class SynthControlWidget(Widget):
         imPlayerLayout.addWidget(self.triggerRadioButtonCon, 1, 0, 1, 1)
         imPlayerLayout.addWidget(self.triggerRadioButtonExt, 1, 1, 1, 1)
 
+        imPlayerLayout.addWidget(self.downloadButton, 2, 0, 1, 1)
+
         imPlayerLayout.addWidget(self.currentImageLabel, 3, 0, 1, 1)
         imPlayerLayout.addWidget(self.currentImage, 3, 1, 1, 1)
         imPlayerLayout.addWidget(self.repeatOptions, 3, 2, 1, 1)
@@ -65,6 +70,7 @@ class SynthControlWidget(Widget):
         self.repeatOptions.currentIndexChanged.connect(self.sigRepeatOptionChanged)
         self.startButton.clicked.connect(self.sigStartPlayerClicked)
         self.stopButton.clicked.connect(self.sigStopPlayerClicked)
+        self.downloadButton.clicked.connect(self.sigDownloadClicked)
 
         self.imPlayerGroup.setLayout(imPlayerLayout)
         self.layout().addWidget(self.imPlayerGroup)
@@ -115,3 +121,14 @@ class SynthControlWidget(Widget):
 
     def stopClicked(self):
         self.startButton.setChecked(False)
+
+    def setConfig(self, clockrate, trigger, repeatID):
+
+        self.clockRateEdit.setValue(clockrate)
+
+        if trigger == "external":
+            self.triggerRadioButtonExt.setChecked(True)
+        else:
+            self.triggerRadioButtonCon.setChecked(True)
+
+        self.repeatOptions.setCurrentIndex(repeatID)

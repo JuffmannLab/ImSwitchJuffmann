@@ -1,8 +1,8 @@
 import imslib as imslib
 from pathlib import Path
-import numpy as np
+import atexit
 
-from imslib import kHz, Percent, PointClock, ImageTrigger, StopStyle
+from imslib import Percent, PointClock
 
 from imswitch.imcommon.model import initLogger
 from imswitch.imcontrol.model.managers.ims_events import EventWaiter, WaitOnEventsThenPrint, EVENT_MESSAGES
@@ -15,15 +15,22 @@ class SynthControlManager:
         self.__logger.info(f"Targeted Scanning for Isomet System with ID: {self._setupInfo.systemID}")
         self.connection = imslib.ConnectionList(max_discover_timeout_ms=100) #milliseconds
         self.player = None
+        self.clockrate = setupInfo.clockrate
+        self.trigger = setupInfo.trigger
+        self.repeatID = setupInfo.repeatID
+
         synth = self.targeted_system_scan(setupInfo.systemID)
         if synth is not None:
             self.ims = synth
             self.ims.Connect()
-            self.downloadImages()
+            #self.downloadImages()
         else:
             self.ims = None
 
-    def __del__(self):
+        atexit.register(self.cleanup)
+
+    def cleanup(self):
+        self.stopPlayer()
         self.ims.Disconnect()
 
     def downloadImages(self):
@@ -95,12 +102,19 @@ class SynthControlManager:
         self.player = imslib.ImagePlayer(self.ims, table[imageID], config["clockrate"])
         self.player.Config = playerConfig
         self.player.Play()
+
     def stopPlayer(self):
         if self.player is None:
             return
         else:
             self.player.Stop()
             self.player = None
+
+    def getConfig(self):
+        return self.clockrate, self.trigger, self.repeatID
+
+    def test(self):
+        print("test")
 
 
 

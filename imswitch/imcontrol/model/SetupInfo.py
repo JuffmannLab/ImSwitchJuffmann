@@ -185,6 +185,9 @@ class iScatFocusInfo:
     sledControlChannel: str
     """ NiDAQ Analog output channel e.g. Dev1/ao3"""
 
+    pidParams: Dict[str, Any]
+    """ initial PID parameters. """
+
 @dataclass(frozen=True)
 class AutofocusInfo:
     camera: str
@@ -272,6 +275,9 @@ class ShutterInfo:
 @dataclass(frozen=True)
 class SynthControl:
     systemID: Optional[str] = None
+    clockrate: Optional[int] = None
+    repeatID: Optional[int] = None
+    trigger: Optional[str] = None
 
 @dataclass(frozen=True)
 class PulseStreamerInfo:

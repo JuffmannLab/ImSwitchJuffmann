@@ -8,14 +8,13 @@ class SynthControlController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self.__logger = initLogger(self)
 
-        imgTable = self._master.synthControlManager.getImageTable()
-        if imgTable is not None:
-            self._widget.setImageTable(imgTable)
+        self.populateWidget()
 
         #connect signal widgets
         self._widget.sigRepeatOptionChanged.connect(self.setRepeatOption)
         self._widget.sigStartPlayerClicked.connect(self.startPlayer)
         self._widget.sigStopPlayerClicked.connect(self.stopPlayer)
+        self._widget.sigDownloadClicked.connect(self.download)
 
 
     def setRepeatOption(self, index):
@@ -33,6 +32,21 @@ class SynthControlController(ImConWidgetController):
         if self._widget.isPlaying():
             self._master.synthControlManager.stopPlayer()
             self._widget.stopClicked()
+
+    def download(self):
+        self._master.synthControlManager.downloadImages()
+        imgTable = self._master.synthControlManager.getImageTable()
+        if imgTable is not None:
+            self._widget.setImageTable(imgTable)
+
+    def populateWidget(self):
+
+        clockrate, trigger, repeatID = self._master.synthControlManager.getConfig()
+        self._widget.setConfig(clockrate, trigger, repeatID)
+
+        imgTable = self._master.synthControlManager.getImageTable()
+        if imgTable is not None:
+            self._widget.setImageTable(imgTable)
 
 
 

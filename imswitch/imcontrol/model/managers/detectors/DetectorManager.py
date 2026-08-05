@@ -120,7 +120,7 @@ class DetectorManager(SignalInterface):
         else:
             if self.__image is not None:
                 self.sigImageUpdated.emit(self.__image, init)
-                self.__logger.warning('No Image taken')
+                #self.__logger.warning('No Image taken')
     
     def updateDifferentialView(self, enable):
         """ Switch between live view and differential view. """
