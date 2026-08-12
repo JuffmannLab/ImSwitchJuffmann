@@ -26,7 +26,7 @@ class MasterController:
         self.ShuttersManager = ShuttersManager(self.__setupInfo.SEMdevices)
         self.HWPManager = HWPManager(self.__setupInfo.HWPdevices)
         self.DelayStageManager = DelayStageManager(self.__setupInfo.SEMdevices)
-        self.SemSLMManager = SemSLMManager(self.__setupInfo)
+        #self.SemSLMManager = SemSLMManager(self.__setupInfo)
 
         lowLevelManagers = {
             'nidaqManager': self.nidaqManager,

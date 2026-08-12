@@ -551,27 +551,6 @@ class FLIRManager(DetectorManager):
                     arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w))
                 return arr
 
-            # BGR8 output
-            if target_pf == 'BGR8':
-                if img.GetPixelFormat() != PySpin.PixelFormat_RGB8:
-                    conv = img.Convert(PySpin.PixelFormat_RGB8, PySpin.HQ_LINEAR)
-                else:
-                    conv = img
-                arr = conv.GetNDArray()  # shape (H, W, 3)
-                if arr is None:
-                    h, w = conv.GetHeight(), conv.GetWidth()
-                    arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w, 3))
-                return arr
-
-            # If user selected a Bayer format, convert to RGB8 for display
-            if target_pf.startswith('BAYER'):
-                conv = img.Convert(PySpin.PixelFormat_RGB8, PySpin.HQ_LINEAR)
-                arr = conv.GetNDArray()
-                if arr is None:
-                    h, w = conv.GetHeight(), conv.GetWidth()
-                    arr = np.frombuffer(conv.GetData(), dtype=np.uint8).reshape((h, w, 3))
-                return arr
-
             # Default fallback: try Mono8
             conv = img.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR)
             arr = conv.GetNDArray()
