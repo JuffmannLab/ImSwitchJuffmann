@@ -11,7 +11,7 @@ class LiveProfileController(LiveUpdatedController):
         print("MARIA DEBUG: LiveProfileController was created")
 
         self.profileMode = "horizontal"
-        self.roiAdded = False
+        self.roiAdded = {}
 
         # Receive live images
         self._commChannel.sigUpdateImage.connect(self.update)
@@ -19,6 +19,24 @@ class LiveProfileController(LiveUpdatedController):
         # Widget signals
         self._widget.sigShowROIToggled.connect(self.toggleROI)
         self._widget.sigAxisChanged.connect(self.setProfileMode)
+
+    def _getDetectorYOffset(self, detectorName):
+        """Return the vertical display offset of a detector."""
+        margin = 20
+        y_offset = 0
+
+        detectorNames = self._master.detectorsManager.getAllDeviceNames(
+            lambda c: c.forAcquisition
+        )
+
+        for name in detectorNames:
+            if name == detectorName:
+                return y_offset
+
+            detector = self._master.detectorsManager[name]
+            y_offset += detector.shape[1] + margin
+
+        return 0
 
     def update(self, detectorName, im, init, isCurrentDetector):
         """Update profile plot with the current detector frame."""
@@ -36,9 +54,13 @@ class LiveProfileController(LiveUpdatedController):
         if image.ndim == 3:
             image = image.mean(axis=2)
 
+        roiItem = self._widget.getROIGraphicsItem(detectorName)
+        yOffset = self._getDetectorYOffset(detectorName)
+
         cropped = self.getCroppedImage(
             image,
-            self._widget.getROIGraphicsItem()
+            roiItem,
+            yOffset
         )
 
         if cropped.size == 0:
@@ -73,47 +95,73 @@ class LiveProfileController(LiveUpdatedController):
         
         self._widget.updateGraph(profile)
 
-    def addROI(self):
-        """Add ROI to the image viewbox."""
-        if not self.roiAdded:
+    def addROI(self, detectorName):
+        """Add the ROI for one detector to the image viewbox."""
+        if not self.roiAdded.get(detectorName, False):
             self._commChannel.sigAddItemToVb.emit(
-                self._widget.getROIGraphicsItem()
+                self._widget.getROIGraphicsItem(detectorName)
             )
-            self.roiAdded = True
+            self.roiAdded[detectorName] = True
 
     def toggleROI(self, show):
-        """Enable or disable the live profile plot and show the ROI."""
-        if show:
-            self.addROI()
+        """Enable or disable the live profile and show one ROI per detector."""
 
-            roiSize = (256, 256)
-            roiCenter = self._commChannel.getCenterViewbox()
+        detectorNames = self._master.detectorsManager.getAllDeviceNames(
+            lambda c: c.forAcquisition
+        )
 
-            roiPos = (
-                roiCenter[0] - 0.5 * roiSize[0],
-                roiCenter[1] - 0.5 * roiSize[1],
-            )
+        for detectorName in detectorNames:
+            if show:
+                self.addROI(detectorName)
 
-            self._widget.showROI(roiPos, roiSize)
-        else:
-            self._widget.hideROI()
+                detector = self._master.detectorsManager[detectorName]
+                width, height = detector.shape
+
+                # Keep the initial ROI inside the detector image,
+                # even if the detector is currently cropped.
+                roiWidth = min(256, width)
+                roiHeight = min(256, height)
+                roiSize = (roiWidth, roiHeight)
+
+                yOffset = self._getDetectorYOffset(detectorName)
+
+                # ROI coordinates are (x, y).
+                # Center it inside this detector's displayed image.
+                roiPos = (
+                    0.5 * (width - roiWidth),
+                    yOffset + 0.5 * (height - roiHeight),
+                )
+
+                self._widget.showROI(
+                    detectorName,
+                    roiPos,
+                    roiSize
+                )
+
+            else:
+                self._widget.hideROI(detectorName)
 
         self.active = show
+
     def setProfileMode(self, mode):
         """Set horizontal or vertical profile mode."""
         self.profileMode = mode
 
-    def getCroppedImage(self, image, roiItem):
+    def getCroppedImage(self, image, roiItem, yOffset=0):
         """Return the image data inside the possibly rotated LiveProfile ROI.
 
-        The returned image is expressed in the local coordinate system of the
-        ROI. This means that horizontal/vertical profiles are taken along the
-        rotated ROI axes, not along the camera x/y axes.
+        The ROI lives in the global viewer coordinates, while the detector image
+        starts at its own vertical display offset. Subtract that offset before
+        sampling the detector image.
         """
-        roi_position = np.asarray(roiItem.position, dtype=float)
+        roi_position = np.asarray(roiItem.position, dtype=float).copy()
         roi_size = np.asarray(roiItem.size, dtype=float)
-        roi_center = np.asarray(roiItem.center, dtype=float)
+        roi_center = np.asarray(roiItem.center, dtype=float).copy()
         roi_angle = float(getattr(roiItem, "angle", 0.0))
+
+        # Vispy ROI coordinates are (x, y), so the vertical offset is component 1.
+        roi_position[1] -= yOffset
+        roi_center[1] -= yOffset
 
         width = int(round(roi_size[0]))
         height = int(round(roi_size[1]))

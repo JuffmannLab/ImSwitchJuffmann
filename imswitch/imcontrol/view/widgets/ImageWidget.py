@@ -60,6 +60,16 @@ class ImageWidget(QtWidgets.QWidget):
 
     def setImage(self, name, im):
         self.imgLayers[name].data = im
+        self._arrangeLiveViewLayers()
+
+    def _arrangeLiveViewLayers(self):
+        """Arrange live detector images vertically without overlap."""
+        y_offset = 0
+        margin = 20
+
+        for layer in self.imgLayers.values():
+            layer.translate = (y_offset, 0)
+            y_offset += layer.data.shape[0] + margin
 
     def clearImage(self, name):
         self.setImage(name, np.zeros((1, 1)))

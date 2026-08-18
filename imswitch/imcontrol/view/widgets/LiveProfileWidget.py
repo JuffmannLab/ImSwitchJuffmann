@@ -27,11 +27,8 @@ class LiveProfileWidget(Widget):
 
         self.statsLabel = QtWidgets.QLabel("No profile yet")
 
-        # ROI overlay
-        self.ROI = naparitools.VispyROIVisual(
-            rect_color="yellow",
-            handle_color="orange"
-        )
+        # One independent ROI overlay per detector
+        self.ROIs = {}
 
         # Live plot
         self.graph = pg.GraphicsLayoutWidget()
@@ -78,16 +75,24 @@ class LiveProfileWidget(Widget):
             lambda: self.sigAxisChanged.emit("vertical")
         )
 
-    def getROIGraphicsItem(self):
-        return self.ROI
+    def getROIGraphicsItem(self, detectorName):
+        if detectorName not in self.ROIs:
+            self.ROIs[detectorName] = naparitools.VispyROIVisual(
+                rect_color="yellow",
+                handle_color="orange"
+            )
 
-    def showROI(self, position, size):
-        self.ROI.position = position
-        self.ROI.size = size
-        self.ROI.show()
+        return self.ROIs[detectorName]
 
-    def hideROI(self):
-        self.ROI.hide()
+    def showROI(self, detectorName, position, size):
+        roi = self.getROIGraphicsItem(detectorName)
+        roi.position = position
+        roi.size = size
+        roi.show()
+
+    def hideROI(self, detectorName):
+        if detectorName in self.ROIs:
+            self.ROIs[detectorName].hide()
 
     def updateGraph(self, profile):
         profile = np.asarray(profile)
