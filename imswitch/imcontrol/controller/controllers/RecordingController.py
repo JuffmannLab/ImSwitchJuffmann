@@ -68,12 +68,45 @@ class RecordingController(ImConWidgetController):
         self._widget.sigSnapRequested.connect(self.snap)
         self._widget.sigRecToggled.connect(self.toggleREC)
 
+        self._widget.sigSaveHorizontalProfileRequested.connect(
+            self.saveHorizontalProfile
+        )
+        self._widget.sigSaveVerticalProfileRequested.connect(
+            self.saveVerticalProfile
+        )
+        self._widget.sigSaveLiveProfileRequested.connect(
+            self.saveLiveProfile
+        )
+        self._widget.sigSaveLiveProfileROIRequested.connect(
+            self.saveLiveProfileROI
+        )
+
     def openFolder(self):
         """ Opens current folder in File Explorer. """
         folder = self._widget.getRecFolder()
         if not os.path.exists(folder):
             os.makedirs(folder)
         ostools.openFolderInOS(folder)
+
+    def saveHorizontalProfile(self):
+        self._master.detectorsManager.execOnCurrent(
+            lambda detector: detector.saveHorizontalProfile()
+        )
+
+    def saveVerticalProfile(self):
+        self._master.detectorsManager.execOnCurrent(
+            lambda detector: detector.saveVerticalProfile()
+        )
+
+    def saveLiveProfile(self):
+        self._master.detectorsManager.execOnCurrent(
+            lambda detector: detector.saveLiveProfileProfile()
+        )
+
+    def saveLiveProfileROI(self):
+        self._master.detectorsManager.execOnCurrent(
+            lambda detector: detector.saveLiveProfileROIImage()
+        )
 
     def snapSaveModeChanged(self):
         saveMode = SaveMode(self._widget.getSnapSaveMode())

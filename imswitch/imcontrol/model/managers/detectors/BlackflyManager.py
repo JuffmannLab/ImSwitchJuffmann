@@ -8,7 +8,6 @@ from imswitch.imcontrol.model.liveprofile_state import liveprofile_state
 from imswitch.imcommon.model import initLogger
 from .DetectorManager import (
     DetectorManager,
-    DetectorAction,
     DetectorNumberParameter,
     DetectorListParameter,
 )
@@ -86,24 +85,7 @@ class BlackflyManager(DetectorManager):
                 editable=True,
             ),
         }
-        actions = {
-            "Save horizontal profile": DetectorAction(
-                group="Profiles",
-                func=self.saveHorizontalProfile,
-            ),
-            "Save vertical profile": DetectorAction(
-                group="Profiles",
-                func=self.saveVerticalProfile,
-            ),
-            "Save LiveProfile profile": DetectorAction(
-                group="LiveProfile",
-                func=lambda: self.saveLiveProfileProfile(),
-            ),
-            "Save LiveProfile ROI image": DetectorAction(
-                group="LiveProfile",
-                func=lambda: self.saveLiveProfileROIImage(),
-            ),
-        }
+        actions = {}
 
         super().__init__(
             detectorInfo,

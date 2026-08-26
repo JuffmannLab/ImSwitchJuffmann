@@ -29,6 +29,11 @@ class RecordingWidget(Widget):
     sigSnapRequested = QtCore.Signal()
     sigRecToggled = QtCore.Signal(bool)  # (enabled)
 
+    sigSaveHorizontalProfileRequested = QtCore.Signal()
+    sigSaveVerticalProfileRequested = QtCore.Signal()
+    sigSaveLiveProfileRequested = QtCore.Signal()
+    sigSaveLiveProfileROIRequested = QtCore.Signal()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -66,6 +71,20 @@ class RecordingWidget(Widget):
         self.recButton.setCheckable(True)
         self.recButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
                                      QtWidgets.QSizePolicy.Expanding)
+
+        # Profile / ROI save buttons
+        self.saveHorizontalProfileButton = guitools.BetterPushButton(
+            'Save horizontal profile'
+        )
+        self.saveVerticalProfileButton = guitools.BetterPushButton(
+            'Save vertical profile'
+        )
+        self.saveLiveProfileButton = guitools.BetterPushButton(
+            'Save LiveProfile profile'
+        )
+        self.saveLiveProfileROIButton = guitools.BetterPushButton(
+            'Save LiveProfile ROI image'
+        )
 
         # Number of frames and measurement timing
         modeTitle = QtWidgets.QLabel('<strong>Recording mode</strong>')
@@ -118,6 +137,12 @@ class RecordingWidget(Widget):
         buttonWidget.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
                                    QtWidgets.QSizePolicy.Expanding)
         buttonGrid.addWidget(self.recButton, 0, 2)
+
+        # Profile / ROI save buttons below SNAP and REC
+        buttonGrid.addWidget(self.saveHorizontalProfileButton, 1, 0)
+        buttonGrid.addWidget(self.saveVerticalProfileButton, 1, 2)
+        buttonGrid.addWidget(self.saveLiveProfileButton, 2, 0)
+        buttonGrid.addWidget(self.saveLiveProfileROIButton, 2, 2)
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
@@ -213,6 +238,19 @@ class RecordingWidget(Widget):
 
         self.snapTIFFButton.clicked.connect(self.sigSnapRequested)
         self.recButton.toggled.connect(self.sigRecToggled)
+
+        self.saveHorizontalProfileButton.clicked.connect(
+            self.sigSaveHorizontalProfileRequested
+        )
+        self.saveVerticalProfileButton.clicked.connect(
+            self.sigSaveVerticalProfileRequested
+        )
+        self.saveLiveProfileButton.clicked.connect(
+            self.sigSaveLiveProfileRequested
+        )
+        self.saveLiveProfileROIButton.clicked.connect(
+            self.sigSaveLiveProfileROIRequested
+        )
 
     def getDetectorMode(self):
         """ Returns -1 if "current detector at start" is selected, -2 if "all
