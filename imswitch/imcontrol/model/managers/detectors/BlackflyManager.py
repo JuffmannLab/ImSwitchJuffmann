@@ -19,6 +19,7 @@ class BlackflyManager(DetectorManager):
     def __init__(self, detectorInfo, name, **_lowLevelManagers):
         self.__logger = initLogger(self, instanceName=name)
         self.detectorInfo = detectorInfo
+        self._detector_name = name
 
         props = detectorInfo.managerProperties
 
@@ -354,15 +355,13 @@ class BlackflyManager(DetectorManager):
         finally:
             self._running = False
 
-    def saveHorizontalProfile(self):
-        """Save a horizontal averaged intensity profile from the latest frame."""
-        self._saveLatestProfile(mode="horizontal")
+    def saveHorizontalProfile(self, output_dir=None):
+        self._saveLatestProfile(mode="horizontal", output_dir=output_dir)
 
-    def saveVerticalProfile(self):
-        """Save a vertical averaged intensity profile from the latest frame."""
-        self._saveLatestProfile(mode="vertical")
+    def saveVerticalProfile(self, output_dir=None):
+        self._saveLatestProfile(mode="vertical", output_dir=output_dir)
 
-    def _saveLatestProfile(self, mode):
+    def _saveLatestProfile(self, mode, output_dir=None):
         """Save a 1D intensity profile from the latest displayed frame.
 
         The latest frame already includes the current software ROI, so this uses
@@ -403,7 +402,12 @@ class BlackflyManager(DetectorManager):
             self.__logger.warning(f"Unknown profile mode: {mode}")
             return
 
-        output_dir = self._getProfileOutputDir()
+        if output_dir is None:
+            output_dir = self._getProfileOutputDir()
+        else:
+            output_dir = Path(output_dir)
+
+        output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = time.strftime("%d%m%Y_%H%M%S")
         safe_name = self.name.replace(" ", "_")
 
@@ -488,20 +492,31 @@ class BlackflyManager(DetectorManager):
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
-    def saveLiveProfileProfile(self):
+    def saveLiveProfileProfile(self, output_dir=None):
         """Save the latest LiveProfile curve as CSV and PNG."""
-        profile = liveprofile_state.profile
-        mode = liveprofile_state.profile_mode or "unknown"
+        profile = liveprofile_state.profiles.get(self._detector_name)
+        mode = liveprofile_state.profile_modes.get(self._detector_name, "unknown")
 
         if profile is None or profile.size == 0:
             self.__logger.warning("No LiveProfile profile available to save.")
             print("LiveProfile: no profile available to save.")
             return
 
-        output_dir = self._getLiveProfileOutputDir()
-        timestamp = liveprofile_state.timestamp or time.strftime("%d%m%Y_%H%M%S")
+        if output_dir is None:
+            output_dir = self._getLiveProfileOutputDir()
+        else:
+            output_dir = Path(output_dir)
 
-        base_name = f"{timestamp}_liveprofile_{mode}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = liveprofile_state.timestamps.get(
+            self._detector_name, time.strftime("%d%m%Y_%H%M%S")
+        )
+
+        safe_detector_name = "".join(
+            ch if ch.isalnum() or ch in "-_" else "_"
+            for ch in self._detector_name
+        )
+        base_name = f"{timestamp}_{safe_detector_name}_liveprofile_{mode}"
         csv_path = output_dir / f"{base_name}.csv"
         png_path = output_dir / f"{base_name}.png"
 
@@ -535,9 +550,9 @@ class BlackflyManager(DetectorManager):
             print(f"LiveProfile: saved CSV to {csv_path}")
             print(f"LiveProfile: could not save PNG: {exc}")
 
-    def saveLiveProfileROIImage(self):
+    def saveLiveProfileROIImage(self, output_dir=None):
         """Save the latest LiveProfile ROI image as TIFF."""
-        roi_image = liveprofile_state.roi_image
+        roi_image = liveprofile_state.roi_images.get(self._detector_name)
 
         if roi_image is None or roi_image.size == 0:
             self.__logger.warning("No LiveProfile ROI image available to save.")
@@ -545,9 +560,15 @@ class BlackflyManager(DetectorManager):
             return
 
         output_dir = self._getLiveProfileOutputDir()
-        timestamp = liveprofile_state.timestamp or time.strftime("%d%m%Y_%H%M%S")
+        timestamp = liveprofile_state.timestamps.get(
+            self._detector_name, time.strftime("%d%m%Y_%H%M%S")
+        )
 
-        tiff_path = output_dir / f"{timestamp}_liveprofile_roi.tiff"
+        safe_detector_name = "".join(
+            ch if ch.isalnum() or ch in "-_" else "_"
+            for ch in self._detector_name
+        )
+        tiff_path = output_dir / f"{timestamp}_{safe_detector_name}_liveprofile_roi.tiff"
 
         try:
             import tifffile

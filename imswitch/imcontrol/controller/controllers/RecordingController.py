@@ -88,25 +88,31 @@ class RecordingController(ImConWidgetController):
             os.makedirs(folder)
         ostools.openFolderInOS(folder)
 
+    def _saveForSelectedDetectors(self, methodName):
+        """Run a detector save action for the detectors selected in Recording."""
+        folder = self._widget.getRecFolder()
+        os.makedirs(folder, exist_ok=True)
+
+        detectorNames = self.getDetectorNamesToCapture()
+
+        for detectorName in detectorNames:
+            self._master.detectorsManager.execOn(
+                detectorName,
+                lambda detector, methodName=methodName, folder=folder:
+                getattr(detector, methodName)(output_dir=folder)
+            )
+
     def saveHorizontalProfile(self):
-        self._master.detectorsManager.execOnCurrent(
-            lambda detector: detector.saveHorizontalProfile()
-        )
+        self._saveForSelectedDetectors("saveHorizontalProfile")
 
     def saveVerticalProfile(self):
-        self._master.detectorsManager.execOnCurrent(
-            lambda detector: detector.saveVerticalProfile()
-        )
+        self._saveForSelectedDetectors("saveVerticalProfile")
 
     def saveLiveProfile(self):
-        self._master.detectorsManager.execOnCurrent(
-            lambda detector: detector.saveLiveProfileProfile()
-        )
+        self._saveForSelectedDetectors("saveLiveProfileProfile")
 
     def saveLiveProfileROI(self):
-        self._master.detectorsManager.execOnCurrent(
-            lambda detector: detector.saveLiveProfileROIImage()
-        )
+        self._saveForSelectedDetectors("saveLiveProfileROIImage")
 
     def snapSaveModeChanged(self):
         saveMode = SaveMode(self._widget.getSnapSaveMode())
@@ -128,13 +134,13 @@ class RecordingController(ImConWidgetController):
 
         attrs = {detectorName: self._commChannel.sharedAttrs.getHDF5Attributes()
                  for detectorName in detectorNames}
-        
+
         self._master.recordingManager.snap(detectorNames,
                                            savename,
                                            SaveMode(self._widget.getSnapSaveMode()),
                                            SaveFormat(self._widget.getsaveFormat()),
                                            attrs)
-        
+
     def snapNumpy(self):
         self.updateRecAttrs(isSnapping=True)
         detectorNames = self.getDetectorNamesToCapture()

@@ -3,19 +3,19 @@ import numpy as np
 
 
 class LiveProfileState:
-    """Small shared state for the latest LiveProfile data."""
+    """Shared state for the latest LiveProfile data of each detector."""
 
     def __init__(self):
-        self.profile = None
-        self.roi_image = None
-        self.profile_mode = None
-        self.timestamp = None
+        self.profiles = {}
+        self.roi_images = {}
+        self.profile_modes = {}
+        self.timestamps = {}
 
-    def update(self, profile, roi_image, profile_mode):
-        self.profile = np.asarray(profile).copy()
-        self.roi_image = np.asarray(roi_image).copy()
-        self.profile_mode = str(profile_mode)
-        self.timestamp = time.strftime("%d%m%Y_%H%M%S")
+    def update(self, detector_name, profile, roi_image, profile_mode):
+        self.profiles[detector_name] = np.asarray(profile).copy()
+        self.roi_images[detector_name] = np.asarray(roi_image).copy()
+        self.profile_modes[detector_name] = str(profile_mode)
+        self.timestamps[detector_name] = time.strftime("%d%m%Y_%H%M%S")
 
 
 liveprofile_state = LiveProfileState()

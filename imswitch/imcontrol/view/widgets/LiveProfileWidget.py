@@ -30,6 +30,11 @@ class LiveProfileWidget(Widget):
         # One independent ROI overlay per detector
         self.ROIs = {}
 
+        # One live curve and one statistics line per detector
+        self.profileCurves = {}
+        self.profileStats = {}
+        self.detectorColors = {}
+
         # Live plot
         self.graph = pg.GraphicsLayoutWidget()
         self.graph.setAntialiasing(True)
@@ -41,20 +46,7 @@ class LiveProfileWidget(Widget):
         )
         self.plot.showGrid(x=True, y=True)
 
-        self.profileCurve = self.plot.plot(pen="y")
-
-        self.maxMarker = self.plot.plot(
-            [],
-            [],
-            pen=None,
-            symbol="o"
-        )
-
-        self.maxText = pg.TextItem(
-            "",
-            anchor=(0, 1)
-        )
-        self.plot.addItem(self.maxText)
+        self.plot.addLegend()
 
         # Layout
         grid = QtWidgets.QGridLayout()
@@ -75,11 +67,22 @@ class LiveProfileWidget(Widget):
             lambda: self.sigAxisChanged.emit("vertical")
         )
 
+    def _getDetectorColor(self, detectorName):
+        """Return a stable display color for each detector."""
+        if detectorName not in self.detectorColors:
+            colors = ["yellow", "cyan", "magenta", "green"]
+            colorIndex = len(self.detectorColors) % len(colors)
+            self.detectorColors[detectorName] = colors[colorIndex]
+
+        return self.detectorColors[detectorName]
+
     def getROIGraphicsItem(self, detectorName):
         if detectorName not in self.ROIs:
+            color = self._getDetectorColor(detectorName)
+
             self.ROIs[detectorName] = naparitools.VispyROIVisual(
-                rect_color="yellow",
-                handle_color="orange"
+                rect_color=color,
+                handle_color=color
             )
 
         return self.ROIs[detectorName]
@@ -94,32 +97,40 @@ class LiveProfileWidget(Widget):
         if detectorName in self.ROIs:
             self.ROIs[detectorName].hide()
 
-    def updateGraph(self, profile):
+    def updateGraph(self, detectorName, profile):
+        """Update the curve and statistics belonging to one detector."""
         profile = np.asarray(profile)
 
+        if detectorName not in self.profileCurves:
+            color = self._getDetectorColor(detectorName)
+
+            self.profileCurves[detectorName] = self.plot.plot(
+                pen=pg.mkPen(color, width=2),
+                name=detectorName
+            )
+
+        curve = self.profileCurves[detectorName]
+
         if profile.size == 0:
-            self.profileCurve.setData([], [])
-            self.maxMarker.setData([], [])
-            self.maxText.setText("")
-            self.statsLabel.setText("Empty profile")
-            return
+            curve.setData([], [])
+            self.profileStats[detectorName] = "empty profile"
+        else:
+            pixels = np.arange(profile.size)
+            curve.setData(pixels, profile)
 
-        pixels = np.arange(profile.size)
-        self.profileCurve.setData(pixels, profile)
+            maxPixel = int(np.nanargmax(profile))
+            maxValue = float(profile[maxPixel])
 
-        maxPixel = int(np.nanargmax(profile))
-        maxValue = float(profile[maxPixel])
-
-        self.maxMarker.setData([maxPixel], [maxValue])
-        self.maxText.setText(
-            f"max = {maxValue:.1f}\n"
-            f"pixel = {maxPixel}"
-        )
-        self.maxText.setPos(maxPixel, maxValue)
+            self.profileStats[detectorName] = (
+                f"points={profile.size}, "
+                f"min={np.nanmin(profile):.1f}, "
+                f"max={maxValue:.1f} at pixel {maxPixel}, "
+                f"mean={np.nanmean(profile):.1f}"
+            )
 
         self.statsLabel.setText(
-            f"points={profile.size}, "
-            f"min={np.nanmin(profile):.1f}, "
-            f"max={maxValue:.1f} at pixel {maxPixel}, "
-            f"mean={np.nanmean(profile):.1f}"
+            "\n".join(
+                f"{name}: {stats}"
+                for name, stats in self.profileStats.items()
+            )
         )

@@ -53,11 +53,9 @@ class Storer(abc.ABC):
         raise NotImplementedError
 
 
-
-
 class ZarrStorer(Storer):
     """ A storer that stores the images in a zarr file store """
-    
+
     def snap(self, images: Dict[str, np.ndarray], attrs: Dict[str, str] = None):
 
         with AsTemporayFile(f'{self.filepath}.zarr') as path:
@@ -79,7 +77,7 @@ class HDF5Storer(Storer):
     def snap(self, images: Dict[str, np.ndarray], attrs: Dict[str, str] = None):
 
         for channel, image in images.items():
-            
+
             with AsTemporayFile(f'{self.filepath}_{channel}.h5') as path:
                 file = h5py.File(path, 'w')
 
@@ -100,7 +98,7 @@ class HDF5Storer(Storer):
                     self.detectorManager[channel].pixelSizeUm
 
                 dataset[:, ...] = np.moveaxis(image, 0, -1)
-            
+
                 file.close()
 
 class NPYStorer(Storer):
@@ -113,27 +111,18 @@ class NPYStorer(Storer):
                 logger.info(f"Saved image to npy file {path}")
 
 class TiffStorer(Storer):
-    """A storer that stores contrast-stretched TIFF images."""
+    """A storer that preserves the original detector data in TIFF files."""
 
     def snap(self, images: Dict[str, np.ndarray], attrs: Dict[str, str] = None):
         for channel, image in images.items():
-            image_float = image.astype(np.float32)
-
-            lo, hi = np.percentile(image_float, [1, 99.8])
-
-            if hi > lo:
-                output = np.clip((image_float - lo) / (hi - lo), 0, 1)
-                output = (output * 255).astype(np.uint8)
-            else:
-                output = np.zeros_like(image, dtype=np.uint8)
-
             with AsTemporayFile(f'{self.filepath}_{channel}.tiff') as path:
-                tiff.imwrite(path, output)
+                tiff.imwrite(path, image)
 
             logger.info(
-                f"Saved contrast-stretched TIFF image for {channel}; "
-                f"contrast limits: lo={lo}, hi={hi}"
+                f"Saved raw TIFF image for {channel}; "
+                f"shape={image.shape}, dtype={image.dtype}"
             )
+
 
 class SaveMode(enum.Enum):
     Disk = 1

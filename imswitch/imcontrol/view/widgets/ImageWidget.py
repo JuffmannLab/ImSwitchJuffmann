@@ -63,13 +63,30 @@ class ImageWidget(QtWidgets.QWidget):
         self._arrangeLiveViewLayers()
 
     def _arrangeLiveViewLayers(self):
-        """Arrange live detector images vertically without overlap."""
-        y_offset = 0
+        """Arrange live detector images vertically with the same displayed size."""
+        if not self.imgLayers:
+            return
+
         margin = 20
 
+        # Use the first detector as the reference display size
+        first_layer = next(iter(self.imgLayers.values()))
+        target_height, target_width = first_layer.data.shape[:2]
+
+        y_offset = 0
+
         for layer in self.imgLayers.values():
+            height, width = layer.data.shape[:2]
+
+            # Scale only the display, not the acquired image data
+            scale_y = target_height / height
+            scale_x = target_width / width
+
+            layer.scale = (scale_y, scale_x)
             layer.translate = (y_offset, 0)
-            y_offset += layer.data.shape[0] + margin
+
+            # All displayed images now have the same height
+            y_offset += target_height + margin
 
     def clearImage(self, name):
         self.setImage(name, np.zeros((1, 1)))
