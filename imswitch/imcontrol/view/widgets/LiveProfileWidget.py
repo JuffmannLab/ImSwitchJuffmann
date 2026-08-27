@@ -15,7 +15,6 @@ class LiveProfileWidget(Widget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        print("MARIA DEBUG: LiveProfileWidget was created")
 
         # Controls
         self.roiButton = guitools.BetterPushButton("Enable live profile")

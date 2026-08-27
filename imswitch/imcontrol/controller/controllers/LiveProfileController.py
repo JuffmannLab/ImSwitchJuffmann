@@ -8,7 +8,6 @@ class LiveProfileController(LiveUpdatedController):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        print("MARIA DEBUG: LiveProfileController was created")
 
         self.profileMode = "horizontal"
         self.roiAdded = {}
