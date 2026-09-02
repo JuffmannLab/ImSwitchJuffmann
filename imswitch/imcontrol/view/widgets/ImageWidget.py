@@ -57,7 +57,7 @@ class ImageWidget(QtWidgets.QWidget):
                 try:
                     addImage(name, name.lower())
                 except KeyError:
-                    addImage(name, 'grayclip')
+                    addImage(name, 'viridis')
 
     def addStaticLayer(self, name, im):
         self.napariViewer.add_image(im, rgb=False, name=name, blending='additive')
