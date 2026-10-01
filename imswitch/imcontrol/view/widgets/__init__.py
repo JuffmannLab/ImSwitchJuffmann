@@ -21,3 +21,4 @@ from .TilingWidget import TilingWidget
 from .basewidgets import WidgetFactory
 from .ShutterWidget import ShutterWidget
 from .PockelCellWidget import PockelCellWidget
+from .DDSWidget import DDSWidget

@@ -222,6 +222,7 @@
         "BeadRec",
         "Shutter",
         "FFT",
-        "ULenses"
+        "ULenses",
+        "DDS"
     ]
 }

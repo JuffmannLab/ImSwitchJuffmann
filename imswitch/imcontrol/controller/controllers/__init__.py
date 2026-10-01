@@ -20,3 +20,4 @@ from .TilingController import TilingController
 from .WatcherController import WatcherController
 from .ShutterController import ShutterController
 from .PockelCellController import PockelCellController
+from .DDSController import DDSController
