@@ -8,9 +8,8 @@ class DDSWidget(Widget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        #Overall Grid Layout
-        self.setLayout(QtWidgets.QGridLayout())
-
+        #Overall VBOX Layout
+        mainLayout = QtWidgets.QVBoxLayout()
         #Channel Control Group
         self.channelGroup = QtWidgets.QGroupBox("Channel Control")
         channelLayout = QtWidgets.QGridLayout()
@@ -90,7 +89,58 @@ class DDSWidget(Widget):
         self.tableGroup = QtWidgets.QGroupBox("Table Control")
         tableLayout = QtWidgets.QGridLayout()
 
+        self.table = QtWidgets.QTableWidget()
+        self.table.setRowCount(3)
+        self.table.setColumnCount(4)
+
+        #Table formatting nightmare
+        vheader = self.table.verticalHeader()
+        vheader.setStretchLastSection(False)
+        vheader.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        vheader.setDefaultSectionSize(30)
+        self.table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+
+        hheader = self.table.horizontalHeader()
+        hheader.setSectionResizeMode(
+            QtWidgets.QHeaderView.Fixed
+        )
+
+        self.rowLabel = QtWidgets.QLabel("Format: Row, Dwell(µs), Channel#, Frequency(MHz), Phase(°), Amplitude(0-1V)")
+        self.rowEdit = QtWidgets.QLineEdit()
+        self.rowAddBtn = guitools.BetterPushButton("Add row")
+
+        self.rowIdx = QtWidgets.QSpinBox()
+        self.rowIdx.setRange(0, 14249)
+        self.rowDelBtn = guitools.BetterPushButton("Delete row")
+
+        self.tableCommand = QtWidgets.QComboBox()
+        self.tableCommand.addItems(["TSAVE", "TSTOP", "TCLEAR", "TRUN", "TONCE"])
+        self.tableCmdBtn = guitools.BetterPushButton("Send command")
+
+        tableLayout.addWidget(self.tableCommand, 0, 0, 1, 2)
+        tableLayout.addWidget(self.tableCmdBtn, 0, 2, 1, 1)
+
+        tableLayout.addWidget(self.rowLabel, 1, 0, 1, 2)
+        tableLayout.addWidget(self.rowEdit, 2, 0, 1, 2)
+        tableLayout.addWidget(self.rowAddBtn, 2, 2, 1, 1)
+
+        tableLayout.addWidget(self.rowIdx, 3, 0, 1, 1)
+        tableLayout.addWidget(self.rowDelBtn, 3, 1, 1, 1)
+
+        tableLayout.addWidget(self.table, 0, 3, 5, 3)
+
+        tableLayout.setRowStretch(0, 0)
+        tableLayout.setRowStretch(1, 0)
+        tableLayout.setRowStretch(2, 0)
+        tableLayout.setRowStretch(3, 0)
+        tableLayout.setRowStretch(4, 1)
+
         self.tableGroup.setLayout(tableLayout)
 
-        self.layout().addWidget(self.channelGroup)
-        self.layout().addWidget(self.tableGroup)
+
+        mainLayout.addWidget(self.channelGroup, 0)
+        mainLayout.addWidget(self.tableGroup, 0)
+        mainLayout.addStretch(1)
+
+        self.setLayout(mainLayout)
