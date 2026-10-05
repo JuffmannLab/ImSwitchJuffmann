@@ -5,6 +5,8 @@ from .basewidgets import Widget
 
 class DDSWidget(Widget):
 
+    sigSetClicked = QtCore.Signal(bool)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -144,3 +146,24 @@ class DDSWidget(Widget):
         mainLayout.addStretch(1)
 
         self.setLayout(mainLayout)
+
+        #connect signals
+        self.setChannelsBtn.clicked.connect(self.sigSetClicked)
+
+        #Helper variables
+        self.channels = [self.ch0, self.ch1, self.ch2, self.ch3]
+        self.frequencies = [self.ch0Freq, self.ch1Freq, self.ch2Freq, self.ch3Freq]
+        self.phases = [self.ch0Phase, self.ch1Phase, self.ch2Phase, self.ch3Phase]
+        self.amplitudes = [self.ch0Amp, self.ch1Amp, self.ch2Amp, self.ch3Amp]
+
+        def isActive(self, int):
+            return self.channels[int].isChecked()
+
+        def getFreq(self, int):
+            return self.frequencies[int].text()
+
+        def getPhase(self, int):
+            return self.phases[int].text()
+
+        def getAmplitude(self, int):
+            return self.amplitudes[int].text()

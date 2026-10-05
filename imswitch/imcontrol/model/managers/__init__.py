@@ -10,3 +10,4 @@ from .SLMManager import SLMManager
 from .ScanManager import ScanManager
 from .ShutterManager import ShutterManager
 from .PockelCellManager import PockelCellManager
+from .DDSManager import DDSManager
