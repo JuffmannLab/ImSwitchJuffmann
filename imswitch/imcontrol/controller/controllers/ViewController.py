@@ -9,8 +9,14 @@ class ViewController(ImConWidgetController):
         super().__init__(*args, **kwargs)
         self._lvacqHandle = None
         self._dvacqHandle = None
+        self._dvBeforeRecording = False
 
         self._widget.setViewToolsEnabled(False, 'LV')
+
+        # DV and recording both take frames from the camera buffer, so DV is switched to LV
+        # during a recording and back afterwards
+        self._commChannel.sigRecordingStarting.connect(self.recordingStarting)
+        self._commChannel.sigRecordingEnded.connect(self.recordingEnded)
 
         # Connect ViewWidget signals
         self._widget.sigGridToggled.connect(self.gridToggle)
@@ -20,50 +26,75 @@ class ViewController(ImConWidgetController):
         self._widget.sigSliderValueChanged.connect(self.sliderValue)
 
     def liveview(self, enabled):
-        """ Start liveview and activate detector acquisition. """
-        if enabled and self._lvacqHandle is None:
+        """ Called when the LiveView button is toggled. Starting LiveView while
+        the Differential View is running switches from DV to LV. """
+        if enabled:
+            # Start LV before stopping DV so the camera keeps running
+            self._startLiveView()
+            if self._dvacqHandle is not None:
+                self._stopDifferentialView()
+                self._widget.setDifferentialViewChecked(False)
+        else:
+            self._stopLiveView()
+
+    def differentialview(self, enabled):
+        """ Called when the Differential View button is toggled. Starting DV
+        switches from LV to DV, stopping DV switches back to LV. """
+        if enabled:
+            # Start DV before stopping LV so the camera keeps running
+            self._startDifferentialView()
+            if self._lvacqHandle is not None:
+                self._stopLiveView()
+                self._widget.setLiveViewChecked(False)
+        else:
+            self._startLiveView()
+            self._stopDifferentialView()
+            self._widget.setLiveViewChecked(True)
+
+    def recordingStarting(self):
+        """ Switches from DV to LV before a recording starts and blocks DV during it. """
+        if self._dvacqHandle is not None:
+            self._dvBeforeRecording = True
+            self._widget.setLiveViewActive(True)  # runs liveview(True), which stops DV
+        self._widget.setDifferentialViewEnabled(False)
+
+    def recordingEnded(self):
+        """ Re-enables DV after a recording and switches back to it if it was active before. """
+        self._widget.setDifferentialViewEnabled(True)
+        if self._dvBeforeRecording:
+            self._dvBeforeRecording = False
+            if self._lvacqHandle is not None:  # LV wasn't stopped by the user in the meantime
+                self._widget.setDifferentialViewActive(True)  # runs differentialview(True)
+
+    def _startLiveView(self):
+        if self._lvacqHandle is None:
             self._lvacqHandle = self._master.detectorsManager.execOnAll(
                 lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
-                condition = lambda c: c.forAcquisition
+                condition=lambda c: c.forAcquisition
             )
-            print(f"LV ACQ HANDLE: {self._lvacqHandle}")
-            if self._dvacqHandle is not None:
-                self._master.detectorsManager.execOnAll(
-                    lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
-                    condition = lambda c: c.forDifferential
-                )
-        elif not enabled and self._lvacqHandle is not None:
+
+    def _stopLiveView(self):
+        if self._lvacqHandle is not None:
             self._master.detectorsManager.execOnAll(
                 lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
-                condition = lambda c: c.forAcquisition
+                condition=lambda c: c.forAcquisition
             )
             self._lvacqHandle = None
 
-    def differentialview(self, enabled):
-        """Start differential view, activate detector acquisition and calculate the differential image"""
-        if enabled and self._dvacqHandle is None:
+    def _startDifferentialView(self):
+        if self._dvacqHandle is None:
             self._dvacqHandle = self._master.detectorsManager.execOnAll(
                 lambda c: self._master.detectorsManager.startDetectorAcquisition(c, differentialView=True),
-                condition = lambda c: c.forDifferential
+                condition=lambda c: c.forDifferential
             )
-            if self._lvacqHandle is not None:
-                self._master.detectorsManager.execOnAll(
-                    lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
-                    condition = lambda c: c.forDifferential
-                )
 
-        elif not enabled and self._dvacqHandle is not None:
+    def _stopDifferentialView(self):
+        if self._dvacqHandle is not None:
             self._master.detectorsManager.execOnAll(
                 lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
-                condition = lambda c: c.forDifferential
+                condition=lambda c: c.forDifferential
             )
             self._dvacqHandle = None
-            
-            self._lvacqHandle = self._master.detectorsManager.execOnAll(
-                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
-                condition = lambda c: c.forDifferential
-            )
-            
 
 
     def sliderValue(self, batch_size):
@@ -79,13 +110,8 @@ class ViewController(ImConWidgetController):
 
     def closeEvent(self):
         """ Stops both live view and differential view acquisitions if active. """
-        if self._lvacqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._lvacqHandle, liveView=True)
-            self._lvacqHandle = None
-
-        if self._dvacqHandle is not None:
-            self._master.detectorsManager.stopAcquisition(self._dvacqHandle, differentialView=True)
-            self._dvacqHandle = None
+        self._stopLiveView()
+        self._stopDifferentialView()
 
     def get_image(self, detectorName):
         if detectorName is None:

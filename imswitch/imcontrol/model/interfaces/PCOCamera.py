@@ -32,8 +32,8 @@ class PCOCamera:
         # Binning is done in h and v direction. Even though we synchronize it for simplicity
         self.hbin = binning
         self.vbin = binning
-        
-        # define the buffer here:
+
+        self._lastFrame = None
         
 
         # initialise camera
@@ -75,22 +75,47 @@ class PCOCamera:
     def stop_live(self):
         self.camera.stop_acquisition()
 
-    def getLast(self):
+    def getLast(self, waitForNew=False):
+        # snap()/grab() start and stop a new acquisition on every call, which stalls the
+        # running live acquisition. While acquiring, read the newest frame from the buffer instead.
+        # peek=True leaves the frames unread, so getLastChunk (differential view, recording)
+        # still gets every frame. With waitForNew=True, wait for a frame recorded after this
+        # call (used for snaps, so they don't return an old frame).
         try:
-            return self.camera.snap()
-        except:
-            pass
+            if self.camera.acquisition_in_progress():
+                if waitForNew:
+                    self.camera.wait_for_frame(since='now', timeout=self.exposure_time * 1e-3 + 5)
+                frame = self.camera.read_newest_image(peek=True)
+                if frame is not None:
+                    self._lastFrame = frame
+            else:
+                self._lastFrame = self.camera.snap()
+        except Exception as e:
+            self.__logger.error(e)
+        return self._lastFrame
 
     def getLastChunk(self):
-
-        try: 
-            vid = self.camera.grab(nframes=self.nframes, frame_timeout=4) # unfortunately 100 frames is the maximum buffer size
-            return vid
-        
+        # Returns all frames acquired since the last call, shape (nframes, height, width).
+        # Returns an empty array (0, height, width) if there are none, since the recording
+        # calls len() on the result.
+        try:
+            frames = self.camera.read_multiple_images()
+            if frames:
+                return np.stack(frames)
         except Exception as e:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')
-            pass
+        return np.zeros((0, *self.camera.get_data_dimensions()), dtype=np.uint16)
+
+    def getLostFrames(self):
+        """ Number of frames that were overwritten in the ring buffer before they were read
+        (pylablib counts frames skipped by flushBuffer here as well). """
+        return self.camera.get_frames_status().skipped
+
+    def flushBuffer(self):
+        # Marks all frames recorded so far as read, so the next getLastChunk only returns new ones
+        if self.camera.acquisition_in_progress():
+            self.camera.read_newest_image()
 
     def setExposure(self, exposuretime):
         self.exposure_time = exposuretime
@@ -100,101 +125,27 @@ class PCOCamera:
     def setBinning(self, binning):
         self.hbin = binning
         self.vbin = binning
+        # The PCO sets binning together with the ROI, so re-apply the current ROI with the new binning
+        hstart, hend, vstart, vend, _, _ = self.camera.get_roi()
+        return self.setROI(hstart, hend, vstart, vend)
 
-    def setROI(self, hstart, hend, vstart, vend):
-        # Check if the ROI has to be symmetric
-        requires_h_symmetry, requires_v_symmetry = self.camera.requires_symmetric_roi()
-        
-        # Old version of setting ROI and proofing for constrains, however it will close the 
-        # code if the input values does not fulfill the constrains. Therefore created a new 
-        # definition which rounds to the nex allowed value. 
-        """
-        # get the center coordinates of the ROI
-        h_center = (hstart + hend)/2
-        v_center = (vstart + vend)/2
-        h_width = (hend-hstart)
-        v_height = (vend - vstart)
-        
-        # horizontal constrains min=160, max=2560, sstep=160, maxbin=4
-        if not (0 <= hstart <=2560-160 and 160 <= hend <= 2560):
-            self.__logger.warning(f'Horizontal Values must be between 160 and 2560')
-            pass
-        elif (hstart % 160 != 0) or (hend % 160 != 0):
-            self.__logger.warning(f'Horizontal Values must be multiples of 160')
-            pass
-        elif hstart >= hend:
-            self.__logger.warning(f'hstart must be smaller than hend')
-            pass
-        elif hend - hstart < 160:
-            self.__logger.warning(f'Horizontal ROI width must be at least 160 pixels')
-            pass
-        elif self.hbin > 4:
-            self.__logger.warning(f'Binning value not supported')
-            pass
-        
-        # vertical constrains min=16, max=2160, sstep=1, maxbin=4
-        elif not (0 <= vstart <=2160-16 and 16 <= vend <= 2160):
-            self.__logger.warning(f'Vertical Values must be between 16 and 2160')
-            pass
-        elif vstart >= vend:
-            self.__logger.warning(f'vstart must be smaller than vend')
-            pass
-        elif vend - vstart < 16:
-            self.__logger.warning(f'Vertical ROI height must be at least 16 pixels')
-        elif self.vbin > 4:
-            self.__logger.warning(f'Binning value not supported')
-            pass
-        
-        # Check for symmetric ROI requirement:
-        elif requires_h_symmetry:
-            hstart_expected = int(h_center - h_width/2)
-            hend_expected = int(h_center + h_width/2)
-            if (hstart, hend) != (hstart_expected, hend_expected):
-                self.__logger.warning(f'Symmetric ROI in h direction required')
-        
-        elif requires_v_symmetry:
-            vstart_expected = int(v_center - v_height/2)
-            vend_expected = int(v_center + v_height/2)
-            if (vstart, vend) != (vstart_expected, vend_expected):
-                self.__logger.warning(f'Symmetric ROI v direction required')
-             
-        else:
-            roi_values = (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
-            self.setPropertyValue('roi', roi_values)
-
-        return roi_values if roi_values else (hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric)
-        """
-    # Ensure ROI values are within allowed constraints
-        def clamp(value, min_val, max_val, step=1):
-            value = max(min_val, min(max_val, value))  # Clamp within range
-            return round(value / step) * step  # Snap to nearest step
-
-        # Define constraints
-        hstart = clamp(hstart, 0, 2560 - 160, step=1)
-        hend = clamp(hend, 160, 2560, step=160)+hstart
-        vstart = clamp(vstart, 0, 2160 - 16, step=1)
-        vend = clamp(vend, 16, 2160, step=16)+vstart
-        
-        # Ensure hstart < hend and vstart < vend
-        if hstart >= hend:
-            hstart = hend - 160 
-        if vstart >= vend:
-            vstart = vend - 16
-        
-        # Apply symmetric ROI constraints if required
-        if requires_h_symmetry:
-            h_center = (hstart + hend) // 2
-            h_width = (hend - hstart)
-            hstart = h_center - (h_width // 2)
-            hend = h_center + (h_width // 2)
-        if requires_v_symmetry:
-            v_center = (vstart + vend) // 2
-            v_height = (vend - vstart)
-            vstart = v_center - v_height // 2
-            vend = v_center + (v_height // 2)
-        
-        roi_values = (hstart, hend, vstart, vend)
-        return roi_values
+    def setROI(self, hstart, hend, vstart, vend, symmetric=False):
+        """ Sets the ROI in unbinned sensor pixels (end exclusive) and returns the ROI that was
+        actually applied as (hstart, hend, vstart, vend, hbin, vbin).
+        pylablib snaps the values to the allowed steps/limits of the camera and pauses/resumes
+        a running acquisition itself. With symmetric=False the part of the ROI that the camera
+        can't do in hardware is done as software ROI: smaller frames, but no faster readout.
+        symmetric=True keeps the hardware ROI symmetric around the sensor centre, which is what
+        actually increases the frame rate. """
+        roi = self.camera.set_roi(hstart, hend, vstart, vend, self.hbin, self.vbin, symmetric=symmetric)
+        if tuple(roi[:4]) != (hstart, hend, vstart, vend):
+            hlim, vlim = self.camera.get_roi_limits(self.hbin, self.vbin)
+            self.__logger.warning(
+                f'Requested ROI h {hstart}-{hend}, v {vstart}-{vend} was adjusted to camera limits: '
+                f'h {roi[0]}-{roi[1]}, v {roi[2]}-{roi[3]} '
+                f'(h min {hlim.min}, step {hlim.pstep}; v min {vlim.min}, step {vlim.pstep})'
+            )
+        return roi
 
     def reboot(self):
         self.camera.reboot(wait=True)
@@ -258,7 +209,7 @@ class PCOCamera:
         if property_name == 'Set exposure time':
             self.setExposure(property_value)
         elif property_name == 'roi':
-            self.camera.set_roi(property_value)
+            self.camera.set_roi(*property_value)
         elif property_name == 'Set Hotpixel Correction':
             if property_value == 'Off':
                 self.camera.set_device_variable('hotpixel_correction', False)

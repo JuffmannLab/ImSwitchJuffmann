@@ -48,14 +48,16 @@ class PCOCamManager(DetectorManager):
                                                                       'On'],
                                                             editable=True),
             'Buffer Frames': DetectorNumberParameter(group='Acquisition', value = self._camera.nframes,
-                                                     editable=True)
+                                                     valueUnits='frames', editable=True)
             }
         
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1,2,3,4],
                          model=model, parameters=parameters, actions=None, croppable=True)
         
-    def getLatestFrame(self):
-        return self._camera.getLast()
+    def getLatestFrame(self, is_save=False):
+        # is_save is passed by RecordingManager.snap: wait for a fresh frame instead of
+        # returning the last one from the live view
+        return self._camera.getLast(waitForNew=is_save)
     
     def setParameter(self, name, value):
         
@@ -77,11 +79,10 @@ class PCOCamManager(DetectorManager):
     
     def setBinning(self, binning):
         super().setBinning(binning)
-
-        def binningAction():
-            self._camera.setBinning(binning)
-            
-            self._performSafeCameraAction(binningAction)
+        try:
+            self._updateFrameFromROI(self._camera.setBinning(binning))
+        except Exception as e:
+            self.__logger.error(e)
 
     def getChunk(self):
         try:
@@ -108,7 +109,12 @@ class PCOCamManager(DetectorManager):
         self.__logger.debug('stoplive') 
 
     def flushBuffers(self):
-        return super().flushBuffers() 
+        self._camera.flushBuffer()
+
+    def getLostFrames(self):
+        """ Number of frames overwritten in the buffer before they were read. Used by the
+        recording to report incomplete recordings. """
+        return self._camera.getLostFrames()
     
     def finalize(self) -> None:
         super().finalize()
@@ -120,21 +126,23 @@ class PCOCamManager(DetectorManager):
         return [1, 1, 1]
     
     def crop(self, hpos, vpos, hsize, vsize):
-
-        def cropAction():
-            self.__logger.debug(
-                f'{self._camera.model}: crop frame to {hsize}x{vsize} at {hpos},{vpos}.'
-            )
-            self._camera.setROI(hpos, hpos + hsize, vpos, vpos + vsize)
-    
-            self._shape = (hsize, vsize)
-            self._frameStart = (hpos, vpos)
-            pass
+        # hpos, vpos, hsize, vsize come from the SettingsController in unbinned sensor pixels.
+        # pylablib pauses/resumes a running acquisition itself, so no stop/start needed here.
+        self.__logger.debug(
+            f'{self._camera.model}: crop frame to {hsize}x{vsize} at {hpos},{vpos}.'
+        )
         try:
-            self._performSafeCameraAction(cropAction)
+            self._updateFrameFromROI(self._camera.setROI(hpos, hpos + hsize, vpos, vpos + vsize))
         except Exception as e:
             self.__logger.error(e)
-        pass 
+
+    def _updateFrameFromROI(self, roi):
+        """ Sets frameStart and shape from the ROI the camera actually applied, given as
+        (hstart, hend, vstart, vend, hbin, vbin). Like the Settings widget, they are in binned
+        pixels. """
+        hstart, hend, vstart, vend, hbin, vbin = roi
+        self._frameStart = (hstart // hbin, vstart // vbin)
+        self._shape = ((hend - hstart) // hbin, (vend - vstart) // vbin)
 
     def _performSafeCameraAction(self, function):
         try:

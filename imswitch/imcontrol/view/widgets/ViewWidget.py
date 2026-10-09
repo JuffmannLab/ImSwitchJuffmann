@@ -42,9 +42,9 @@ class ViewWidget(Widget):
         self.differentialviewButton = guitools.BetterPushButton('Differential View')
         self.differentialviewButton.setStyleSheet("font-size:20px")
         self.differentialviewButton.setCheckable(True)
-        self.liveviewButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
-                                          QtWidgets.QSizePolicy.Expanding)
-        self.liveviewButton.setEnabled(True)
+        self.differentialviewButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
+                                                  QtWidgets.QSizePolicy.Expanding)
+        self.differentialviewButton.setEnabled(True)
 
         # Slider and Input Field for Batch Size
         self.sliderLabel = QtWidgets.QLabel("Batch Size:")
@@ -121,8 +121,22 @@ class ViewWidget(Widget):
     def getDifferentialViewActive(self):
         return self.differentialviewButton.isChecked()
     
-    def setDiffrentialViewActive(self, active):
+    def setDifferentialViewActive(self, active):
         self.differentialviewButton.setChecked(active)
+
+    def setDifferentialViewEnabled(self, enabled):
+        self.differentialviewButton.setEnabled(enabled)
+
+    def setLiveViewChecked(self, checked):
+        """ Sets the LiveView button state without emitting sigLiveviewToggled. """
+        with QtCore.QSignalBlocker(self.liveviewButton):
+            self.liveviewButton.setChecked(checked)
+
+    def setDifferentialViewChecked(self, checked):
+        """ Sets the Differential View button state without emitting
+        sigDifferentialviewToggled. """
+        with QtCore.QSignalBlocker(self.differentialviewButton):
+            self.differentialviewButton.setChecked(checked)
 
     def setLiveViewGridVisible(self, visible):
         """ Sets whether the LiveView grid is visible. """
@@ -146,7 +160,8 @@ class ViewWidget(Widget):
 
     @shortcut('Ctrl+D', "Differential View")
     def toggleDifferentialviewButton(self):
-        self.differentialviewButton.toggle()
+        if self.differentialviewButton.isEnabled():  # disabled during recordings
+            self.differentialviewButton.toggle()
 
 
 # Copyright (C) 2020-2021 ImSwitch developers

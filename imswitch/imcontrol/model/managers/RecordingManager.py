@@ -64,10 +64,9 @@ class ZarrStorer(Storer):
             root = zarr.group(store=store)
 
             for channel, image in images.items():
-                shape = self.detectorManager[channel].shape
-
-                d = root.create_dataset(channel, data=image, shape=tuple(reversed(shape)),
-                                        chunks=(512, 512), dtype='i2') #TODO: why not dynamic chunking?
+                # Shape and dtype are taken from the image itself (height, width)
+                d = root.create_dataset(channel, data=image,
+                                        chunks=(512, 512)) #TODO: why not dynamic chunking?
                 d.attrs["ImSwitchData"] = attrs[channel]
                 logger.info(f"Saved image to zarr file {path}")
 
@@ -80,27 +79,23 @@ class HDF5Storer(Storer):
         for channel, image in images.items():
             
             with AsTemporayFile(f'{self.filepath}_{channel}.h5') as path:
-                file = h5py.File(path, 'w')
+                # The file is closed by the with-block even if writing fails, so the
+                # temporary file can still be renamed
+                with h5py.File(path, 'w') as file:
+                    # Shape and dtype are taken from the image itself (height, width)
+                    dataset = file.create_dataset('data', data=image)
 
-                shape = self.detectorManager[channel].shape
+                    for key, value in attrs[channel].items():
+                        try:
+                            dataset.attrs[key] = value
+                        except:
+                            logger.debug(f'Could not put key:value pair {key}:{value} in hdf5 metadata.')
 
-                dataset = file.create_dataset('data', tuple(reversed(shape)), dtype='i2')
+                    dataset.attrs['detector_name'] = channel
 
-                for key, value in attrs[channel].items():
-                    try:
-                        dataset.attrs[key] = value
-                    except:
-                        logger.debug(f'Could not put key:value pair {key}:{value} in hdf5 metadata.')
-
-                dataset.attrs['detector_name'] = channel
-
-                # For ImageJ compatibility
-                dataset.attrs['element_size_um'] = \
-                    self.detectorManager[channel].pixelSizeUm
-
-                dataset[:, ...] = np.moveaxis(image, 0, -1)
-            
-                file.close()
+                    # For ImageJ compatibility
+                    dataset.attrs['element_size_um'] = \
+                        self.detectorManager[channel].pixelSizeUm
 
 class NPYStorer(Storer):
     """ A storer that stores the images as .npy files """
@@ -149,6 +144,7 @@ class RecordingManager(SignalInterface):
     """ RecordingManager handles single frame captures as well as continuous
     recordings of detector data. """
 
+    sigRecordingStarting = Signal()  # emitted in startRecording, before the recording thread starts
     sigRecordingStarted = Signal()
     sigRecordingEnded = Signal()
     sigRecordingFrameNumUpdated = Signal(int)  # (frameNumber)
@@ -196,6 +192,8 @@ class RecordingManager(SignalInterface):
         specified. """
 
         self.__logger.info('Starting recording')
+        # Lets e.g. the differential view stop before frames are read for the recording
+        self.sigRecordingStarting.emit()
         self.__record = True
         self.__recordingWorker.detectorNames = detectorNames
         self.__recordingWorker.recMode = recMode
@@ -216,9 +214,8 @@ class RecordingManager(SignalInterface):
         sigRecordingEnded signal will be emitted. Unless wait is False, this
         method will wait until the recording is complete before returning. """
 
-        self.__detectorsManager.execOnAll(lambda c: c.flushBuffers(),
-                                          condition=lambda c: c.forAcquisition)
-
+        # No flushBuffers here: the recording worker reads the remaining frames in its final
+        # loop; flushing would discard them. startRecording flushes before the next recording.
         if self.__record:
             self.__logger.info('Stopping recording')
         self.__record = False
@@ -270,25 +267,21 @@ class RecordingManager(SignalInterface):
 
         # Write file
         if saveFormat == SaveFormat.HDF5:
-            file = h5py.File(filePath, 'w')
+            with h5py.File(filePath, 'w') as file:
+                # Shape and dtype are taken from the image itself (height, width)
+                dataset = file.create_dataset('data', data=image)
 
-            shape = image.shape
-            dataset = file.create_dataset('data', tuple(reversed(shape)), dtype='i2')
+                for key, value in attrs[detectorName].items():
+                    try:
+                        dataset.attrs[key] = value
+                    except:
+                        self.__logger.debug(f'Could not put key:value pair {key}:{value} in hdf5 metadata.')
 
-            for key, value in attrs[detectorName].items():
-                try:
-                    dataset.attrs[key] = value
-                except:
-                    self.__logger.debug(f'Could not put key:value pair {key}:{value} in hdf5 metadata.')
+                dataset.attrs['detector_name'] = detectorName
 
-            dataset.attrs['detector_name'] = detectorName
-
-            # For ImageJ compatibility
-            dataset.attrs['element_size_um'] = \
-                self.__detectorsManager[detectorName].pixelSizeUm
-
-            dataset[:, ...] = np.moveaxis(image, 0, -1)
-            file.close()
+                # For ImageJ compatibility
+                dataset.attrs['element_size_um'] = \
+                    self.__detectorsManager[detectorName].pixelSizeUm
         elif saveFormat == SaveFormat.TIFF:
             tiff.imwrite(filePath, image)
         elif saveFormat == SaveFormat.NPY:
@@ -297,9 +290,7 @@ class RecordingManager(SignalInterface):
             path = self.getSaveFilePath(f'{savename}.{fileExtension}')
             store = zarr.storage.DirectoryStore(path)
             root = zarr.group(store=store)
-            shape = self.__detectorsManager[detectorName].shape
-            d = root.create_dataset(detectorName, data=image, shape=tuple(reversed(shape)), chunks=(512, 512),
-                                    dtype='i2')
+            d = root.create_dataset(detectorName, data=image, chunks=(512, 512))
             d.attrs["ImSwitchData"] = attrs[detectorName]
             store.close()
         else:
@@ -332,11 +323,43 @@ class RecordingWorker(Worker):
 
     def run(self):
         acqHandle = self.__recordingManager.detectorsManager.startAcquisition()
+        lostAtStart = self._getLostFrames()
         try:
             self._record()
 
         finally:
+            self._reportLostFrames(lostAtStart)
             self.__recordingManager.detectorsManager.stopAcquisition(acqHandle)
+
+    def _getLostFrames(self):
+        """ Returns {detectorName: number of frames lost so far} for the recorded detectors
+        whose manager can tell (getLostFrames). """
+        lost = {}
+        for detectorName in self.detectorNames:
+            detector = self.__recordingManager.detectorsManager[detectorName]
+            if hasattr(detector, 'getLostFrames'):
+                try:
+                    lost[detectorName] = detector.getLostFrames()
+                except Exception as e:
+                    self.__logger.debug(f'Could not read lost frames of {detectorName}: {e}')
+        return lost
+
+    def _reportLostFrames(self, lostAtStart):
+        """ Logs how many frames were overwritten in the camera buffer during the recording,
+        i.e. are missing from the recording. """
+        lostAtEnd = self._getLostFrames()
+        for detectorName, lostBefore in lostAtStart.items():
+            if detectorName not in lostAtEnd:
+                continue
+            lost = lostAtEnd[detectorName] - lostBefore
+            if lost > 0:
+                self.__logger.warning(
+                    f'{detectorName}: {lost} frames were overwritten in the camera buffer before'
+                    f' they could be saved; the recording is incomplete. Increase the buffer size'
+                    f' (NumberOfFrames) or reduce the frame rate/ROI.'
+                )
+            else:
+                self.__logger.info(f'{detectorName}: recording complete, no frames lost.')
 
     def _record(self):
         if self.saveFormat == SaveFormat.HDF5 or self.saveFormat == SaveFormat.ZARR:
@@ -371,10 +394,11 @@ class RecordingWorker(Worker):
             if self.saveFormat == SaveFormat.HDF5:
                 # Initial number of frames must not be 0; otherwise, too much disk space may get
                 # allocated. We remove this default frame later on if no frames are captured.
+                # uint16: camera data is unsigned, values above 32767 would wrap with int16
                 datasets[detectorName] = files[detectorName].create_dataset(
                     datasetName, (1, *reversed(shape)),
                     maxshape=(None, *reversed(shape)),
-                    dtype='i2'
+                    dtype='u2'
                 )
 
                 for key, value in self.attrs[detectorName].items():
@@ -394,7 +418,7 @@ class RecordingWorker(Worker):
 
             elif self.saveFormat == SaveFormat.ZARR:
                 datasets[detectorName] = files[detectorName].create_dataset(datasetName, shape=(1, *reversed(shape)),
-                                                                            dtype='i2', chunks=(1, 512, 512)
+                                                                            dtype='u2', chunks=(1, 512, 512)
                                                                             )
 
                 datasets[detectorName].attrs['ImSwitchData'] = self.attrs[detectorName]

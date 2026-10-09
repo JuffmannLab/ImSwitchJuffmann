@@ -39,7 +39,8 @@ class PhotonFocusManager(DetectorManager):
                                             editable=True),
             'BlackLevelOffset': DetectorNumberParameter(group='Misc', value=self.camera.getPropertyValue('BlackLevelOffset'), valueUnits='arb.u.', 
                                             editable=True),
-            'NumberOfFrames': DetectorNumberParameter(group='Misc', value=100, valueUnits='arb.u.',
+            # Ring buffer size; can be set with "NumberOfFrames" under "PFCam" in the setup file
+            'NumberOfFrames': DetectorNumberParameter(group='Misc', value=getattr(self.camera, 'nframes', 100), valueUnits='frames',
                                             editable=True),
             'Hstart': DetectorNumberParameter(group = 'Frame', value=self.camera.getPropertyValue('Hstart'), valueUnits='px',
                                               editable = True),
@@ -65,8 +66,10 @@ class PhotonFocusManager(DetectorManager):
         super().__init__(detectorInfo, name, fullShape=fullShape, supportedBinnings=[1],
                          model=model, parameters=parameters, actions=actions, croppable=False) 
 
-    def getLatestFrame(self, is_save = True):
-        return self.camera.getLast()
+    def getLatestFrame(self, is_save = False):
+        # is_save is passed by RecordingManager.snap: wait for a fresh frame instead of
+        # returning the last one from the live view
+        return self.camera.getLast(waitForNew=is_save)
     
     def setParameter(self, name, value):
         
@@ -103,6 +106,11 @@ class PhotonFocusManager(DetectorManager):
         
     def flushBuffers(self):
         self.camera.flushBuffer()
+
+    def getLostFrames(self):
+        """ Number of frames overwritten in the buffer before they were read. Used by the
+        recording to report incomplete recordings. """
+        return self.camera.getLostFrames()
     
     def startAcquisition(self):
         if not self._running:

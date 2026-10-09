@@ -19,11 +19,12 @@ from logging import raiseExceptions
 from imswitch.imcommon.model import initLogger
 
 class PhotonFocusBitflowCamera:
-    def __init__(self, exposure_time = 10, nframes = 100, mode = 'sequence', pfcam_port = 0):
+    def __init__(self, exposure_time = 0.005, nframes = 1000, mode = 'sequence', pfcam_port = 0):
         super().__init__()
         self.__logger = initLogger(self, tryInheritParent=True)
-        
-        self.exposure_time = exposure_time
+
+        self.exposure_time = exposure_time  # in s, like the ExposureTime parameter of the manager
+        self._lastFrame = None
         self.nframes = nframes
         self.mode = mode
         self.pfcam_port = pfcam_port
@@ -36,7 +37,7 @@ class PhotonFocusBitflowCamera:
         self.camera = PhotonFocus.PhotonFocusBitFlowCamera(index, camfile, port) # to do: provide the path to the camfile in order to change the ROI
         self.model = self.getPropertyValue('CameraName')
         self.open()
-        self.setPropertyValue('EposureTime', self.exposure_time)
+        self.setPropertyValue('ExposureTime', self.exposure_time)
         
     def open(self):
         self.camera.open()
@@ -113,11 +114,24 @@ class PhotonFocusBitflowCamera:
 
         return hstart, vstart, hend, vend
             
-    def getLast(self):
+    def getLast(self, waitForNew=False):
+        # snap()/grab() start and stop a new acquisition on every call, which stalls the
+        # running live acquisition. While acquiring, read the newest frame from the buffer instead.
+        # peek=True leaves the frames unread, so getLastChunk (differential view, recording)
+        # still gets every frame. With waitForNew=True, wait for a frame recorded after this
+        # call (used for snaps, so they don't return an old frame).
         try:
-            return self.camera.snap()
-        except:
-            pass
+            if self.camera.acquisition_in_progress():
+                if waitForNew:
+                    self.camera.wait_for_frame(since='now', timeout=self.exposure_time + 5)
+                frame = self.camera.read_newest_image(peek=True)
+                if frame is not None:
+                    self._lastFrame = frame
+            else:
+                self._lastFrame = self.camera.snap()
+        except Exception as e:
+            self.__logger.error(e)
+        return self._lastFrame
     
     def start_live(self):
         nframes = self.nframes
@@ -134,20 +148,29 @@ class PhotonFocusBitflowCamera:
             self.camera.pausing_acquisition()
 
     def flushBuffer(self):
-        self.camera.BufferManager(self.camera).reset()
-        self.camera.clear_acquisition()
+        # Marks all frames recorded so far as read, so the next getLastChunk only returns new ones.
+        # (Clearing the acquisition here would free the buffers of the running acquisition.)
+        if self.camera.acquisition_in_progress():
+            self.camera.read_newest_image()
 
     def getLastChunk(self):
-
-        try: 
-            vid = self.camera.grab(nframes=self.nframes, frame_timeout=4) # unfortunately 100 frames is the maximum buffer size
-            return vid
-        
+        # Returns all frames acquired since the last call, shape (nframes, height, width).
+        # Returns an empty array (0, height, width) if there are none, since the recording
+        # calls len() on the result.
+        try:
+            frames = self.camera.read_multiple_images()
+            if frames:
+                return np.stack(frames)
         except Exception as e:
             self.__logger.error(e)
             self.__logger.warning(f'Something went wrong in acquiring a video')
-            pass
+        return np.zeros((0, *self.camera.get_data_dimensions()), dtype=np.uint16)
         
+    def getLostFrames(self):
+        """ Number of frames that were overwritten in the ring buffer before they were read
+        (pylablib counts frames skipped by flushBuffer here as well). """
+        return self.camera.get_frames_status().skipped
+
     def getPropertyValue(self, attribute_name):
         if attribute_name == 'All':
             attribute_value = self.camera.get_all_attribute_values()
@@ -164,9 +187,9 @@ class PhotonFocusBitflowCamera:
         elif attribute_name == 'BlackLevelOffset':
             attribute_value = self.camera.get_attribute_value('Voltages/BlackLevelOffset')
         elif attribute_name == 'image_width':
-            attribute_value = self.camera.get_attribute_value('Window/H')
-        elif attribute_name == 'image_height':
             attribute_value = self.camera.get_attribute_value('Window/W')
+        elif attribute_name == 'image_height':
+            attribute_value = self.camera.get_attribute_value('Window/H')
         elif attribute_name == 'CameraName':
             attribute_value = self.camera.get_attribute_value('CameraName')
         elif attribute_name == 'Hstart':
@@ -178,6 +201,7 @@ class PhotonFocusBitflowCamera:
             
     def setPropertyValue(self, attribute_name, attribute_value):
         if attribute_name == 'ExposureTime':
+            self.exposure_time = attribute_value
             self.camera.set_exposure(attribute_value)
         elif attribute_name == 'FramePeriod':
             self.camera.set_frame_period(attribute_value)
@@ -190,7 +214,12 @@ class PhotonFocusBitflowCamera:
         elif attribute_name == 'StatusLine':
             self.camera.enable_status_line(attribute_value)
         elif attribute_name == 'NumberOfFrames':
-            self.nframes = attribute_value
+            # Ring buffer size in frames. The buffer is allocated when the acquisition starts,
+            # so a running acquisition is restarted to apply it.
+            self.nframes = int(attribute_value)
+            if self.camera.acquisition_in_progress():
+                self.stop_live()
+                self.start_live()
         elif attribute_name == 'Hstart':
             vstart = self.getPropertyValue('Vstart')
             hshift, vshift = self.setROI_shift(hstart=attribute_value, vstart=vstart)
