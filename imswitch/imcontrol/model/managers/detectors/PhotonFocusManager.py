@@ -192,5 +192,13 @@ class PhotonFocusManager(DetectorManager):
         self.__logger.info(f'Initialized camera, model: {camera.model}')
         return camera
     
+    def finalize(self) -> None:
+        # Called by the DetectorsManager on shutdown: stopping the acquisition also ends
+        # pylablib's buffer thread before the camera is closed
+        super().finalize()
+        self.__logger.debug('Safely disconnecting the camera...')
+        self.stopAcquisition()
+        self.camera.close()
+
     def closeEvent(self):
         self.camera.close()

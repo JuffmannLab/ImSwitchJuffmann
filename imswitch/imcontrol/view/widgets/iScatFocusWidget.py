@@ -48,6 +48,11 @@ class iScatFocusWidget(Widget):
         pidLayout.addWidget(self.kdEdit, 2, 1)
         pidLayout.addWidget(self.lockButton, 0, 2, 2, 1)
         pidLayout.addWidget(self.autoTuneButton, 2, 2)
+
+        # Auto-tune result: measured noise, drift and expected stability
+        self.autoTuneResultLabel = QtWidgets.QLabel('')
+        self.autoTuneResultLabel.setWordWrap(True)
+        pidLayout.addWidget(self.autoTuneResultLabel, 3, 0, 1, 3)
         self.pidControlGroup.setLayout(pidLayout)
 
         # ---- Position Control ----
@@ -180,7 +185,8 @@ class iScatFocusWidget(Widget):
         voltage = value * 0.01  # Convert to volts (-10 to +10V range)
         self.positionEdit.setText(f"{voltage:.2f}")
 
-    def updateCalibrationResult(self, slope, intercept, forward_slope=None, backward_slope=None):
+    def updateCalibrationResult(self, slope, intercept, forward_slope=None, backward_slope=None,
+                                angle_deg=None):
         """Display calibration results with optional forward/backward slopes"""
         px_per_volt = 1/slope
         
@@ -197,7 +203,11 @@ class iScatFocusWidget(Widget):
             text += (f"<br><b>Forward:</b> {forward_px_per_v:.2f} px/V<br>"
                     f"<b>Backward:</b> {backward_px_per_v:.2f} px/V<br>"
                     f"<b>Hysteresis:</b> {hysteresis:.2f} px/V")
-        
+
+        # Direction in which the spot moves on the camera (0 deg = along x)
+        if angle_deg is not None:
+            text += f"<br><b>Direction of motion:</b> {angle_deg:.1f} deg"
+
         # Color coding for plausibility
         if abs(px_per_volt) < 2:  # Unrealistically small
             color = "red"
@@ -210,6 +220,10 @@ class iScatFocusWidget(Widget):
         
         self.calibResultLabel.setText(text)
         self.calibResultLabel.setStyleSheet(f"color: {color};")
+
+    def setAutoTuneResult(self, text):
+        """ Shows the auto-tune result (rich text) below the PID parameters. """
+        self.autoTuneResultLabel.setText(text)
 
     def emitPIDValues(self):
         """Emit current PID values"""

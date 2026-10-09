@@ -74,6 +74,14 @@ class DetectorsManager(MultiManager, SignalInterface):
         if hasattr(super(), '__del__'):
             super().__del__()
 
+    def finalize(self):
+        """ Stops the LiveView and Differential View threads, then closes the detectors. Called
+        by the MasterController on shutdown, after the controllers were closed. """
+        for thread in (self._thread, self._dvthread):
+            thread.quit()
+            thread.wait()
+        super().finalize()
+
     def adjustBatchSize(self, batch_size):
         """ Adjusting the batch size for the Differential View inside the dvworker class """
 
@@ -191,9 +199,10 @@ class DetectorsManager(MultiManager, SignalInterface):
             self._dvthread.wait()
 
         if disableAcq:
-            # Keep cameras running that are still used by LiveView/Differential View
+            # Keep cameras running that are still used by LiveView/Differential View or that
+            # a focus lock needs
             self.execOnAll(lambda c: c.stopAcquisition(),
-                           condition=lambda c: c.forAcquisition
+                           condition=lambda c: c.forAcquisition and not c.forFocusLock
                            and not self._activeDetectorAcqHandles.get(c))
             self.sigAcquisitionStopped.emit()
 
@@ -256,8 +265,10 @@ class DetectorsManager(MultiManager, SignalInterface):
             if differentialView:
                 self._activeDetectorDVHandles.get(detector, set()).difference_update(handles)
 
+            # A camera used by a focus lock keeps running
             disableAcq = (not self._activeDetectorAcqHandles.get(detector)
-                          and not self._hasGlobalAcqHandles())
+                          and not self._hasGlobalAcqHandles()
+                          and not detector.forFocusLock)
             disableLV = liveView and not any(self._activeDetectorAcqLVHandles.values())
             disableDV = differentialView and not any(self._activeDetectorDVHandles.values())
         finally:

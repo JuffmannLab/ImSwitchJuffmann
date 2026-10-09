@@ -146,6 +146,7 @@ class GXPIPYManager(DetectorManager):
     def finalize(self) -> None:
         super().finalize()
         self.__logger.debug('Safely disconnecting the camera...')
+        self.stopAcquisition()
         self._camera.close()
 
     @property

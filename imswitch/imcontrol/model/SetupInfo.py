@@ -176,17 +176,22 @@ class iScatFocusInfo:
     frameCroph: int
     """ Height of frame crop. """
 
-    sledEnableLine: str
-    """ NiDAQ Digital Line e.g. Dev1/Port0/Line6 """
+    sledEnableLine: Optional[str] = None
+    """ NiDAQ digital line that enables the SLED of the focus lock, e.g. Dev1/Port0/Line6 """
 
-    sledAIEnableLine: str
-    """ NiDAQ Digital Line e.g. Dev1/Port0/Line6 """
+    sledAIEnableLine: Optional[str] = None
+    """ NiDAQ digital line that enables the analog current control of the SLED,
+    e.g. Dev1/Port0/Line7 """
 
-    sledControlChannel: str
-    """ NiDAQ Analog output channel e.g. Dev1/ao3"""
+    sledControlChannel: Optional[str] = None
+    """ NiDAQ analog output channel for the SLED control voltage, e.g. Dev1/ao3 """
 
-    pidParams: Dict[str, Any]
-    """ initial PID parameters. """
+    pidParams: Optional[Dict[str, Any]] = None
+    """ Initial PID parameters, e.g. {"p": 0.4, "i": 0.02, "d": 0.03}. Optional. """
+
+    piezoNmPerVolt: Optional[float] = None
+    """ Focus change of the piezo in nm per volt. Optional; if set, the auto-tune
+    shows the expected lock stability in nm. """
 
 @dataclass(frozen=True)
 class AutofocusInfo:
@@ -325,8 +330,8 @@ class SetupInfo:
     functionality. """
     
     iScatFocus: Optional[iScatFocusInfo] = field(default_factory=lambda: None)
-    """ Focus lock settings. Required to be defined to use focus lock
-    functionality. """
+    """ iScat focus lock settings. Required to be defined to use the iScat
+    focus lock functionality. """
     
     autofocus: Optional[AutofocusInfo] = field(default_factory=lambda: None)
     """ Autofocus  settings. Required to be defined to use autofocus 
