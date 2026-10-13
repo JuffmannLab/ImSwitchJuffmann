@@ -162,7 +162,8 @@ class GXPIPYManager(DetectorManager):
             self._camera.setROI(hpos, vpos, hsize, vsize)
             # TOdO: weird hackaround
             self._shape = (self._camera.camera.Width.get()//self._camera.binning, self._camera.camera.Height.get()//self._camera.binning)
-            self._frameStart = (hpos, vpos)
+            # The offsets the camera actually applied (rounded to its increments)
+            self._frameStart = (self._camera.camera.OffsetX.get(), self._camera.camera.OffsetY.get())
             pass
         try:
             self._performSafeCameraAction(cropAction)

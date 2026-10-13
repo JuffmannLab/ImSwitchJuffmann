@@ -325,6 +325,15 @@ class CameraGXIPY:
         vpos = self.camera.OffsetY.get_range()["inc"]*((vpos)//self.camera.OffsetY.get_range()["inc"])
         hsize = int(np.min((self.camera.Width.get_range()["inc"]*((hsize*self.binning)//self.camera.Width.get_range()["inc"]),self.camera.WidthMax.get())))
         vsize = int(np.min((self.camera.Height.get_range()["inc"]*((vsize*self.binning)//self.camera.Height.get_range()["inc"]),self.camera.HeightMax.get())))
+        # The offset plus the size can't exceed the sensor
+        hpos = int(min(hpos, self.camera.WidthMax.get() - hsize))
+        vpos = int(min(vpos, self.camera.HeightMax.get() - vsize))
+
+        # Set the offsets to 0 first, otherwise a larger size can't be set while the old offset
+        # plus the new size would exceed the sensor
+        for offset in (self.camera.OffsetX, self.camera.OffsetY):
+            if offset.is_implemented() and offset.is_writable():
+                offset.set(0)
 
         if vsize is not None:
             self.ROI_width = hsize

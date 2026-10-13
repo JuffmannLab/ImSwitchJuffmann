@@ -1,4 +1,4 @@
-from imswitch.imcommon.model import APIExport
+from imswitch.imcommon.model import APIExport, initLogger
 from ..basecontrollers import ImConWidgetController
 
 
@@ -7,55 +7,55 @@ class ViewController(ImConWidgetController):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._lvacqHandle = None
-        self._dvacqHandle = None
+        self.__logger = initLogger(self)
+        # Acquisition handles per camera, {detectorName: handle}. Differential View only runs
+        # on the cameras marked forDifferential; all other cameras stay in LiveView.
+        self._lvHandles = {}
+        self._dvHandles = {}
         self._dvBeforeRecording = False
 
         self._widget.setViewToolsEnabled(False, 'LV')
 
-        # DV and recording both take frames from the camera buffer, so DV is switched to LV
-        # during a recording and back afterwards
+        # DV and recording both take frames from the camera buffer, so the DV cameras are
+        # switched to LV during a recording and back afterwards
         self._commChannel.sigRecordingStarting.connect(self.recordingStarting)
         self._commChannel.sigRecordingEnded.connect(self.recordingEnded)
 
         # Connect ViewWidget signals
-        self._widget.sigGridToggled.connect(self.gridToggle)
-        self._widget.sigCrosshairToggled.connect(self.crosshairToggle)
         self._widget.sigLiveviewToggled.connect(self.liveview)
         self._widget.sigDifferentialviewToggled.connect(self.differentialview)
         self._widget.sigSliderValueChanged.connect(self.sliderValue)
 
     def liveview(self, enabled):
-        """ Called when the LiveView button is toggled. Starting LiveView while
-        the Differential View is running switches from DV to LV. """
+        """ Called when the LiveView button is toggled. Starts/stops LiveView on all
+        acquisition cameras that are not in Differential View. """
         if enabled:
-            # Start LV before stopping DV so the camera keeps running
-            self._startLiveView()
-            if self._dvacqHandle is not None:
-                self._stopDifferentialView()
-                self._widget.setDifferentialViewChecked(False)
+            self._startLiveView(self._lvNames())
         else:
-            self._stopLiveView()
+            self._stopLiveView(list(self._lvHandles))
 
     def differentialview(self, enabled):
-        """ Called when the Differential View button is toggled. Starting DV
-        switches from LV to DV, stopping DV switches back to LV. """
+        """ Called when the Differential View button is toggled. Switches the forDifferential
+        cameras from LV to DV and back; the other cameras keep running in LV. """
+        dvNames = self._dvNames()
         if enabled:
             # Start DV before stopping LV so the camera keeps running
-            self._startDifferentialView()
-            if self._lvacqHandle is not None:
-                self._stopLiveView()
-                self._widget.setLiveViewChecked(False)
+            self._startDifferentialView(dvNames)
+            self._stopLiveView(dvNames)
         else:
-            self._startLiveView()
+            # Back to LV if the LiveView is on
+            if self._widget.getLiveViewActive():
+                self._startLiveView(self._acqNames(dvNames))
             self._stopDifferentialView()
-            self._widget.setLiveViewChecked(True)
 
     def recordingStarting(self):
-        """ Switches from DV to LV before a recording starts and blocks DV during it. """
-        if self._dvacqHandle is not None:
+        """ Switches the DV cameras to LV before a recording starts and blocks DV during it. """
+        if self._dvHandles:
             self._dvBeforeRecording = True
-            self._widget.setLiveViewActive(True)  # runs liveview(True), which stops DV
+            dvNames = list(self._dvHandles)
+            self._startLiveView(self._acqNames(dvNames))
+            self._stopDifferentialView()
+            self._widget.setDifferentialViewChecked(False)
         self._widget.setDifferentialViewEnabled(False)
 
     def recordingEnded(self):
@@ -63,54 +63,70 @@ class ViewController(ImConWidgetController):
         self._widget.setDifferentialViewEnabled(True)
         if self._dvBeforeRecording:
             self._dvBeforeRecording = False
-            if self._lvacqHandle is not None:  # LV wasn't stopped by the user in the meantime
+            # Only if the LiveView wasn't stopped by the user in the meantime
+            if any(name in self._lvHandles for name in self._dvNames()):
                 self._widget.setDifferentialViewActive(True)  # runs differentialview(True)
 
-    def _startLiveView(self):
-        if self._lvacqHandle is None:
-            self._lvacqHandle = self._master.detectorsManager.execOnAll(
-                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, liveView=True),
-                condition=lambda c: c.forAcquisition
-            )
+    def _dvNames(self):
+        return self._master.detectorsManager.getAllDeviceNames(lambda c: c.forDifferential)
 
-    def _stopLiveView(self):
-        if self._lvacqHandle is not None:
-            self._master.detectorsManager.execOnAll(
-                lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._lvacqHandle, liveView=True),
-                condition=lambda c: c.forAcquisition
-            )
-            self._lvacqHandle = None
+    def _acqNames(self, names):
+        """ The given cameras that are used for acquisition, i.e. can run in LiveView. """
+        acqNames = self._master.detectorsManager.getAllDeviceNames(lambda c: c.forAcquisition)
+        return [name for name in names if name in acqNames]
 
-    def _startDifferentialView(self):
-        if self._dvacqHandle is None:
-            self._dvacqHandle = self._master.detectorsManager.execOnAll(
-                lambda c: self._master.detectorsManager.startDetectorAcquisition(c, differentialView=True),
-                condition=lambda c: c.forDifferential
-            )
+    def _lvNames(self):
+        """ Acquisition cameras that are not in Differential View. """
+        return [name for name in self._acqNames(
+                    self._master.detectorsManager.getAllDeviceNames())
+                if name not in self._dvHandles]
+
+    def _startLiveView(self, names):
+        self._lvHandles.update(self._startOnDetectors(
+            [name for name in names if name not in self._lvHandles], liveView=True))
+
+    def _stopLiveView(self, names):
+        self._stopOnDetectors({name: self._lvHandles.pop(name)
+                               for name in names if name in self._lvHandles}, liveView=True)
+
+    def _startDifferentialView(self, names):
+        self._dvHandles.update(self._startOnDetectors(
+            [name for name in names if name not in self._dvHandles], differentialView=True))
 
     def _stopDifferentialView(self):
-        if self._dvacqHandle is not None:
-            self._master.detectorsManager.execOnAll(
-                lambda c: self._master.detectorsManager.stopDetectorAcquisition(c, self._dvacqHandle, differentialView=True),
-                condition=lambda c: c.forDifferential
-            )
-            self._dvacqHandle = None
+        handles, self._dvHandles = self._dvHandles, {}
+        self._stopOnDetectors(handles, differentialView=True)
 
+    def _startOnDetectors(self, names, **kwargs):
+        """ Starts the acquisition on the given detectors and returns the handles as
+        {detectorName: handle}. A detector that fails to start is skipped, so the others still
+        work and the view can be stopped again. """
+        detectorsManager = self._master.detectorsManager
+        handles = {}
+        for name in names:
+            try:
+                handles[name] = detectorsManager.startDetectorAcquisition(
+                    detectorsManager[name], **kwargs)
+            except Exception as e:
+                self.__logger.error(f'Could not start {name}: {e}')
+        return handles
+
+    def _stopOnDetectors(self, handles, **kwargs):
+        """ Stops the acquisition started by _startOnDetectors on each of its detectors. """
+        detectorsManager = self._master.detectorsManager
+        for name, handle in handles.items():
+            try:
+                detectorsManager.stopDetectorAcquisition(detectorsManager[name], {name: handle},
+                                                         **kwargs)
+            except Exception as e:
+                self.__logger.error(f'Could not stop {name}: {e}')
 
     def sliderValue(self, batch_size):
         self._master.detectorsManager.adjustBatchSize(batch_size)
 
-    def gridToggle(self, enabled):
-        """ Connect with grid toggle from Image Widget through communication channel. """
-        self._commChannel.sigGridToggled.emit(enabled)
-
-    def crosshairToggle(self, enabled):
-        """ Connect with crosshair toggle from Image Widget through communication channel. """
-        self._commChannel.sigCrosshairToggled.emit(enabled)
-
     def closeEvent(self):
         """ Stops both live view and differential view acquisitions if active. """
-        self._stopLiveView()
+        self._stopLiveView(list(self._lvHandles))
         self._stopDifferentialView()
 
     def get_image(self, detectorName):
@@ -127,16 +143,6 @@ class ViewController(ImConWidgetController):
     @APIExport(runOnUIThread=True)
     def setDifferentialViewActive(self, active: bool) -> None:
         self._widget.setDifferentialViewActive(active)
-
-    @APIExport(runOnUIThread=True)
-    def setLiveViewGridVisible(self, visible: bool) -> None:
-        """ Sets whether the LiveView grid is visible. """
-        self._widget.setLiveViewGridVisible(visible)
-
-    @APIExport(runOnUIThread=True)
-    def setLiveViewCrosshairVisible(self, visible: bool) -> None:
-        """ Sets whether the LiveView crosshair is visible. """
-        self._widget.setLiveViewCrosshairVisible(visible)
 
 
 # Copyright (C) 2020-2021 ImSwitch developers

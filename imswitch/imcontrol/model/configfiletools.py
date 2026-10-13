@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 from pathlib import Path
 
@@ -18,6 +19,18 @@ def loadSetupInfo(options, setupInfoType):
 def saveSetupInfo(options, setupInfo):
     with open(os.path.join(_setupFilesDir, options.setupFileName), 'w') as setupFile:
         setupFile.write(setupInfo.to_json(indent=4))
+
+
+def updateSetupFile(options, updateFunc):
+    """ Changes single entries of the setup file without rewriting it from the SetupInfo
+    (which would add all default values). updateFunc gets the setup file content as dict and
+    changes it in place. """
+    path = os.path.join(_setupFilesDir, options.setupFileName)
+    with open(path) as setupFile:
+        setupDict = json.load(setupFile)
+    updateFunc(setupDict)
+    with open(path, 'w') as setupFile:
+        json.dump(setupDict, setupFile, indent=4)
 
 
 def loadOptions():

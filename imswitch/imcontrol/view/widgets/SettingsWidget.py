@@ -12,7 +12,7 @@ class CamParamTree(ParameterTree):
     """
 
     def __init__(self, detectorParameters, detectorActions, supportedBinnings, roiInfos,
-                 *args, **kwargs):
+                 *args, savedROI=False, **kwargs):
         super().__init__(*args, **kwargs)
 
         BinTip = ("Sets binning mode. Binning mode specifies if and how \n"
@@ -24,8 +24,12 @@ class CamParamTree(ParameterTree):
                   {'name': 'Image frame', 'type': 'group', 'children': [
                       {'name': 'Binning', 'type': 'list', 'value': 1,
                        'values': supportedBinnings, 'tip': BinTip},
-                      {'name': 'Mode', 'type': 'list', 'value': 'Full chip',
-                       'values': ['Full chip'] + list(roiInfos.keys()) + ['Custom']},
+                      # 'Saved ROI' is the ROI saved for this detector in the setup file; it
+                      # is selected (and applied) on startup
+                      {'name': 'Mode', 'type': 'list',
+                       'value': 'Saved ROI' if savedROI else 'Full chip',
+                       'values': (['Full chip'] + (['Saved ROI'] if savedROI else [])
+                                  + list(roiInfos.keys()) + ['Custom'])},
                       {'name': 'X0', 'type': 'int', 'value': 0, 'limits': (0, 65535)},
                       {'name': 'Y0', 'type': 'int', 'value': 0, 'limits': (0, 65535)},
                       {'name': 'Width', 'type': 'int', 'value': 1, 'limits': (1, 65535)},
@@ -37,6 +41,8 @@ class CamParamTree(ParameterTree):
                        'title': 'Save current parameters as mode'},
                       {'name': 'Delete mode', 'type': 'action',
                        'title': 'Remove current mode from list'},
+                      {'name': 'Save ROI', 'type': 'action',
+                       'title': 'Save ROI to setup file (applied on startup)'},
                       {'name': 'Update all detectors', 'type': 'bool', 'value': False}
                   ]}]
 
@@ -180,9 +186,9 @@ class SettingsWidget(Widget):
         self.nextDetectorButton.clicked.connect(self.sigNextDetectorClicked)
 
     def addDetector(self, detectorName, detectorModel, detectorParameters, detectorActions,
-                    supportedBinnings, roiInfos):
+                    supportedBinnings, roiInfos, savedROI=False):
         self.trees[detectorName] = CamParamTree(detectorParameters, detectorActions,
-                                                supportedBinnings, roiInfos)
+                                                supportedBinnings, roiInfos, savedROI=savedROI)
         self.stack.addWidget(self.trees[detectorName])
 
         self.detectorList.addItem(f'{detectorModel} ({detectorName})', detectorName)

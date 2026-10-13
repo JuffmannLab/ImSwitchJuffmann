@@ -113,6 +113,25 @@ class CommunicationChannel(SignalInterface):
         else:
             raise RuntimeError('Required image widget not available')
 
+    def pixelToScene(self, detectorName, x, y):
+        """ Pixel position of a detector image -> canvas coordinates of the ROI items. Without
+        image widget, they are the same. """
+        if 'Image' in self.__main.controllers:
+            return self.__main.controllers['Image'].pixelToScene(detectorName, x, y)
+        return x, y
+
+    def sceneToPixel(self, detectorName, x, y):
+        """ Canvas coordinates of the ROI items -> pixel position of a detector image. """
+        if 'Image' in self.__main.controllers:
+            return self.__main.controllers['Image'].sceneToPixel(detectorName, x, y)
+        return x, y
+
+    def getDisplayScale(self, detectorName):
+        """ Displayed size (canvas units) of one pixel of a detector image. """
+        if 'Image' in self.__main.controllers:
+            return self.__main.controllers['Image'].getDisplayScale(detectorName)
+        return 1
+
     def getDimsScan(self):
         if 'Scan' in self.__main.controllers:
             return self.__main.controllers['Scan'].getDimsScan()

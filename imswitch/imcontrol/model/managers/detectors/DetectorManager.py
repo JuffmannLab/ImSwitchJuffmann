@@ -112,15 +112,16 @@ class DetectorManager(SignalInterface):
         self.setBinning(supportedBinnings[0])
 
     def updateLatestFrame(self, init):
-        """ :meta private: """
+        """ :meta private: Returns whether a frame was emitted. """
         try:
             self.__image = self.getLatestFrame()
         except Exception:
             self.__logger.error(traceback.format_exc())
-        else:
-            if self.__image is not None:
-                self.sigImageUpdated.emit(self.__image, init)
-                #self.__logger.warning('No Image taken')
+            return False
+        if self.__image is None:
+            return False
+        self.sigImageUpdated.emit(self.__image, init)
+        return True
     
     def updateDifferentialView(self, enable):
         """ Switch between live view and differential view. """

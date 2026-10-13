@@ -172,7 +172,11 @@ class NapariUpdateLevelsWidget(NapariBaseWidget):
 
     def _on_update_levels(self):
         for layer in self.viewer.layers.selected:
-            layer.contrast_limits = minmaxLevels(layer.data)
+            levels = minmaxLevels(layer.data)
+            # Set the slider range as well, otherwise it stays at the range of the
+            # previous (e.g. live view) images
+            layer.contrast_limits_range = levels
+            layer.contrast_limits = levels
 
 
 class NapariColorbarWidget(NapariBaseWidget):

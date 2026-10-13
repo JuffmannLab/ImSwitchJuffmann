@@ -1,5 +1,6 @@
 from typing import Dict, List
 
+from imswitch.imcommon.framework import Timer
 from imswitch.imcommon.model import APIExport
 from ..basecontrollers import ImConWidgetController
 from imswitch.imcommon.model import initLogger
@@ -36,7 +37,24 @@ class PositionerController(ImConWidgetController):
         self._widget.sigStepDownClicked.connect(self.stepDown)
         self._widget.sigsetSpeedClicked.connect(self.setSpeedGUI)
 
+        # Positions shown in the widget; checked periodically, so moves by other widgets (e.g.
+        # the focus lock) or scripts are shown as well. Only reads the stored positions.
+        self._shownPositions = {}
+        self._positionTimer = Timer()
+        self._positionTimer.timeout.connect(self._refreshPositions)
+        self._positionTimer.start(200)
+
+    def _refreshPositions(self):
+        for pName, pManager in self._master.positionersManager:
+            if not pManager.forPositioning:
+                continue
+            for axis in pManager.axes:
+                position = pManager.position[axis]
+                if self._shownPositions.get((pName, axis)) != position:
+                    self.updatePosition(pName, axis)
+
     def closeEvent(self):
+        self._positionTimer.stop()
         self._master.positionersManager.execOnAll(
             lambda p: [p.setPosition(0, axis) for axis in p.axes]
         )
@@ -73,6 +91,7 @@ class PositionerController(ImConWidgetController):
         
     def updatePosition(self, positionerName, axis):
         newPos = self._master.positionersManager[positionerName].position[axis]
+        self._shownPositions[(positionerName, axis)] = newPos
         self._widget.updatePosition(positionerName, axis, newPos)
         self.setSharedAttr(positionerName, axis, _positionAttr, newPos)
 

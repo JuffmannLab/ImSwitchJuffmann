@@ -1,5 +1,7 @@
+import functools
 import sys
 import os
+import threading
 import numpy as np
 
 import pylablib
@@ -10,6 +12,17 @@ from pylablib.devices import PCO
 
 from logging import raiseExceptions
 from imswitch.imcommon.model import initLogger
+
+
+def _locked(func):
+    """ Runs the method while holding the camera lock: frames are not read while the ROI,
+    binning or acquisition state change. Otherwise the LiveView thread could read while pylablib
+    pauses the acquisition for a new ROI, take a snap() and collide with the restart. """
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return func(self, *args, **kwargs)
+    return wrapper
 
 """
 Interface for PCO camera using Pylablib    
@@ -34,6 +47,7 @@ class PCOCamera:
         self.vbin = binning
 
         self._lastFrame = None
+        self._lock = threading.RLock()
         
 
         # initialise camera
@@ -69,12 +83,15 @@ class PCOCamera:
     def close(self):
         self.camera.close()
 
+    @_locked
     def start_live(self):
         self.camera.start_acquisition()
 
+    @_locked
     def stop_live(self):
         self.camera.stop_acquisition()
 
+    @_locked
     def getLast(self, waitForNew=False):
         # snap()/grab() start and stop a new acquisition on every call, which stalls the
         # running live acquisition. While acquiring, read the newest frame from the buffer instead.
@@ -94,6 +111,7 @@ class PCOCamera:
             self.__logger.error(e)
         return self._lastFrame
 
+    @_locked
     def getLastChunk(self):
         # Returns all frames acquired since the last call, shape (nframes, height, width).
         # Returns an empty array (0, height, width) if there are none, since the recording
@@ -112,6 +130,7 @@ class PCOCamera:
         (pylablib counts frames skipped by flushBuffer here as well). """
         return self.camera.get_frames_status().skipped
 
+    @_locked
     def flushBuffer(self):
         # Marks all frames recorded so far as read, so the next getLastChunk only returns new ones
         if self.camera.acquisition_in_progress():
@@ -122,6 +141,7 @@ class PCOCamera:
         # it takes seconds as input variable, we change it to ms
         self.camera.set_exposure(self.exposure_time*0.001)
         
+    @_locked
     def setBinning(self, binning):
         self.hbin = binning
         self.vbin = binning
@@ -129,6 +149,7 @@ class PCOCamera:
         hstart, hend, vstart, vend, _, _ = self.camera.get_roi()
         return self.setROI(hstart, hend, vstart, vend)
 
+    @_locked
     def setROI(self, hstart, hend, vstart, vend, symmetric=False):
         """ Sets the ROI in unbinned sensor pixels (end exclusive) and returns the ROI that was
         actually applied as (hstart, hend, vstart, vend, hbin, vbin).

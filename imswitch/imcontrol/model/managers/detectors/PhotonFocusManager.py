@@ -17,6 +17,7 @@ class PhotonFocusManager(DetectorManager):
         self.__logger = initLogger(self, instanceName=name)
        
         cameraId = detectorInfo.managerProperties['cameraListIndex']
+        self._pixelSizeUm = detectorInfo.managerProperties.get('pixelSizeUm')
         self.camera = self._getPFObj(cameraId)
        
         for propertyName, propertyValue in detectorInfo.managerProperties['PFCam'].items():
@@ -131,7 +132,10 @@ class PhotonFocusManager(DetectorManager):
 
     @property
     def pixelSizeUm(self):
-        return [1, 1, 1]
+        # "pixelSizeUm" in the managerProperties: effective pixel size at the sample (also used
+        # to display the cameras in the same scale)
+        size = self._pixelSizeUm if self._pixelSizeUm else 1
+        return [1, size, size]
 
     def crop(self, hpos, vpos, hsize, vsize):
         pass

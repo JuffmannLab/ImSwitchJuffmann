@@ -17,9 +17,20 @@ class ImageController(LiveUpdatedController):
         self._shouldResetView = False
 
         # create live view layer for detectors which have the Attribute forAcquisition
-        self._widget.setLiveViewLayers(
-            self._master.detectorsManager.getAllDeviceNames(lambda c: c.forAcquisition)
-        )
+        liveNames = self._master.detectorsManager.getAllDeviceNames(lambda c: c.forAcquisition)
+        self._widget.setLiveViewLayers(liveNames)
+
+        # Display scale of the cameras: with "pixelSizeUm" (effective pixel size at the sample)
+        # in the managerProperties of all cameras, the images are shown in the same physical
+        # scale; otherwise every image is shown with the same width. Image shapes per camera,
+        # the scales are updated when a shape changes (e.g. new ROI).
+        self._pixelSizes = {name: self._setupInfo.detectors[name].managerProperties.get('pixelSizeUm')
+                            for name in liveNames}
+        self._imageShapes = {}
+        # Several cameras are shown next to each other (napari grid mode, can be toggled with
+        # the grid button of the layer list)
+        if len(liveNames) > 1:
+            self._widget.setGridEnabled(True)
 
         # Connect CommunicationChannel signals
         self._commChannel.sigUpdateImage.connect(self.update)
@@ -58,10 +69,17 @@ class ImageController(LiveUpdatedController):
         """ Update new image in the viewbox. """
         if np.prod(im.shape)>1: # TODO: This seems weird!
 
+            # init is False for the first frame of the live view/differential view: only then
+            # the levels are set automatically, so they can be adjusted by hand afterwards
+            self._widget.setImage(detectorName, im)
+
+            if self._imageShapes.get(detectorName) != im.shape[:2]:
+                self._imageShapes[detectorName] = im.shape[:2]
+                self._updateLayerScales()
+                self._shouldResetView = True
+
             if not init:
                 self.autoLevels([detectorName], im)
-
-            self._widget.setImage(detectorName, im)
 
             if not init or self._shouldResetView:
                 self.adjustFrame(instantResetView=True)
@@ -80,6 +98,35 @@ class ImageController(LiveUpdatedController):
             self._shouldResetView = True
 
         self._lastShape = shape
+
+    def _updateLayerScales(self):
+        """ Sets the display scale of all live layers that have an image (see __init__). The
+        smallest scale is 1, so canvas units are never larger than a pixel (ROI items use
+        integer canvas coordinates). """
+        names = [name for name in self._imageShapes if name in self._pixelSizes]
+        if not names:
+            return
+        if all(self._pixelSizes[name] for name in names):
+            sizes = {name: float(self._pixelSizes[name]) for name in names}
+        else:
+            # Same displayed width: the size of a pixel is 1 / image width
+            sizes = {name: 1 / self._imageShapes[name][1] for name in names}
+        smallest = min(sizes.values())
+        for name in names:
+            self._widget.setLayerScale(name, sizes[name] / smallest)
+        self._widget.updateGridLayout()
+
+    def pixelToScene(self, detectorName, x, y):
+        """ Pixel position of a detector image -> canvas coordinates of the ROI items. """
+        return self._widget.pixelToScene(detectorName, x, y)
+
+    def sceneToPixel(self, detectorName, x, y):
+        """ Canvas coordinates of the ROI items -> pixel position of a detector image. """
+        return self._widget.sceneToPixel(detectorName, x, y)
+
+    def getDisplayScale(self, detectorName):
+        """ Displayed size (canvas units) of one pixel of a detector image. """
+        return self._widget.getLayerScale(detectorName)
 
     def getCenterViewbox(self):
         """ Returns center of viewbox to center a ROI. """

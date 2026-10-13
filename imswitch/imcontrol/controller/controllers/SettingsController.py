@@ -23,6 +23,7 @@ class SettingsControllerParams:
     abortROI: Any
     saveMode: Any
     deleteMode: Any
+    saveROI: Any
     allDetectorsFrame: Any
 
 
@@ -45,7 +46,8 @@ class SettingsController(ImConWidgetController):
 
             self._widget.addDetector(
                 dName, dManager.model, dManager.parameters, dManager.actions,
-                dManager.supportedBinnings, self._setupInfo.rois
+                dManager.supportedBinnings, self._setupInfo.rois,
+                savedROI=self._getSavedROI(dName) is not None
             )
 
         self.roiAdded = False
@@ -107,6 +109,7 @@ class SettingsController(ImConWidgetController):
                     abortROI=framePar.param('Abort ROI'),
                     saveMode=framePar.param('Save mode'),
                     deleteMode=framePar.param('Delete mode'),
+                    saveROI=framePar.param('Save ROI'),
                     allDetectorsFrame=framePar.param('Update all detectors')
                 )
 
@@ -118,6 +121,7 @@ class SettingsController(ImConWidgetController):
                 params.abortROI.sigActivated.connect(self.abortROI)
                 params.saveMode.sigActivated.connect(self.saveMode)
                 params.deleteMode.sigActivated.connect(self.deleteMode)
+                params.saveROI.sigActivated.connect(self.saveROI)
 
                 def syncFrameParamsWithoutUpdates(): self.syncFrameParams(False, False)
                 params.x0.sigValueChanged.connect(syncFrameParamsWithoutUpdates)
@@ -194,16 +198,19 @@ class SettingsController(ImConWidgetController):
 
     def ROIchanged(self):
         """ Update parameters according to ROI. """
+        detectorName = self._master.detectorsManager.getCurrentDetectorName()
         frameStart = self._master.detectorsManager.execOnCurrent(lambda c: c.frameStart)
         ROI = self._widget.getROIGraphicsItem()
-        pos = ROI.position
-        size = ROI.size
+        # The ROI item is in canvas coordinates; the image can be scaled and shifted on the
+        # canvas (several cameras next to each other)
+        x, y = self._commChannel.sceneToPixel(detectorName, *ROI.position)
+        scale = self._commChannel.getDisplayScale(detectorName)
 
         currentParams = self.getCurrentParams()
-        currentParams.x0.setValue(frameStart[0] + int(pos[0]))
-        currentParams.y0.setValue(frameStart[1] + int(pos[1]))
-        currentParams.width.setValue(size[0])  # [0] is Width
-        currentParams.height.setValue(size[1])  # [1] is Height
+        currentParams.x0.setValue(frameStart[0] + int(round(x)))
+        currentParams.y0.setValue(frameStart[1] + int(round(y)))
+        currentParams.width.setValue(int(round(ROI.size[0] / scale)))  # [0] is Width
+        currentParams.height.setValue(int(round(ROI.size[1] / scale)))  # [1] is Height
 
     def updateFrameActionButtons(self, *, detector=None):
         """ Shows the frame-related buttons appropriate for the current frame
@@ -222,12 +229,14 @@ class SettingsController(ImConWidgetController):
         params.abortROI.hide()
         params.saveMode.hide()
         params.deleteMode.hide()
+        params.saveROI.hide()
 
         if params.frameMode.value() == 'Custom':
             params.applyROI.show()
             params.newROI.show()
             params.abortROI.show()
             params.saveMode.show()
+            params.saveROI.show()
         elif params.frameMode.value() != 'Full chip':
             params.deleteMode.show()
 
@@ -291,6 +300,10 @@ class SettingsController(ImConWidgetController):
         currentParams = self.getCurrentParams()
         modeToDelete = currentParams.frameMode.value()
 
+        if modeToDelete == 'Saved ROI':
+            self.deleteSavedROI()
+            return
+
         confirmationResult = guitools.askYesNoQuestion(
             self._widget,
             'Delete frame mode?',
@@ -307,6 +320,61 @@ class SettingsController(ImConWidgetController):
             # Remove from setup info
             self._setupInfo.removeROI(modeToDelete)
             configfiletools.saveSetupInfo(configfiletools.loadOptions()[0], self._setupInfo)
+
+    def _getSavedROI(self, detectorName):
+        """ The ROI saved for this detector in the setup file (managerProperties -> roi) as
+        dict with x0, y0, width, height (binned pixels, like the Settings widget) and binning,
+        or None. """
+        return self._setupInfo.detectors[detectorName].managerProperties.get('roi')
+
+    def saveROI(self):
+        """ Saves the ROI currently applied to the current detector in the setup file. It is
+        applied automatically on the next start (frame mode 'Saved ROI'). """
+        detectorName = self._master.detectorsManager.getCurrentDetectorName()
+        detector = self._master.detectorsManager[detectorName]
+        frameStart, shape = detector.frameStart, detector.shape
+        roi = {'x0': int(frameStart[0]), 'y0': int(frameStart[1]),
+               'width': int(shape[0]), 'height': int(shape[1]),
+               'binning': int(detector.binning)}
+
+        if not guitools.askYesNoQuestion(
+                self._widget, 'Save ROI',
+                f'Save the applied ROI of {detectorName} to the setup file? It will be applied '
+                f'on every start.\n(X0: {roi["x0"]}; Y0: {roi["y0"]}; Width: {roi["width"]}; '
+                f'Height: {roi["height"]}; Binning: {roi["binning"]})\n\n'
+                f'Click "Apply" first if you changed the ROI.'):
+            return
+
+        def update(setupDict):
+            setupDict['detectors'][detectorName].setdefault('managerProperties', {})['roi'] = roi
+        configfiletools.updateSetupFile(configfiletools.loadOptions()[0], update)
+        self._setupInfo.detectors[detectorName].managerProperties['roi'] = roi
+
+        # Add 'Saved ROI' to the modes of this detector and select it
+        params = self.allParams[detectorName]
+        modes = params.frameMode.opts['limits'].copy()
+        if 'Saved ROI' not in modes:
+            modes.insert(1, 'Saved ROI')
+            params.frameMode.setLimits(modes)
+        params.frameMode.setValue('Saved ROI')
+
+    def deleteSavedROI(self):
+        """ Removes the saved ROI of the current detector from the setup file. """
+        detectorName = self._master.detectorsManager.getCurrentDetectorName()
+        if not guitools.askYesNoQuestion(
+                self._widget, 'Delete saved ROI?',
+                f'Remove the saved ROI of {detectorName} from the setup file?'):
+            return
+
+        def update(setupDict):
+            setupDict['detectors'][detectorName].get('managerProperties', {}).pop('roi', None)
+        configfiletools.updateSetupFile(configfiletools.loadOptions()[0], update)
+        self._setupInfo.detectors[detectorName].managerProperties.pop('roi', None)
+
+        params = self.allParams[detectorName]
+        params.frameMode.setValue('Full chip')
+        params.frameMode.setLimits([mode for mode in params.frameMode.opts['limits']
+                                    if mode != 'Saved ROI'])
 
     def updateBinning(self):
         """ Update a new binning to the detector. """
@@ -354,7 +422,7 @@ class SettingsController(ImConWidgetController):
             return
 
         params = self.allParams[detector.name]
-        frameMode = self.getCurrentParams().frameMode.value()
+        frameMode = params.frameMode.value()
         customFrame = frameMode == 'Custom'
 
         params.x0.setWritable(customFrame)
@@ -368,11 +436,11 @@ class SettingsController(ImConWidgetController):
         params.height.show()
 
         if customFrame:
-            ROIsize = (64, 64)
-            ROIcenter = self._commChannel.getCenterViewbox()
-
-            ROIpos = (ROIcenter[0] - 0.5 * ROIsize[0],
-                      ROIcenter[1] - 0.5 * ROIsize[1])
+            # 64 x 64 pixels in the centre of this detector's image, in canvas coordinates
+            scale = self._commChannel.getDisplayScale(detector.name)
+            ROIsize = (64 * scale, 64 * scale)
+            ROIpos = self._commChannel.pixelToScene(detector.name, detector.shape[0] / 2 - 32,
+                                                    detector.shape[1] / 2 - 32)
 
             self.toggleROI(True, ROIpos, ROIsize)
             self.ROIchanged()
@@ -387,6 +455,20 @@ class SettingsController(ImConWidgetController):
                     params.y0.setValue(0)
                     params.width.setValue(fullChipShape[0])
                     params.height.setValue(fullChipShape[1])
+                elif frameMode == 'Saved ROI':
+                    roi = self._getSavedROI(detector.name)
+                    if roi is None:
+                        return
+                    binning = int(roi.get('binning', 1))
+                    if binning != detector.binning:
+                        # Directly on this detector; updateBinning would act on the
+                        # current detector
+                        params.binning.setValue(binning, blockSignal=self.updateBinning)
+                        detector.setBinning(binning)
+                    params.x0.setValue(roi['x0'])
+                    params.y0.setValue(roi['y0'])
+                    params.width.setValue(roi['width'])
+                    params.height.setValue(roi['height'])
                 else:
                     roiInfo = self._setupInfo.rois[frameMode]
                     params.x0.setValue(roiInfo.x)
@@ -420,7 +502,9 @@ class SettingsController(ImConWidgetController):
         for params in self.allParams.values():
             params.allDetectorsFrame.setValue(shouldSync)
             if shouldSync:
-                params.frameMode.setValue(currentParams.frameMode.value())
+                # 'Saved ROI' only exists for detectors with a saved ROI
+                if currentParams.frameMode.value() in params.frameMode.opts['limits']:
+                    params.frameMode.setValue(currentParams.frameMode.value())
                 params.x0.setValue(currentParams.x0.value())
                 params.y0.setValue(currentParams.y0.value())
                 params.width.setValue(currentParams.width.value())

@@ -37,10 +37,24 @@ def bestLevels(arr):
 
 
 def minmaxLevels(arr):
+    if np.issubdtype(arr.dtype, np.floating) and arr.size > 1:
+        # Differential images (e.g. iScat contrast) are centered around 0 and can contain
+        # a few extreme pixels, so use symmetric levels that ignore the outliers
+        return symmetricLevels(arr)
+
     minlevel = 0
     maxlevel = arr.max() + 2
 
     return minlevel, maxlevel
+
+
+def symmetricLevels(arr, percentile=99.5):
+    """ Levels (-m, m) with m the given percentile of the absolute values. """
+    finite = np.abs(arr[np.isfinite(arr)])
+    m = float(np.percentile(finite, percentile)) if finite.size else 0.0
+    if m <= 0:
+        m = 1e-6
+    return -m, m
 
 
 # Copyright (C) 2017 Federico Barabas

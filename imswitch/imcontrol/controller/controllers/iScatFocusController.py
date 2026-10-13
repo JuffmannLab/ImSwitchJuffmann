@@ -1,4 +1,5 @@
 import atexit
+import threading
 import time
 
 import numpy as np
@@ -10,6 +11,7 @@ from qtpy import QtCore
 
 from imswitch.imcommon.framework import Signal, Thread, Timer, Worker
 from imswitch.imcommon.model import initLogger
+from imswitch.imcontrol.model import configfiletools
 from ..basecontrollers import ImConWidgetController
 
 
@@ -42,6 +44,9 @@ class iScatFocusController(ImConWidgetController):
         self._widget.sigSledEnable.connect(self.sledEnable)
         self._widget.sigSledAIEnable.connect(self.sledEnableAI)
         self._widget.sigSledControlUpdate.connect(self.updateSledControl)
+        self._widget.sigSelectROI.connect(self.selectROI)
+        self._widget.sigApplyROI.connect(self.applyROI)
+        self._widget.sigSaveROI.connect(self.saveROI)
 
         # SLED (light source of the focus lock), controlled by the NiDAQ
         self.sledEnableLine = self._setupInfo.iScatFocus.sledEnableLine
@@ -65,15 +70,18 @@ class iScatFocusController(ImConWidgetController):
                           self._setupInfo.iScatFocus.frameCropw,
                           self._setupInfo.iScatFocus.frameCroph)
         self._master.detectorsManager[self.camera].crop(*self.cropFrame)
+        self.cropFrame = self._appliedCrop()
+        self._showCropText()
+
+        # Optional initial PID parameters from the setup file (before the edits are connected
+        # to unlockFocus, the lock state doesn't exist yet)
+        if self._setupInfo.iScatFocus.pidParams is not None:
+            self._widget.setPIDparams(self._setupInfo.iScatFocus.pidParams)
 
         # Connect FocusLockWidget buttons
         self._widget.kpEdit.textChanged.connect(self.unlockFocus)
         self._widget.kiEdit.textChanged.connect(self.unlockFocus)
         self._widget.kdEdit.textChanged.connect(self.unlockFocus)
-
-        # Optional initial PID parameters from the setup file
-        if self._setupInfo.iScatFocus.pidParams is not None:
-            self._widget.setPIDparams(self._setupInfo.iScatFocus.pidParams)
 
         # Calibration storage
         self.volts_per_px = None  # Calibration slope (V/px)
@@ -125,11 +133,18 @@ class iScatFocusController(ImConWidgetController):
         self._thread.finished.connect(self._worker.stop)
         self._thread.start()
 
+        # Shows the current piezo position, also when it is moved by the Positioner widget
+        self._positionTimer = Timer()
+        self._positionTimer.timeout.connect(self._showPosition)
+        self._positionTimer.start(200)
+        self._showPosition()
+
     def closeEvent(self):
         """ Stops the FocusWorker thread; a running calibration/auto-tune is aborted. Called before
         the cameras are closed. Also switches the SLED off. """
         if self._setupInfo.iScatFocus is not None:
             self.sledOff()
+            self._positionTimer.stop()
         if self._thread is None:
             return
         self.unlockFocus()
@@ -170,6 +185,83 @@ class iScatFocusController(ImConWidgetController):
         self._master.nidaqManager.setAnalog(self._setupInfo.iScatFocus, voltage, min_val=0,
                                             max_val=2.5, channel=self.sledControlChannel)
         self._sledOff = False
+
+    def _appliedCrop(self):
+        """ The crop the focus camera actually applied, as (x, y, width, height). """
+        detector = self._master.detectorsManager[self.camera]
+        return (*map(int, detector.frameStart), *map(int, detector.shape))
+
+    def _crop(self, x, y, width, height):
+        """ Crops the focus camera. The FocusWorker doesn't grab frames meanwhile. """
+        with self._worker.cameraLock:
+            self._master.detectorsManager[self.camera].crop(x, y, width, height)
+        # The fallback spot position refers to the previous crop
+        self._worker.resetSpot()
+
+    def _showCropText(self, note=''):
+        x, y, w, h = self.cropFrame
+        self._widget.setROIText(f'ROI: x {x}, y {y}, {w} x {h} px{note}')
+
+    def selectROI(self, enabled):
+        """ Shows the full field of view of the focus camera with the current ROI drawn on it,
+        or goes back to the current ROI (cancel). """
+        if self._worker is None:
+            return
+        if enabled:
+            if self._worker.busy:
+                self._widget.setSelectROIChecked(False)
+                return
+            self.unlockFocus()
+            self._setRoutineRunning(True)
+            self._worker.setPreview(True)  # frames are shown without fitting the spot
+            fullShape = self._master.detectorsManager[self.camera].fullShape
+            self._crop(0, 0, *fullShape)
+            self._widget.showROI(*self.cropFrame)
+            self._widget.setROIText('Drag/resize the rectangle, then click "Apply ROI". '
+                                    'Click "Select ROI" again to cancel.')
+        else:
+            # Cancel: back to the current ROI
+            self._widget.hideROI()
+            self._crop(*self.cropFrame)
+            self._worker.setPreview(False)
+            self._setRoutineRunning(False)
+            self._showCropText()
+
+    def applyROI(self, x, y, width, height):
+        """ Crops the focus camera to the drawn ROI (sensor pixels). """
+        if self._worker is None:
+            return
+        fullW, fullH = self._master.detectorsManager[self.camera].fullShape
+        x = int(np.clip(x, 0, fullW - 1))
+        y = int(np.clip(y, 0, fullH - 1))
+        width = int(np.clip(width, 1, fullW - x))
+        height = int(np.clip(height, 1, fullH - y))
+        self._widget.hideROI()
+        self._widget.setSelectROIChecked(False)
+        self._crop(x, y, width, height)
+        self.cropFrame = self._appliedCrop()
+        self._worker.setPreview(False)
+        self._setRoutineRunning(False)
+        self.__logger.info(f'Focus camera ROI set to {self.cropFrame}')
+        # The calibration slopes stay valid, positions in px refer to the new ROI
+        self._showCropText(' (not saved; the positions in px refer to the new ROI, '
+                           'recalibrate if needed)')
+
+    def saveROI(self):
+        """ Saves the current ROI of the focus camera in the setup file (frameCrop*), it is
+        applied on startup. """
+        x, y, w, h = self.cropFrame
+
+        def update(setupDict):
+            setupDict['iScatFocus'].update(
+                {'frameCropx': x, 'frameCropy': y, 'frameCropw': w, 'frameCroph': h})
+        try:
+            configfiletools.updateSetupFile(configfiletools.loadOptions()[0], update)
+        except Exception as e:
+            self.__logger.error(f'Could not save the ROI: {e}')
+            self._widget.setROIText(f"<font color='red'>Could not save the ROI: {e}</font>")
+            return
+        self._showCropText(' (saved)')
 
     def _setRoutineRunning(self, running, text=None):
         """ Disables the buttons that move the piezo while calibration/auto-tuning runs. """
@@ -260,6 +352,10 @@ class iScatFocusController(ImConWidgetController):
         target_voltage = max(-10, min(10, target_voltage))
         self._master.positionersManager[self.positioner].setPosition(target_voltage, 0)
         self.__logger.debug(f'Move Z-piezo to {target_voltage} V')
+        self._showPosition()
+
+    def _showPosition(self):
+        self._widget.showCurrentPosition(self._master.positionersManager[self.positioner].get_abs())
 
     # Update focus lock
     def update(self, img, position):
@@ -267,6 +363,10 @@ class iScatFocusController(ImConWidgetController):
         # 1+2 Camera frame and beam position come from the FocusWorker; the displayed frame is
         # the one that was analyzed
         self._worker.frameConsumed()
+        if np.isnan(position):
+            # ROI selection: frame without beam position, only displayed
+            self._widget.camImg.setImage(img)
+            return
         self.setPointSignal = position
         # 3 Update PID with the new setPointSignal and get back the distance to move, send to
         # update the PID control, and then send the move-distance to the z-piezo.
@@ -453,10 +553,21 @@ class FocusWorker(Worker):
         # Unit vector along which the spot moves with the piezo voltage, from the calibration.
         # None: not calibrated, the x coordinate is used as position signal.
         self._direction = None
+        # Held while a frame is grabbed; the controller holds it while it crops the camera
+        self.cameraLock = threading.Lock()
+        self._preview = False  # ROI selection: frames are emitted without fitting the spot
 
     @property
     def busy(self):
         return self._busy
+
+    def setPreview(self, enabled):
+        """ While enabled, frames are only displayed (position NaN), the spot isn't fitted. """
+        self._preview = enabled
+
+    def resetSpot(self):
+        """ Forgets the fallback spot position, e.g. after the ROI changed. """
+        self._last_valid_spot = None
 
     def run(self):
         self._timer = Timer()
@@ -481,6 +592,10 @@ class FocusWorker(Worker):
             return
         img = self.grabCameraFrame()
         if img is None:
+            return
+        if self._preview:
+            self._frameConsumed = False
+            self.sigFrameAnalyzed.emit(img, float('nan'))
             return
         position = self.positionSignal(self.fitSpot(img))
         if position is None:
@@ -507,12 +622,13 @@ class FocusWorker(Worker):
         self._abort = False
         initial_V = None
         try:
-            # 1. Prepare measurement points with hysteresis compensation
-            test_voltages = np.linspace(from_V, to_V, steps)
-            test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
-
-            # 2. Store initial position
+            # 1. Store initial position
             initial_V = self._positioner.get_abs()
+
+            # 2. Prepare measurement points with hysteresis compensation. from_V and to_V are
+            # relative to the current position, so the calibration scans around the focus
+            test_voltages = np.clip(initial_V + np.linspace(from_V, to_V, steps), -10, 10)
+            test_voltages = np.concatenate([test_voltages, test_voltages[::-1]])  # Forward and back
             spots = []  # spot centre (x, y) per voltage
 
             # 3. Enhanced measurement collection
@@ -727,7 +843,8 @@ class FocusWorker(Worker):
     def grabCameraFrame(self):
         """Grab frame with error handling"""
         try:
-            img = self._detector.getLatestFrame()
+            with self.cameraLock:
+                img = self._detector.getLatestFrame()
             return np.swapaxes(img, 0, 1) if img is not None else None
         except Exception as e:
             self.__logger.error(f"Frame grab failed: {str(e)}")

@@ -68,8 +68,53 @@ class ImageWidget(QtWidgets.QWidget):
     def getImageDisplayLevels(self, name):
         return self.imgLayers[name].contrast_limits
 
+    def setLayerScale(self, name, scale):
+        """ Displayed size of one pixel of this layer (same in x and y). """
+        self.imgLayers[name].scale = (scale, scale)
+
+    def updateGridLayout(self):
+        """ Recomputes the positions of the layers in grid mode; napari only does that when the
+        grid or the layer order changes, not when the size of an image changes. """
+        if self.napariViewer.grid.enabled:
+            self.napariViewer._on_grid_change()
+
+    def getLayerScale(self, name):
+        return float(self.imgLayers[name].scale[-1])
+
+    def setGridEnabled(self, enabled):
+        """ Shows the layers next to each other instead of on top of each other. """
+        self.napariViewer.grid.enabled = enabled
+
+    def _layerOffset(self, name):
+        """ (x, y) offset of the layer on the canvas: its translation plus its grid position. """
+        layer = self.imgLayers[name]
+        offset = np.asarray(layer.translate, dtype=float)[-2:] + \
+            np.asarray(layer._translate_grid, dtype=float)[-2:]
+        return offset[1], offset[0]
+
+    def pixelToScene(self, name, x, y):
+        """ Converts a pixel position (x = column, y = row) of this layer to the canvas
+        coordinates used by the ROI items. """
+        s = self.getLayerScale(name)
+        ox, oy = self._layerOffset(name)
+        return (x - 0.5) * s + ox + 0.5, (y - 0.5) * s + oy + 0.5
+
+    def sceneToPixel(self, name, x, y):
+        """ Inverse of pixelToScene. """
+        s = self.getLayerScale(name)
+        ox, oy = self._layerOffset(name)
+        return (x - 0.5 - ox) / s + 0.5, (y - 0.5 - oy) / s + 0.5
+
     def setImageDisplayLevels(self, name, minimum, maximum):
-        self.imgLayers[name].contrast_limits = (minimum, maximum)
+        # Set the slider range to the current image as well, otherwise it stays at the range
+        # of the previous images when switching between live view and differential view
+        layer = self.imgLayers[name]
+        data = np.asarray(layer.data)
+        finite = data[np.isfinite(data)] if data.dtype.kind == 'f' else data
+        if finite.size > 0:
+            layer.contrast_limits_range = (min(minimum, float(finite.min())),
+                                           max(maximum, float(finite.max())))
+        layer.contrast_limits = (minimum, maximum)
 
     def getCenterViewbox(self):
         """ Returns the center point of the viewbox, as an (x, y) tuple. """

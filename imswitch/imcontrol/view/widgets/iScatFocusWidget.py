@@ -15,6 +15,9 @@ class iScatFocusWidget(Widget):
     sigSledEnable = QtCore.Signal(bool)
     sigSledAIEnable = QtCore.Signal(bool)
     sigSledControlUpdate = QtCore.Signal(float)
+    sigSelectROI = QtCore.Signal(bool)  # show the full field of view to draw the ROI
+    sigApplyROI = QtCore.Signal(int, int, int, int)  # (x, y, width, height) in sensor pixels
+    sigSaveROI = QtCore.Signal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -27,11 +30,11 @@ class iScatFocusWidget(Widget):
         pidLayout = QtWidgets.QGridLayout()
         
         # PID Parameters
-        self.kpEdit = QtWidgets.QLineEdit('0')
+        self.kpEdit = QtWidgets.QLineEdit('0.0350')
         self.kpEdit.setValidator(QtGui.QDoubleValidator())
-        self.kiEdit = QtWidgets.QLineEdit('0')
+        self.kiEdit = QtWidgets.QLineEdit('0.0005')
         self.kiEdit.setValidator(QtGui.QDoubleValidator())
-        self.kdEdit = QtWidgets.QLineEdit('0')
+        self.kdEdit = QtWidgets.QLineEdit('0.0035')
         self.kdEdit.setValidator(QtGui.QDoubleValidator())
         
         # Control Buttons
@@ -59,6 +62,8 @@ class iScatFocusWidget(Widget):
         self.positionGroup = QtWidgets.QGroupBox("Position Control")
         posLayout = QtWidgets.QVBoxLayout()
         
+        # Current piezo position, also when moved by the Positioner widget or the lock
+        self.currentPositionLabel = QtWidgets.QLabel('Current: - V')
         self.positionEdit = QtWidgets.QLineEdit('0.0')
         self.positionEdit.setValidator(QtGui.QDoubleValidator(-10, 10, 3))
         
@@ -67,6 +72,7 @@ class iScatFocusWidget(Widget):
         
         self.positionSetButton = guitools.BetterPushButton('Set (V)')
         
+        posLayout.addWidget(self.currentPositionLabel)
         posLayout.addWidget(self.positionEdit)
         posLayout.addWidget(self.positionSlider)
         posLayout.addWidget(self.positionSetButton)
@@ -77,11 +83,12 @@ class iScatFocusWidget(Widget):
         calibLayout = QtWidgets.QGridLayout()
         
         # Calibration inputs
-        calibLayout.addWidget(QtWidgets.QLabel("Start (V):"), 0, 0)
+        # Relative to the current piezo position, so the calibration scans around the focus
+        calibLayout.addWidget(QtWidgets.QLabel("Start (V, rel. to current):"), 0, 0)
         self.calibFromEdit = QtWidgets.QLineEdit("-2")
         calibLayout.addWidget(self.calibFromEdit, 0, 1)
         
-        calibLayout.addWidget(QtWidgets.QLabel("End (V):"), 1, 0)
+        calibLayout.addWidget(QtWidgets.QLabel("End (V, rel. to current):"), 1, 0)
         self.calibToEdit = QtWidgets.QLineEdit("2")
         calibLayout.addWidget(self.calibToEdit, 1, 1)
         
@@ -140,9 +147,36 @@ class iScatFocusWidget(Widget):
         self.camViewBox.addItem(self.camImg)
         self.camViewBox.setAspectLocked(True)
 
+        # ---- Camera ROI ----
+        # The ROI is drawn on the full field of view of the focus camera ("Select ROI")
+        self.roiGroup = QtWidgets.QGroupBox("Camera ROI")
+        roiLayout = QtWidgets.QGridLayout()
+        self.selectROIButton = guitools.BetterPushButton('Select ROI')
+        self.selectROIButton.setCheckable(True)
+        self.applyROIButton = guitools.BetterPushButton('Apply ROI')
+        self.applyROIButton.setEnabled(False)
+        self.saveROIButton = guitools.BetterPushButton('Save ROI to setup file')
+        self.roiLabel = QtWidgets.QLabel('')
+        self.roiLabel.setWordWrap(True)
+        roiLayout.addWidget(self.selectROIButton, 0, 0)
+        roiLayout.addWidget(self.applyROIButton, 0, 1)
+        roiLayout.addWidget(self.saveROIButton, 1, 0, 1, 2)
+        roiLayout.addWidget(self.roiLabel, 2, 0, 1, 2)
+        self.roiGroup.setLayout(roiLayout)
+
+        self.roiItem = pg.RectROI([0, 0], [100, 100], pen=pg.mkPen('y', width=2),
+                                  removable=False)
+        self.roiItem.addScaleHandle([0, 0], [1, 1])
+        self.roiItem.addScaleHandle([1, 0], [0, 1])
+        self.roiItem.addScaleHandle([0, 1], [1, 0])
+        self.roiItem.setZValue(10)
+        self.roiItem.hide()
+        self.camViewBox.addItem(self.roiItem)
+
         # ---- Layout ----
         self.layout().addWidget(self.pidControlGroup, 0, 0, 1, 2)
         self.layout().addWidget(self.positionGroup, 1, 0)
+        self.layout().addWidget(self.roiGroup, 1, 1)
         self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
         self.layout().addWidget(self.camView, 2, 2, 2, 1)
         self.layout().addWidget(self.calibGroup, 2, 0, 1, 2)
@@ -154,6 +188,10 @@ class iScatFocusWidget(Widget):
             lambda: self.sigSetPosition.emit(float(self.positionEdit.text())))
         self.autoTuneButton.clicked.connect(self.sigAutoTune)
         self.calibButton.clicked.connect(self._emitCalibrate)
+        self.selectROIButton.toggled.connect(self.sigSelectROI)
+        self.applyROIButton.clicked.connect(
+            lambda: self.sigApplyROI.emit(*self.getROI()))
+        self.saveROIButton.clicked.connect(self.sigSaveROI)
         self.positionSlider.valueChanged.connect(self._onSliderMove)
 
         self.sledEnable.clicked.connect(self.sigSledEnable)
@@ -179,6 +217,15 @@ class iScatFocusWidget(Widget):
             self.sigCalibrate.emit(from_V, to_V, steps)
         except ValueError as e:
             self.calibResultLabel.setText(f"<font color='red'>Invalid input: {str(e)}</font>")
+
+    def showCurrentPosition(self, voltage):
+        """ Shows the current piezo position. The Set field and slider follow it while they
+        aren't being edited. """
+        self.currentPositionLabel.setText(f'Current: {voltage:.3f} V')
+        if not self.positionEdit.hasFocus() and not self.positionSlider.isSliderDown():
+            self.positionEdit.setText(f'{voltage:.3f}')
+            with QtCore.QSignalBlocker(self.positionSlider):
+                self.positionSlider.setValue(int(round(voltage * 100)))
 
     def _onSliderMove(self, value):
         """Handle slider movement and update position display"""
@@ -243,6 +290,32 @@ class iScatFocusWidget(Widget):
     def updateCameraImage(self, img):
         """Update camera display"""
         self.camImg.setImage(img)
+
+    def showROI(self, x, y, width, height):
+        """ Shows the ROI rectangle on the camera image (image coordinates = sensor pixels
+        while the full field of view is shown). """
+        self.roiItem.setPos([x, y], update=False)
+        self.roiItem.setSize([width, height])
+        self.roiItem.show()
+        self.applyROIButton.setEnabled(True)
+
+    def hideROI(self):
+        self.roiItem.hide()
+        self.applyROIButton.setEnabled(False)
+
+    def getROI(self):
+        """ The drawn ROI as (x, y, width, height) in pixels. """
+        x, y = self.roiItem.pos()
+        w, h = self.roiItem.size()
+        return int(round(x)), int(round(y)), int(round(w)), int(round(h))
+
+    def setSelectROIChecked(self, checked):
+        """ Sets the Select ROI button without emitting sigSelectROI. """
+        with QtCore.QSignalBlocker(self.selectROIButton):
+            self.selectROIButton.setChecked(checked)
+
+    def setROIText(self, text):
+        self.roiLabel.setText(text)
 
     def setPIDparams(self, params):
         self.kpEdit.setText(str(params["p"]))

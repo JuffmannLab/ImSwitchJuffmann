@@ -12,6 +12,7 @@ class PCOCamManager(DetectorManager):
         self.__logger = initLogger(self, instanceName=name)
         
         self._camera = self._getCameraObj(detectorInfo.managerProperties['cameraListIndex'])
+        self._pixelSizeUm = detectorInfo.managerProperties.get('pixelSizeUm')
         self._binning = 1
         
         for propertyName, propertyValue in detectorInfo.managerProperties['PCO'].items():
@@ -124,7 +125,10 @@ class PCOCamManager(DetectorManager):
 
     @property
     def pixelSizeUm(self):
-        return [1, 1, 1]
+        # "pixelSizeUm" in the managerProperties: effective pixel size at the sample (also used
+        # to display the cameras in the same scale)
+        size = self._pixelSizeUm if self._pixelSizeUm else 1
+        return [1, size, size]
     
     def crop(self, hpos, vpos, hsize, vsize):
         # hpos, vpos, hsize, vsize come from the SettingsController in unbinned sensor pixels.

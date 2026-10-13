@@ -221,22 +221,41 @@ class DetectorsManager(MultiManager, SignalInterface):
             handle = np.random.randint(2**31)  # Creates a unique handle
 
             self._activeDetectorAcqHandles.setdefault(detector, set()).add(handle)
-            if liveView:
-                self._activeDetectorAcqLVHandles.setdefault(detector, set()).add(handle)
-            if differentialView:
-                self._activeDetectorDVHandles.setdefault(detector, set()).add(handle)
 
             # Only this detector's handles count; a camera already running for a recording
             # (global startAcquisition) doesn't need to be started again
             enableAcq = (len(self._activeDetectorAcqHandles[detector]) == 1
                          and not self._hasGlobalAcqHandles())
-            enableLV = liveView and not self._thread.isRunning()
-            enableDV = differentialView and not self._dvthread.isRunning()
         finally:
             self._activeAcqsMutex.unlock()
 
         if enableAcq:
-            detector.startAcquisition()
+            try:
+                detector.startAcquisition()
+            except Exception:
+                # Remove the handle again, otherwise the camera would count as running
+                self._activeAcqsMutex.lock()
+                try:
+                    self._activeDetectorAcqHandles.get(detector, set()).discard(handle)
+                finally:
+                    self._activeAcqsMutex.unlock()
+                raise
+
+        # The LiveView/Differential View handles are only added once the camera is started.
+        # Otherwise the running LiveView thread would already read frames from it while it is
+        # starting; a camera that isn't acquiring yet takes a snap then, which collides with
+        # the start (seen with the PCO).
+        self._activeAcqsMutex.lock()
+        try:
+            if liveView:
+                self._activeDetectorAcqLVHandles.setdefault(detector, set()).add(handle)
+                self._lvWorker.resetDetector(detector.name)
+            if differentialView:
+                self._activeDetectorDVHandles.setdefault(detector, set()).add(handle)
+            enableLV = liveView and not self._thread.isRunning()
+            enableDV = differentialView and not self._dvthread.isRunning()
+        finally:
+            self._activeAcqsMutex.unlock()
 
         if enableLV:
             sleep(0.3)
@@ -285,6 +304,12 @@ class DetectorsManager(MultiManager, SignalInterface):
         if disableAcq:
             detector.stopAcquisition()
 
+    def isInLiveView(self, detector):
+        """ Whether the LiveView shows this detector: it was started with liveView=True, either
+        on its own or through startAcquisition. """
+        return detector.forAcquisition and bool(self._activeAcqLVHandles
+                                                or self._activeDetectorAcqLVHandles.get(detector))
+
     def _hasGlobalAcqHandles(self):
         """ Whether acquisition was started through startAcquisition (e.g. by a recording). """
         return bool(self._activeAcqHandles or self._activeAcqLVHandles or self._activeDVHandles)
@@ -297,16 +322,31 @@ class LVWorker(Worker):
         self._detectorsManager = detectorsManager
         self._updatePeriod = updatePeriod
         self._vtimer = None
+        # Detectors that already got their first LiveView frame since they were started
+        self._initialized = set()
 
     def run(self):
-        self._detectorsManager.execOnAll(lambda c: c.updateLatestFrame(False),
-                                         condition=lambda c: c.forAcquisition)
+        self._initialized = set()
+        self._update()
         self._vtimer = Timer()
-        self._vtimer.timeout.connect(
-            lambda: self._detectorsManager.execOnAll(lambda c: c.updateLatestFrame(True),
-                                                     condition=lambda c: c.forAcquisition)
-        )
+        self._vtimer.timeout.connect(self._update)
         self._vtimer.start(self._updatePeriod)
+
+    def _update(self):
+        """ Updates the frame of each detector in LiveView (not those in Differential View).
+        The first frame of a detector is sent with init=False, so the viewer sets its levels. """
+        self._detectorsManager.execOnAll(lambda c: self._updateDetector(c),
+                                         condition=self._detectorsManager.isInLiveView)
+
+    def _updateDetector(self, detector):
+        # Only counts as initialized once a frame was actually sent; right after starting, a
+        # camera may not have a frame yet
+        if detector.updateLatestFrame(detector.name in self._initialized):
+            self._initialized.add(detector.name)
+
+    def resetDetector(self, detectorName):
+        """ The next frame of this detector is treated as its first one again. """
+        self._initialized.discard(detectorName)
 
     def stop(self):
         if self._vtimer is not None:
@@ -334,6 +374,8 @@ class DVWorker(Worker):
         self._batchSum = {}
         self._batchCount = {}
         self._prevBatchAvg = {}
+        # Detectors that already got a differential image; the first one sets the levels
+        self._levelsSet = set()
         self._resetRequested = False
 
     def run(self):
@@ -400,8 +442,12 @@ class DVWorker(Worker):
                 batch_avg = self._batchSum[name] / self._batchCount[name]
                 prev_avg = self._prevBatchAvg.get(name)
                 if prev_avg is not None:
-                    # Normalized iScat contrast: older batch / newer batch - 1
-                    diff_image = (prev_avg / (batch_avg + 1e-6)) - 1
+                    # Normalized iScat contrast: older batch / newer batch - 1. Pixels without
+                    # signal (dark or dead pixels) are set to 0 instead of dividing by ~0.
+                    diff_image = np.zeros_like(batch_avg)
+                    np.divide(prev_avg, batch_avg, out=diff_image, where=batch_avg >= 1)
+                    diff_image -= 1
+                    diff_image[batch_avg < 1] = 0
                 self._prevBatchAvg[name] = batch_avg
                 self._batchCount[name] = 0
 
@@ -410,11 +456,14 @@ class DVWorker(Worker):
 
 
     def emit_diff_image(self, detector, diff_image):
-        """ Emit the differential image. """
+        """ Emit the differential image. Like the LiveView, 'init' is False only for the first
+        image, so the viewer sets the levels once and they can be adjusted by hand afterwards. """
+        first = detector.name not in self._levelsSet
+        self._levelsSet.add(detector.name)
         self._detectorsManager.sigImageUpdated.emit(
             detector.name,
             diff_image,
-            False,  # 'init' is False for differential images
+            not first,  # init
             True    # This is the current detector's image
         )
 

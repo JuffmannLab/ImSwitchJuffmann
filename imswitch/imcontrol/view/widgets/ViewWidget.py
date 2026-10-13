@@ -6,11 +6,9 @@ from .basewidgets import Widget
 
 
 class ViewWidget(Widget):
-    """ View settings (liveview, grid, crosshair).
+    """ View settings (liveview, differential view).
         Adapted for a separate Differential View Button"""
 
-    sigGridToggled = QtCore.Signal(bool)  # (enabled)
-    sigCrosshairToggled = QtCore.Signal(bool)  # (enabled)
     sigLiveviewToggled = QtCore.Signal(bool)  # (enabled)
     sigDifferentialviewToggled = QtCore.Signal(bool)
     sigSliderValueChanged = QtCore.Signal(int)
@@ -19,17 +17,6 @@ class ViewWidget(Widget):
         super().__init__(*args, **kwargs)
 
         # Graphical elements
-        # Grid
-        self.gridButton = guitools.BetterPushButton('Grid')
-        self.gridButton.setCheckable(True)
-        self.gridButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
-                                      QtWidgets.QSizePolicy.Expanding)
-
-        # Crosshair
-        self.crosshairButton = guitools.BetterPushButton('Crosshair')
-        self.crosshairButton.setCheckable(True)
-        self.crosshairButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
-                                           QtWidgets.QSizePolicy.Expanding)
         # liveview
         self.liveviewButton = guitools.BetterPushButton('LIVEVIEW')
         self.liveviewButton.setStyleSheet("font-size:20px")
@@ -62,9 +49,7 @@ class ViewWidget(Widget):
         self.viewCtrlLayout = QtWidgets.QGridLayout()
         self.setLayout(self.viewCtrlLayout)
         self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 2)
-        self.viewCtrlLayout.addWidget(self.gridButton, 1, 0)
-        self.viewCtrlLayout.addWidget(self.crosshairButton, 1, 1)
-        self.viewCtrlLayout.addWidget(self.differentialviewButton, 2, 0, 1, 2)
+        self.viewCtrlLayout.addWidget(self.differentialviewButton, 1, 0, 1, 2)
         # Add Slider Row
         sliderLayout = QtWidgets.QHBoxLayout()
         sliderLayout.addWidget(self.sliderLabel)
@@ -72,11 +57,9 @@ class ViewWidget(Widget):
         sliderLayout.addWidget(self.inputField)
 
         # Add to main layout
-        self.viewCtrlLayout.addLayout(sliderLayout, 3, 0, 1, 2)
+        self.viewCtrlLayout.addLayout(sliderLayout, 2, 0, 1, 2)
 
         # Connect signals
-        self.gridButton.toggled.connect(self.sigGridToggled)
-        self.crosshairButton.toggled.connect(self.sigCrosshairToggled)
         self.liveviewButton.toggled.connect(self.sigLiveviewToggled)
         self.differentialviewButton.toggled.connect(self.sigDifferentialviewToggled)
         self.slider.valueChanged.connect(self.update_input_field)
@@ -103,8 +86,6 @@ class ViewWidget(Widget):
         self.sigSliderValueChanged.emit(value)
 
     def setViewToolsEnabled(self, enabled, mode):
-        self.crosshairButton.setEnabled(enabled)
-        self.gridButton.setEnabled(enabled)
         if enabled == True and mode == 'LV':
             self.differentialviewButton.setEnabled(False)
         elif enabled == False and mode == 'LV':
@@ -138,25 +119,9 @@ class ViewWidget(Widget):
         with QtCore.QSignalBlocker(self.differentialviewButton):
             self.differentialviewButton.setChecked(checked)
 
-    def setLiveViewGridVisible(self, visible):
-        """ Sets whether the LiveView grid is visible. """
-        self.crosshairButton.setChecked(visible)
-
-    def setLiveViewCrosshairVisible(self, visible):
-        """ Sets whether the LiveView crosshair is visible. """
-        self.gridButton.setChecked(visible)
-
     @shortcut('Ctrl+L', "Liveview")
     def toggleLiveviewButton(self):
         self.liveviewButton.toggle()
-
-    @shortcut('Ctrl+G', "Grid")
-    def toggleGridButton(self):
-        self.gridButton.toggle()
-
-    @shortcut('Ctrl+H', "Crosshair")
-    def toggleCrosshairButton(self):
-        self.crosshairButton.toggle()
 
     @shortcut('Ctrl+D', "Differential View")
     def toggleDifferentialviewButton(self):
