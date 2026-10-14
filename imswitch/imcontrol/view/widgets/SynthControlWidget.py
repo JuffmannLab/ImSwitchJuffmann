@@ -18,15 +18,18 @@ class SynthControlWidget(Widget):
         self.imPlayerGroup = QtWidgets.QGroupBox("Image Player Configuration")
         imPlayerLayout = QtWidgets.QGridLayout()
 
-        self.clockRateLabel = QtWidgets.QLabel("Clock Rate [1-5000 kHz]")
+        self.clockRateLabel = QtWidgets.QLabel("Clock (kHz)")
+        self.clockRateLabel.setToolTip("Clock rate, 1-5000 kHz")
         self.clockRateEdit = QtWidgets.QSpinBox()
         self.clockRateEdit.setRange(1, 5000)
         self.clockRateEdit.setValue(100)
 
         self.downloadButton = guitools.BetterPushButton("Download images")
 
-        self.triggerRadioButtonCon = QtWidgets.QRadioButton("Continuous Trigger")
-        self.triggerRadioButtonExt = QtWidgets.QRadioButton("External Trigger")
+        self.triggerRadioButtonCon = QtWidgets.QRadioButton("Continuous")
+        self.triggerRadioButtonCon.setToolTip("Continuous trigger")
+        self.triggerRadioButtonExt = QtWidgets.QRadioButton("External")
+        self.triggerRadioButtonExt.setToolTip("External trigger")
         self.triggerRadioButtonExt.setChecked(True)
 
         self.repeatOptions = QtWidgets.QComboBox()
@@ -40,31 +43,37 @@ class SynthControlWidget(Widget):
         self.programmedRepeats.setEnabled(False)
 
         self.imageTable = QtWidgets.QTableWidget(1,4)
+        self.imageTable.setMinimumHeight(120)
+        self.imageTable.horizontalHeader().setStretchLastSection(True)
 
-        self.currentImageLabel = QtWidgets.QLabel("Current Image selected:")
+        self.currentImageLabel = QtWidgets.QLabel("Image:")
+        self.currentImageLabel.setToolTip("Currently selected image")
         self.currentImage = QtWidgets.QComboBox()
 
-        self.startButton = guitools.BetterPushButton("Start image playback")
+        self.startButton = guitools.BetterPushButton("Start playback")
         self.startButton.setCheckable(True)
-        self.stopButton = guitools.BetterPushButton("Stop image playback")
+        self.stopButton = guitools.BetterPushButton("Stop playback")
 
 
         imPlayerLayout.addWidget(self.clockRateLabel, 0, 0, 1, 1)
         imPlayerLayout.addWidget(self.clockRateEdit, 0, 1, 1, 1)
-        imPlayerLayout.addWidget(self.imageTable, 0, 2, 3, 3)
 
         imPlayerLayout.addWidget(self.triggerRadioButtonCon, 1, 0, 1, 1)
         imPlayerLayout.addWidget(self.triggerRadioButtonExt, 1, 1, 1, 1)
 
-        imPlayerLayout.addWidget(self.downloadButton, 2, 0, 1, 1)
+        imPlayerLayout.addWidget(self.downloadButton, 2, 0, 1, 2)
 
         imPlayerLayout.addWidget(self.currentImageLabel, 3, 0, 1, 1)
         imPlayerLayout.addWidget(self.currentImage, 3, 1, 1, 1)
         imPlayerLayout.addWidget(self.repeatOptions, 3, 2, 1, 1)
         imPlayerLayout.addWidget(self.programmedRepeats, 3, 3, 1, 1)
 
-        imPlayerLayout.addWidget(self.startButton, 4, 0, 1, 1)
-        imPlayerLayout.addWidget(self.stopButton, 4, 1, 1, 1)
+        imPlayerLayout.addWidget(self.startButton, 4, 0, 1, 2)
+        imPlayerLayout.addWidget(self.stopButton, 4, 2, 1, 2)
+
+        # Table of the loaded images below the controls, with the full width
+        imPlayerLayout.addWidget(self.imageTable, 5, 0, 1, 4)
+        imPlayerLayout.setRowStretch(5, 1)
 
         #Add signals
         self.repeatOptions.currentIndexChanged.connect(self.sigRepeatOptionChanged)

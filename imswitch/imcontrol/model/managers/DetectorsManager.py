@@ -25,6 +25,7 @@ class DetectorsManager(MultiManager, SignalInterface):
     def __init__(self, detectorInfos, updatePeriod, batch_size, **lowLevelManagers):
         MultiManager.__init__(self, detectorInfos, 'detectors', **lowLevelManagers)
         SignalInterface.__init__(self)
+        self.__logger = initLogger(self)
 
         self.batchSize = batch_size
 
@@ -37,14 +38,20 @@ class DetectorsManager(MultiManager, SignalInterface):
         self._activeDVHandles = []
         self._activeAcqsMutex = Mutex()
 
+        # Pseudo flat field: background (median) image per detector, subtracted from the
+        # LiveView frames of the detectors in self._flatFieldActive
+        self._flatFields = {}
+        self._flatFieldActive = set()
+        self._flatFieldShapeWarned = set()
+
         self._currentDetectorName = None
         for detectorName, detectorInfo in detectorInfos.items():
             if not self._subManagers[detectorName].forAcquisition and not self._subManagers[detectorName].forDifferential:
                 continue
             # Connect signals
             self._subManagers[detectorName].sigImageUpdated.connect(
-                lambda image, init, detectorName=detectorName: self.sigImageUpdated.emit(
-                    detectorName, image, init, detectorName == self._currentDetectorName
+                lambda image, init, detectorName=detectorName: self._emitLiveImage(
+                    detectorName, image, init
                 )
             )
 
@@ -81,6 +88,47 @@ class DetectorsManager(MultiManager, SignalInterface):
             thread.quit()
             thread.wait()
         super().finalize()
+
+    def _emitLiveImage(self, detectorName, image, init):
+        """ Emits a LiveView frame; in the pseudo flat field view the background is subtracted.
+        Runs in the LiveView thread. """
+        if detectorName in self._flatFieldActive:
+            background = self._flatFields.get(detectorName)
+            if background is not None and background.shape == image.shape:
+                image = image.astype(np.float32) - background
+            elif background is not None and detectorName not in self._flatFieldShapeWarned:
+                self._flatFieldShapeWarned.add(detectorName)
+                self.__logger.warning(
+                    f'{detectorName}: the frames ({image.shape}) and the flat field background '
+                    f'({background.shape}) differ in size, the background is not subtracted')
+        self.sigImageUpdated.emit(detectorName, image, init,
+                                  detectorName == self._currentDetectorName)
+
+    def setFlatField(self, detectorName, background):
+        """ Sets the background (median) image of the pseudo flat field view, None to remove. """
+        if background is None:
+            self._flatFields.pop(detectorName, None)
+        else:
+            self._flatFields[detectorName] = np.asarray(background, dtype=np.float32)
+        self._flatFieldShapeWarned.discard(detectorName)
+        if detectorName in self._flatFieldActive:
+            self._lvWorker.resetDetector(detectorName)  # new levels for the new background
+
+    def getFlatField(self, detectorName):
+        """ The background (median) image of the pseudo flat field view, or None. """
+        return self._flatFields.get(detectorName)
+
+    def hasFlatField(self, detectorName):
+        return detectorName in self._flatFields
+
+    def setFlatFieldActive(self, detectorName, active):
+        """ Switches the background subtraction of a detector's LiveView frames on/off. The next
+        frame is treated as the first one, so the viewer sets new levels. """
+        if active:
+            self._flatFieldActive.add(detectorName)
+        else:
+            self._flatFieldActive.discard(detectorName)
+        self._lvWorker.resetDetector(detectorName)
 
     def adjustBatchSize(self, batch_size):
         """ Adjusting the batch size for the Differential View inside the dvworker class """

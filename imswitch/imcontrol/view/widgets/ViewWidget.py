@@ -11,6 +11,7 @@ class ViewWidget(Widget):
 
     sigLiveviewToggled = QtCore.Signal(bool)  # (enabled)
     sigDifferentialviewToggled = QtCore.Signal(bool)
+    sigPseudoFlatFieldToggled = QtCore.Signal(bool)
     sigSliderValueChanged = QtCore.Signal(int)
 
     def __init__(self, *args, **kwargs):
@@ -33,6 +34,13 @@ class ViewWidget(Widget):
                                                   QtWidgets.QSizePolicy.Expanding)
         self.differentialviewButton.setEnabled(True)
 
+        # Pseudo flat field: live image minus a median background (PseudoFlatField widget)
+        self.pseudoFlatFieldButton = guitools.BetterPushButton('Pseudo Flat Field')
+        self.pseudoFlatFieldButton.setStyleSheet("font-size:20px")
+        self.pseudoFlatFieldButton.setCheckable(True)
+        self.pseudoFlatFieldButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
+                                                 QtWidgets.QSizePolicy.Expanding)
+
         # Slider and Input Field for Batch Size
         self.sliderLabel = QtWidgets.QLabel("Batch Size:")
         self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -50,6 +58,7 @@ class ViewWidget(Widget):
         self.setLayout(self.viewCtrlLayout)
         self.viewCtrlLayout.addWidget(self.liveviewButton, 0, 0, 1, 2)
         self.viewCtrlLayout.addWidget(self.differentialviewButton, 1, 0, 1, 2)
+        self.viewCtrlLayout.addWidget(self.pseudoFlatFieldButton, 2, 0, 1, 2)
         # Add Slider Row
         sliderLayout = QtWidgets.QHBoxLayout()
         sliderLayout.addWidget(self.sliderLabel)
@@ -57,11 +66,12 @@ class ViewWidget(Widget):
         sliderLayout.addWidget(self.inputField)
 
         # Add to main layout
-        self.viewCtrlLayout.addLayout(sliderLayout, 2, 0, 1, 2)
+        self.viewCtrlLayout.addLayout(sliderLayout, 3, 0, 1, 2)
 
         # Connect signals
         self.liveviewButton.toggled.connect(self.sigLiveviewToggled)
         self.differentialviewButton.toggled.connect(self.sigDifferentialviewToggled)
+        self.pseudoFlatFieldButton.toggled.connect(self.sigPseudoFlatFieldToggled)
         self.slider.valueChanged.connect(self.update_input_field)
         self.inputField.textChanged.connect(self.update_slider_value)
 
@@ -112,6 +122,14 @@ class ViewWidget(Widget):
         """ Sets the LiveView button state without emitting sigLiveviewToggled. """
         with QtCore.QSignalBlocker(self.liveviewButton):
             self.liveviewButton.setChecked(checked)
+
+    def setPseudoFlatFieldChecked(self, checked):
+        """ Sets the Pseudo Flat Field button state without emitting the signal. """
+        with QtCore.QSignalBlocker(self.pseudoFlatFieldButton):
+            self.pseudoFlatFieldButton.setChecked(checked)
+
+    def showMessage(self, title, text):
+        QtWidgets.QMessageBox.information(self, title, text)
 
     def setDifferentialViewChecked(self, checked):
         """ Sets the Differential View button state without emitting

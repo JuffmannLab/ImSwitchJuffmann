@@ -73,7 +73,8 @@ class ImConMainView(QtWidgets.QMainWindow):
             'Watcher': _DockInfo(name='File Watcher', yPosition=3),
             'Tiling': _DockInfo(name='Tiling', yPosition=3),
             'DifferentialView': _DockInfo(name='Differential View', yPosition=3),
-            'SynthControl': _DockInfo(name = "ISOMET synthesizer control", yPosition=3)
+            'SynthControl': _DockInfo(name = "ISOMET synthesizer control", yPosition=3),
+            'PseudoFlatField': _DockInfo(name='Pseudo Flat Field', yPosition=3)
             
         }
         leftDockInfos = {
@@ -86,6 +87,8 @@ class ImConMainView(QtWidgets.QMainWindow):
         allDockKeys = list(rightDockInfos.keys()) + list(leftDockInfos.keys()) + otherDockKeys
 
         dockArea = DockArea()
+        self._dockArea = dockArea
+        self._dockSizesApplied = False
         enabledDockKeys = viewSetupInfo.availableWidgets
         if enabledDockKeys is False:
             enabledDockKeys = []
@@ -119,13 +122,40 @@ class ImConMainView(QtWidgets.QMainWindow):
         self.hide()  # Minimize time the window is displayed while loading multi module window
 
         # Adjust dock sizes (the window has to be maximized first for this to work properly)
+        # Widths: left column 4, image 10, right column 6 (the columns get at least the
+        # minimum width of their widgets)
         if 'Settings' in self.docks:
-            self.docks['Settings'].setStretch(1, 5)
-            self.docks['Settings'].container().setStretch(3, 1)
+            self.docks['Settings'].setStretch(4, 5)
+            self.docks['Settings'].container().setStretch(4, 1)
+        for dock in rightDocks:
+            dock.setStretch(6, 3)
         if len(rightDocks) > 0:
-            rightDocks[-1].setStretch(1, 5)
+            rightDocks[-1].setStretch(6, 5)
+        if 'iScatFocus' in self.docks:
+            # The focus lock needs the most space of the right column
+            self.docks['iScatFocus'].setStretch(6, 10)
+        if 'Positioner' in self.docks:
+            self.docks['Positioner'].setStretch(6, 1)
         if 'Image' in self.docks:
             self.docks['Image'].setStretch(10, 1)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._dockSizesApplied:
+            self._dockSizesApplied = True
+            # The stretch values are only turned into sizes once the window has its size
+            QtCore.QTimer.singleShot(0, lambda: self._applyDockStretch(self._dockArea.topContainer))
+
+    def _applyDockStretch(self, container):
+        """ Sets the sizes of the dock containers according to the stretch of the docks,
+        innermost containers first. """
+        if container is None:
+            return
+        for i in range(container.count()):
+            child = container.widget(i)
+            if hasattr(child, 'updateStretch') and hasattr(child, 'count'):
+                self._applyDockStretch(child)
+        container.updateStretch()
 
     def addShortcuts(self, shortcuts):
         for s in shortcuts.values():
@@ -156,7 +186,16 @@ class ImConMainView(QtWidgets.QMainWindow):
                 getattr(widgets, f'{widgetKey}Widget')
             )
             self.docks[widgetKey] = Dock(dockInfo.name, size=(1, 1))
-            self.docks[widgetKey].addWidget(self.widgets[widgetKey])
+            if position == 'right':
+                # Scrollable, so large widgets don't push the other docks of the column out
+                # of the window
+                scrollArea = QtWidgets.QScrollArea()
+                scrollArea.setWidgetResizable(True)
+                scrollArea.setFrameShape(QtWidgets.QFrame.NoFrame)
+                scrollArea.setWidget(self.widgets[widgetKey])
+                self.docks[widgetKey].addWidget(scrollArea)
+            else:
+                self.docks[widgetKey].addWidget(self.widgets[widgetKey])
             if prevDock is None:
                 dockArea.addDock(self.docks[widgetKey], position)
             elif dockInfo.yPosition > prevDockYPosition:

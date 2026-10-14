@@ -105,6 +105,7 @@ class DetectorManager(SignalInterface):
         self.__forAcquisition = detectorInfo.forAcquisition
         self.__forFocusLock = detectorInfo.forFocusLock
         self.__forDifferential = detectorInfo.forDifferential
+        self.__forPseudoFlatFielding = detectorInfo.forPseudoFlatFielding
         if not detectorInfo.forAcquisition and not detectorInfo.forFocusLock and not detectorInfo.forDifferential:
             raise ValueError('At least one of forAcquisition and forFocusLock must be set in'
                              ' DetectorInfo.')
@@ -220,6 +221,11 @@ class DetectorManager(SignalInterface):
     def forDifferential(self) -> bool:
         """ Wether the detector is used for differential Imaging """
         return self.__forDifferential
+
+    @property
+    def forPseudoFlatFielding(self) -> bool:
+        """ Whether the detector is used for the pseudo flat field view. """
+        return self.__forPseudoFlatFielding
 
     @property
     @abstractmethod

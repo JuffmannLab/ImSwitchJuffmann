@@ -23,3 +23,4 @@ from .ShutterController import ShutterController
 from .iScatFocusController import iScatFocusController
 from .iScatFocusV2Controller import iScatFocusV2Controller
 from .SynthControlController import SynthControlController
+from .PseudoFlatFieldController import PseudoFlatFieldController

@@ -48,6 +48,10 @@ class DetectorInfo(DeviceInfo):
     forDifferential: bool = False
     """ Wether the detector is used for differential view. """
 
+    forPseudoFlatFielding: bool = False
+    """ Whether the pseudo flat field view (live image minus a median background image) and
+    the PseudoFlatField widget are used for this detector. """
+
 
 @dataclass(frozen=True)
 class LaserInfo(DeviceInfo):
@@ -192,6 +196,10 @@ class iScatFocusInfo:
     piezoNmPerVolt: Optional[float] = None
     """ Focus change of the piezo in nm per volt. Optional; if set, the auto-tune
     shows the expected lock stability in nm. """
+
+    autofocusCamera: Optional[str] = None
+    """ Camera whose images are used for the autofocus (image sharpness). Optional; default:
+    the first camera marked forPseudoFlatFielding, forDifferential or forAcquisition. """
 
 @dataclass(frozen=True)
 class AutofocusInfo:

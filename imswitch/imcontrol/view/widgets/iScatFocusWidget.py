@@ -4,6 +4,11 @@ from qtpy import QtWidgets, QtCore, QtGui
 from imswitch.imcontrol.view import guitools as guitools
 from .basewidgets import Widget
 
+class _GridLayoutWithoutHeightForWidth(QtWidgets.QGridLayout):
+    def hasHeightForWidth(self):
+        return False
+
+
 class iScatFocusWidget(Widget):
     """ Enhanced widget with better calibration display and diagnostics """
     sigPIDToggled = QtCore.Signal(bool)
@@ -18,12 +23,17 @@ class iScatFocusWidget(Widget):
     sigSelectROI = QtCore.Signal(bool)  # show the full field of view to draw the ROI
     sigApplyROI = QtCore.Signal(int, int, int, int)  # (x, y, width, height) in sensor pixels
     sigSaveROI = QtCore.Signal()
+    sigAutofocus = QtCore.Signal(float, int, int)  # (range +- V, steps, frames per step)
+    sigStoreFocus = QtCore.Signal()
+    sigGoToFocus = QtCore.Signal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Main layout with more organized grid
-        self.setLayout(QtWidgets.QGridLayout())
+        # Main layout with more organized grid. Without height-for-width: the word-wrapped
+        # labels (also on the hidden tab) would make the scroll area of the dock size the widget
+        # much higher than needed
+        self.setLayout(_GridLayoutWithoutHeightForWidth())
         
         # ---- PID Control Section ----
         self.pidControlGroup = QtWidgets.QGroupBox("PID Control")
@@ -43,11 +53,11 @@ class iScatFocusWidget(Widget):
         self.autoTuneButton = guitools.BetterPushButton('Auto-tune')
         
         # Add to PID layout
-        pidLayout.addWidget(QtWidgets.QLabel('Proportional (V/px):'), 0, 0)
+        pidLayout.addWidget(self._label('P (V/px):', 'Proportional gain'), 0, 0)
         pidLayout.addWidget(self.kpEdit, 0, 1)
-        pidLayout.addWidget(QtWidgets.QLabel('Integral (V/px·s):'), 1, 0)
+        pidLayout.addWidget(self._label('I (V/px·s):', 'Integral gain'), 1, 0)
         pidLayout.addWidget(self.kiEdit, 1, 1)
-        pidLayout.addWidget(QtWidgets.QLabel('Derivative (V/(px/s)):'), 2, 0)
+        pidLayout.addWidget(self._label('D (V·s/px):', 'Derivative gain'), 2, 0)
         pidLayout.addWidget(self.kdEdit, 2, 1)
         pidLayout.addWidget(self.lockButton, 0, 2, 2, 1)
         pidLayout.addWidget(self.autoTuneButton, 2, 2)
@@ -84,11 +94,11 @@ class iScatFocusWidget(Widget):
         
         # Calibration inputs
         # Relative to the current piezo position, so the calibration scans around the focus
-        calibLayout.addWidget(QtWidgets.QLabel("Start (V, rel. to current):"), 0, 0)
+        calibLayout.addWidget(self._label("Start (V, rel.):", "Relative to the current piezo position"), 0, 0)
         self.calibFromEdit = QtWidgets.QLineEdit("-2")
         calibLayout.addWidget(self.calibFromEdit, 0, 1)
         
-        calibLayout.addWidget(QtWidgets.QLabel("End (V, rel. to current):"), 1, 0)
+        calibLayout.addWidget(self._label("End (V, rel.):", "Relative to the current piezo position"), 1, 0)
         self.calibToEdit = QtWidgets.QLineEdit("2")
         calibLayout.addWidget(self.calibToEdit, 1, 1)
         
@@ -117,10 +127,12 @@ class iScatFocusWidget(Widget):
         self.sledGroup = QtWidgets.QGroupBox("SLED Control")
         sledLayout = QtWidgets.QGridLayout()
 
-        self.sledEnable = guitools.BetterPushButton('SLED Enable')
+        self.sledEnable = guitools.BetterPushButton('Enable')
+        self.sledEnable.setToolTip('SLED enable')
         self.sledEnable.setCheckable(True)
 
-        self.sledEnableAI = guitools.BetterPushButton('SLED Current Enable')
+        self.sledEnableAI = guitools.BetterPushButton('Current')
+        self.sledEnableAI.setToolTip('SLED current control enable')
         self.sledEnableAI.setCheckable(True)
 
         self.sledSpinBox = QtWidgets.QDoubleSpinBox()
@@ -128,7 +140,8 @@ class iScatFocusWidget(Widget):
         self.sledSpinBox.setValue(0)
         self.sledSpinBox.setSingleStep(0.1)
 
-        self.sledControlUpdate = guitools.BetterPushButton('Update Control Voltage')
+        self.sledControlUpdate = guitools.BetterPushButton('Set (V)')
+        self.sledControlUpdate.setToolTip('Update the SLED control voltage')
 
 
         sledLayout.addWidget(self.sledEnable, 0, 0)
@@ -155,7 +168,8 @@ class iScatFocusWidget(Widget):
         self.selectROIButton.setCheckable(True)
         self.applyROIButton = guitools.BetterPushButton('Apply ROI')
         self.applyROIButton.setEnabled(False)
-        self.saveROIButton = guitools.BetterPushButton('Save ROI to setup file')
+        self.saveROIButton = guitools.BetterPushButton('Save ROI')
+        self.saveROIButton.setToolTip('Save the ROI to the setup file (applied on startup)')
         self.roiLabel = QtWidgets.QLabel('')
         self.roiLabel.setWordWrap(True)
         roiLayout.addWidget(self.selectROIButton, 0, 0)
@@ -173,14 +187,111 @@ class iScatFocusWidget(Widget):
         self.roiItem.hide()
         self.camViewBox.addItem(self.roiItem)
 
+        # ---- Autofocus and focus memory ----
+        self.afGroup = QtWidgets.QGroupBox("Autofocus")
+        afLayout = QtWidgets.QGridLayout()
+        self.afRangeEdit = QtWidgets.QLineEdit('2.0')
+        self.afRangeEdit.setValidator(QtGui.QDoubleValidator(0.01, 10, 3))
+        self.afStepsEdit = QtWidgets.QSpinBox()
+        self.afStepsEdit.setRange(5, 201)
+        self.afStepsEdit.setValue(21)
+        self.afFramesEdit = QtWidgets.QSpinBox()
+        self.afFramesEdit.setRange(1, 100)
+        self.afFramesEdit.setValue(5)
+        self.autofocusButton = guitools.BetterPushButton('Autofocus')
+        self.storeFocusButton = guitools.BetterPushButton('Store focus')
+        self.goToFocusButton = guitools.BetterPushButton('Go to focus')
+        self.goToFocusButton.setToolTip('Move the piezo until the focus lock spot is at the stored position')
+        self.goToFocusButton.setEnabled(False)
+        self.afResultLabel = QtWidgets.QLabel('')
+        self.afResultLabel.setWordWrap(True)
+        self.focusMemoryLabel = QtWidgets.QLabel('Stored focus: none')
+        self.focusMemoryLabel.setWordWrap(True)
+        self.afPlot = pg.PlotWidget()
+        self.afPlot.setLabels(left='Sharpness', bottom=('Piezo', 'V'))
+        self.afPlot.setMinimumHeight(120)
+        self.afCoarseCurve = self.afPlot.plot(pen=None, symbol='o', symbolSize=5,
+                                              symbolBrush='c')
+        self.afFineCurve = self.afPlot.plot(pen='y', symbol='o', symbolSize=5, symbolBrush='y')
+        self.afBestLine = pg.InfiniteLine(angle=90, pen='r')
+        self.afBestLine.hide()
+        self.afPlot.addItem(self.afBestLine)
+
+        afLayout.addWidget(self._label('Range (± V):', 'Scan range around the current piezo position'), 0, 0)
+        afLayout.addWidget(self.afRangeEdit, 0, 1)
+        afLayout.addWidget(QtWidgets.QLabel('Steps:'), 1, 0)
+        afLayout.addWidget(self.afStepsEdit, 1, 1)
+        afLayout.addWidget(self._label('Frames/step:', 'Frames averaged per scan step'), 2, 0)
+        afLayout.addWidget(self.afFramesEdit, 2, 1)
+        afLayout.addWidget(self.autofocusButton, 3, 0, 1, 2)
+        afLayout.addWidget(self.afResultLabel, 4, 0, 1, 2)
+        afLayout.addWidget(self.afPlot, 5, 0, 1, 2)
+        afLayout.addWidget(self.storeFocusButton, 6, 0)
+        afLayout.addWidget(self.goToFocusButton, 6, 1)
+        afLayout.addWidget(self.focusMemoryLabel, 7, 0, 1, 2)
+        self.afGroup.setLayout(afLayout)
+
         # ---- Layout ----
-        self.layout().addWidget(self.pidControlGroup, 0, 0, 1, 2)
-        self.layout().addWidget(self.positionGroup, 1, 0)
-        self.layout().addWidget(self.roiGroup, 1, 1)
-        self.layout().addWidget(self.focusPlotGraph, 0, 2, 2, 1)
-        self.layout().addWidget(self.camView, 2, 2, 2, 1)
-        self.layout().addWidget(self.calibGroup, 2, 0, 1, 2)
-        self.layout().addWidget(self.sledGroup, 3, 0, 1, 2)
+        # Normal view: controls on the left (at their natural width), graphics on the right
+        # (all the remaining width). Calibration and autofocus share one place as tabs; the
+        # Autofocus tab switches the whole widget to the autofocus view.
+        calibPage = QtWidgets.QWidget()
+        calibPageLayout = QtWidgets.QVBoxLayout(calibPage)
+        calibPageLayout.setContentsMargins(0, 0, 0, 0)
+        calibPageLayout.addWidget(self.calibGroup)
+        calibPageLayout.addStretch(1)
+        afPlaceholder = QtWidgets.QWidget()  # the autofocus is shown in its own view
+        afPlaceholder.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+        self.tabs = QtWidgets.QTabWidget()
+        self.tabs.addTab(calibPage, 'Calibration')
+        self.tabs.addTab(afPlaceholder, 'Autofocus')
+
+        controls = QtWidgets.QWidget()
+        controlsLayout = QtWidgets.QGridLayout(controls)
+        controlsLayout.setContentsMargins(0, 0, 0, 0)
+        controlsLayout.addWidget(self.pidControlGroup, 0, 0, 1, 2)
+        controlsLayout.addWidget(self.positionGroup, 1, 0)
+        controlsLayout.addWidget(self.roiGroup, 1, 1)
+        controlsLayout.addWidget(self.tabs, 2, 0, 1, 2)
+        controlsLayout.addWidget(self.sledGroup, 3, 0, 1, 2)
+        controlsLayout.setRowStretch(4, 1)
+        # Only a bit wider than needed (the input fields would otherwise take all the width)
+        controls.setMaximumWidth(controls.minimumSizeHint().width() + 20)
+
+        graphics = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        graphics.addWidget(self.focusPlotGraph)
+        graphics.addWidget(self.camView)
+        self.focusPlotGraph.setMinimumSize(120, 120)
+        self.camView.setMinimumSize(120, 120)
+        # Share the available height instead of asking for their (large) preferred height
+        graphics.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
+
+        normalView = QtWidgets.QWidget()
+        normalLayout = QtWidgets.QHBoxLayout(normalView)
+        normalLayout.setContentsMargins(0, 0, 0, 0)
+        normalLayout.addWidget(controls)
+        normalLayout.addWidget(graphics, 1)
+
+        # Autofocus view: the autofocus group with the whole area of the widget
+        autofocusView = QtWidgets.QWidget()
+        afViewLayout = QtWidgets.QVBoxLayout(autofocusView)
+        afViewLayout.setContentsMargins(0, 0, 0, 0)
+        self.afTabBar = QtWidgets.QTabBar()
+        self.afTabBar.addTab('Calibration')
+        self.afTabBar.addTab('Autofocus')
+        self.afTabBar.setCurrentIndex(1)
+        afViewLayout.addWidget(self.afTabBar)
+        afViewLayout.addWidget(self.afGroup, 1)
+        self.afGroup.layout().setRowStretch(5, 1)  # the sharpness plot gets the extra height
+
+        self.views = QtWidgets.QStackedWidget()
+        self.views.addWidget(normalView)
+        self.views.addWidget(autofocusView)
+        self.tabs.currentChanged.connect(self._onTabChanged)
+        self.afTabBar.currentChanged.connect(self._onAfTabChanged)
+
+        self.layout().setContentsMargins(2, 2, 2, 2)
+        self.layout().addWidget(self.views, 0, 0)
 
         # ---- Signal Connections ----
         self.lockButton.toggled.connect(self.sigPIDToggled)
@@ -192,6 +303,9 @@ class iScatFocusWidget(Widget):
         self.applyROIButton.clicked.connect(
             lambda: self.sigApplyROI.emit(*self.getROI()))
         self.saveROIButton.clicked.connect(self.sigSaveROI)
+        self.autofocusButton.clicked.connect(self._emitAutofocus)
+        self.storeFocusButton.clicked.connect(self.sigStoreFocus)
+        self.goToFocusButton.clicked.connect(self.sigGoToFocus)
         self.positionSlider.valueChanged.connect(self._onSliderMove)
 
         self.sledEnable.clicked.connect(self.sigSledEnable)
@@ -203,6 +317,29 @@ class iScatFocusWidget(Widget):
             edit.editingFinished.connect(self.emitPIDValues)
 
 
+
+    def _onTabChanged(self, index):
+        """ The Autofocus tab of the normal view switches to the autofocus view. """
+        if index == 1:
+            with QtCore.QSignalBlocker(self.tabs):
+                self.tabs.setCurrentIndex(0)
+            with QtCore.QSignalBlocker(self.afTabBar):
+                self.afTabBar.setCurrentIndex(1)
+            self.views.setCurrentIndex(1)
+
+    def _onAfTabChanged(self, index):
+        """ The Calibration tab of the autofocus view switches back to the normal view. """
+        if index == 0:
+            with QtCore.QSignalBlocker(self.afTabBar):
+                self.afTabBar.setCurrentIndex(1)
+            self.views.setCurrentIndex(0)
+
+    @staticmethod
+    def _label(text, tooltip):
+        """ Short label with the longer explanation as tooltip. """
+        label = QtWidgets.QLabel(text)
+        label.setToolTip(tooltip)
+        return label
 
     def _emitCalibrate(self):
         """Handle calibration signal emission with validation"""
@@ -290,6 +427,25 @@ class iScatFocusWidget(Widget):
     def updateCameraImage(self, img):
         """Update camera display"""
         self.camImg.setImage(img)
+
+    def _emitAutofocus(self):
+        try:
+            rangeV = float(self.afRangeEdit.text())
+        except ValueError:
+            self.afResultLabel.setText("<font color='red'>Invalid range</font>")
+            return
+        self.sigAutofocus.emit(rangeV, self.afStepsEdit.value(), self.afFramesEdit.value())
+
+    def showAutofocusCurves(self, coarse, fine, best):
+        """ Shows the sharpness curves of the coarse and fine scan, (voltages, values) each,
+        and the chosen focus (None: not found). """
+        self.afCoarseCurve.setData(*coarse) if coarse else self.afCoarseCurve.clear()
+        self.afFineCurve.setData(*fine) if fine else self.afFineCurve.clear()
+        if best is None:
+            self.afBestLine.hide()
+        else:
+            self.afBestLine.setValue(best)
+            self.afBestLine.show()
 
     def showROI(self, x, y, width, height):
         """ Shows the ROI rectangle on the camera image (image coordinates = sensor pixels

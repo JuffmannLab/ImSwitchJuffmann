@@ -24,6 +24,9 @@ class iScatFocusController(ImConWidgetController):
 
     sigStartCalibration = Signal(float, float, int)  # (from_V, to_V, steps), runs in FocusWorker
     sigStartAutoTune = Signal(float)  # (step_size), runs in FocusWorker
+    sigStartAutofocus = Signal(float, int, int)  # (range +- V, steps, frames per step)
+    sigStartStoreFocus = Signal()  # measures the spot position, runs in FocusWorker
+    sigStartGoToFocus = Signal(float, float, float)  # (spot x, spot y, px per V)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -47,6 +50,9 @@ class iScatFocusController(ImConWidgetController):
         self._widget.sigSelectROI.connect(self.selectROI)
         self._widget.sigApplyROI.connect(self.applyROI)
         self._widget.sigSaveROI.connect(self.saveROI)
+        self._widget.sigAutofocus.connect(self.autofocus)
+        self._widget.sigStoreFocus.connect(self.storeFocus)
+        self._widget.sigGoToFocus.connect(self.goToFocus)
 
         # SLED (light source of the focus lock), controlled by the NiDAQ
         self.sledEnableLine = self._setupInfo.iScatFocus.sledEnableLine
@@ -86,6 +92,22 @@ class iScatFocusController(ImConWidgetController):
         # Calibration storage
         self.volts_per_px = None  # Calibration slope (V/px)
         self.px_per_volt = None   # Inverse calibration (px/V)
+        self.autoTuneSlope = None  # px/V measured by the auto-tune
+        # Focus memory: spot centre (x, y) on the focus camera and piezo voltage at the focus
+        self.storedFocus = None
+        # Camera for the autofocus (image sharpness)
+        self.afCamera = self._setupInfo.iScatFocus.autofocusCamera
+        if self.afCamera is None:
+            for flag in ('forPseudoFlatFielding', 'forDifferential', 'forAcquisition'):
+                names = self._master.detectorsManager.getAllDeviceNames(
+                    lambda c, flag=flag: getattr(c, flag, False))
+                if names:
+                    self.afCamera = names[0]
+                    break
+        self._afHandle = None
+        if self.afCamera is None:
+            self._widget.autofocusButton.setEnabled(False)
+            self._widget.afResultLabel.setText('No camera for the autofocus')
         self.zero_offset_px = None # Position at 0V
         self.px_per_volt_forward = None   # Slope while the voltage increases (px/V)
         self.px_per_volt_backward = None  # Slope while the voltage decreases (px/V)
@@ -125,6 +147,12 @@ class iScatFocusController(ImConWidgetController):
         self._worker.sigFrameAnalyzed.connect(self.update)
         self._worker.sigCalibrationDone.connect(self.calibrationDone)
         self._worker.sigAutoTuneDone.connect(self.autoTuneDone)
+        self._worker.sigAutofocusDone.connect(self.autofocusDone)
+        self._worker.sigStoreFocusDone.connect(self.storeFocusDone)
+        self._worker.sigGoToFocusDone.connect(self.goToFocusDone)
+        self.sigStartAutofocus.connect(self._worker.runAutofocus)
+        self.sigStartStoreFocus.connect(self._worker.runStoreFocus)
+        self.sigStartGoToFocus.connect(self._worker.runGoToFocus)
         self.sigStartCalibration.connect(self._worker.runCalibration)
         self.sigStartAutoTune.connect(self._worker.runAutoTune)
         self._thread = Thread()
@@ -269,8 +297,114 @@ class iScatFocusController(ImConWidgetController):
         self._widget.autoTuneButton.setEnabled(not running)
         self._widget.lockButton.setEnabled(not running)
         self._widget.positionSetButton.setEnabled(not running)
+        self._widget.autofocusButton.setEnabled(not running and self.afCamera is not None)
+        self._widget.storeFocusButton.setEnabled(not running)
+        self._widget.goToFocusButton.setEnabled(not running and self.storedFocus is not None)
         if text is not None:
             self._widget.calibResultLabel.setText(text)
+
+    # ---- Autofocus ----
+    def autofocus(self, rangeV, steps, framesPerStep):
+        """ Scans the piezo around the current position and moves it to the position with the
+        sharpest image of the autofocus camera (runs in the FocusWorker). """
+        if self._worker is None or self._worker.busy or self.afCamera is None:
+            return
+        detectorsManager = self._master.detectorsManager
+        detector = detectorsManager[self.afCamera]
+        try:
+            # The camera has to run during the scan, also without LiveView
+            self._afHandle = detectorsManager.startDetectorAcquisition(detector)
+        except Exception as e:
+            self._widget.afResultLabel.setText(
+                f"<font color='red'>Could not start {self.afCamera}: {e}</font>")
+            return
+        self.unlockFocus()
+        self._setRoutineRunning(True)
+        background = detectorsManager.getFlatField(self.afCamera)
+        self._worker.setAutofocusCamera(detector, background)
+        self._widget.showAutofocusCurves(None, None, None)
+        self._widget.afResultLabel.setText(
+            f'Autofocus running ({self.afCamera}'
+            f'{", flat field background used" if background is not None else ""})...')
+        self.sigStartAutofocus.emit(rangeV, steps, framesPerStep)
+
+    def autofocusDone(self, result):
+        detectorsManager = self._master.detectorsManager
+        if self._afHandle is not None:
+            try:
+                detectorsManager.stopDetectorAcquisition(detectorsManager[self.afCamera],
+                                                         {self.afCamera: self._afHandle})
+            except Exception as e:
+                self.__logger.error(f'Could not stop {self.afCamera}: {e}')
+            self._afHandle = None
+        self._setRoutineRunning(False)
+        self._widget.showAutofocusCurves(result.get('coarse'), result.get('fine'),
+                                         result.get('best'))
+        self._showPosition()
+        if 'error' in result:
+            self.__logger.warning(f"Autofocus failed: {result['error']}")
+            self._widget.afResultLabel.setText(
+                f"<font color='red'>Autofocus failed: {result['error']}</font><br>"
+                f"Piezo back at the start position.")
+            return
+        text = (f"Focus at {result['best']:.3f} V (start {result['start']:.3f} V), "
+                f"sharpness {result['peakRatio']:.2f}x the median of the scan")
+        self.__logger.info(text)
+        if result.get('spot') is not None:
+            self._setStoredFocus(result['spot'], result['best'])
+            text += '<br>Stored as focus memory.'
+        self._widget.afResultLabel.setText(text)
+
+    # ---- Focus memory ----
+    def storeFocus(self):
+        """ Stores the current spot position of the focus camera as focus memory. """
+        if self._worker is None or self._worker.busy:
+            return
+        self._setRoutineRunning(True)
+        self.sigStartStoreFocus.emit()
+
+    def storeFocusDone(self, result):
+        self._setRoutineRunning(False)
+        if 'error' in result:
+            self._widget.focusMemoryLabel.setText(
+                f"<font color='red'>Could not store the focus: {result['error']}</font>")
+            return
+        self._setStoredFocus(result['spot'], result['voltage'])
+
+    def _setStoredFocus(self, spot, voltage):
+        self.storedFocus = (float(spot[0]), float(spot[1]), float(voltage))
+        self._widget.goToFocusButton.setEnabled(True)
+        self._widget.focusMemoryLabel.setText(
+            f'Stored focus: spot at ({spot[0]:.1f}, {spot[1]:.1f}) px, piezo {voltage:.3f} V '
+            f'(valid while the sample and the focus camera ROI stay the same)')
+
+    def goToFocus(self):
+        """ Moves the piezo until the spot of the focus camera is at the stored position. """
+        if self._worker is None or self._worker.busy or self.storedFocus is None:
+            return
+        pxPerVolt = self.px_per_volt if self.px_per_volt else self.autoTuneSlope
+        if not pxPerVolt:
+            self._widget.focusMemoryLabel.setText(
+                "<font color='red'>Run the calibration (or auto-tune) first, the px/V slope "
+                "is needed</font>")
+            return
+        self.unlockFocus()
+        self._setRoutineRunning(True)
+        self.sigStartGoToFocus.emit(self.storedFocus[0], self.storedFocus[1], float(pxPerVolt))
+
+    def goToFocusDone(self, result):
+        self._setRoutineRunning(False)
+        self._showPosition()
+        x, y, v = self.storedFocus
+        if 'error' in result:
+            self._widget.focusMemoryLabel.setText(
+                f"<font color='red'>Go to focus failed: {result['error']}</font><br>"
+                f"Stored focus: spot ({x:.1f}, {y:.1f}) px, piezo {v:.3f} V")
+            return
+        self._widget.focusMemoryLabel.setText(
+            f"At stored focus: residual {result['residual_px']:.2f} px after "
+            f"{result['iterations']} step(s), piezo {result['voltage']:.3f} V "
+            f"(stored {v:.3f} V)")
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
         """ Starts the calibration in the FocusWorker thread, so the GUI stays responsive. """
@@ -501,6 +635,7 @@ class iScatFocusController(ImConWidgetController):
                 f"<font color='red'>Auto-tuning failed: {result['error']}</font>")
             return
         kp, ki, kd = result['kp'], result['ki'], result['kd']
+        self.autoTuneSlope = result.get('slope')
         self.__logger.info(f"Suggested parameters: kp={kp:.4f}, ki={ki:.4f}, kd={kd:.4f} "
                            f"({result})")
 
@@ -537,6 +672,9 @@ class FocusWorker(Worker):
     sigFrameAnalyzed = Signal(object, float)  # (image, beam position in px)
     sigCalibrationDone = Signal(object)  # dict with the results, or {'error': message}
     sigAutoTuneDone = Signal(object)  # dict with kp, ki, kd, or {'error': message}
+    sigAutofocusDone = Signal(object)  # dict with best voltage and curves, or {'error': ...}
+    sigStoreFocusDone = Signal(object)  # dict with spot and voltage, or {'error': ...}
+    sigGoToFocusDone = Signal(object)  # dict with residual and voltage, or {'error': ...}
 
     def __init__(self, detector, positioner, updatePeriodMs):
         super().__init__()
@@ -806,6 +944,179 @@ class FocusWorker(Worker):
         finally:
             if start_V is not None:
                 self._positioner.setPosition(start_V, 0)
+            self._busy = False
+
+    # ---- Autofocus ----
+    def setAutofocusCamera(self, detector, background):
+        """ Camera (detector manager) and optional background image for the next autofocus;
+        set from the controller before sigStartAutofocus. """
+        self._afDetector = detector
+        self._afBackground = None if background is None else np.array(background, np.float32)
+
+    @staticmethod
+    def focusMetric(img, background=None):
+        """ Image sharpness: variance of the band-passed relative contrast. With a background
+        (pseudo flat field median) of the same size, the contrast is img / background - 1,
+        otherwise relative to a strongly blurred copy of the image itself. """
+        img = np.asarray(img, dtype=np.float32)
+        if background is not None and background.shape == img.shape:
+            ref = background
+        else:
+            ref = ndi.gaussian_filter(img, 20)
+        contrast = img / np.maximum(ref, 1) - 1
+        band = ndi.gaussian_filter(contrast, 1) - ndi.gaussian_filter(contrast, 6)
+        return float(np.var(band))
+
+    def _afImage(self, framesPerStep):
+        """ Mean of framesPerStep fresh frames of the autofocus camera. """
+        frames = []
+        for _ in range(framesPerStep):
+            if self._abort:
+                raise _Aborted()
+            frame = self._afDetector.getLatestFrame(is_save=True)  # taken after the call
+            if frame is None:
+                raise ValueError('no frame from the autofocus camera')
+            frames.append(np.asarray(frame, dtype=np.float32))
+        return np.mean(frames, axis=0)
+
+    def _afScan(self, voltages, framesPerStep, settle):
+        """ Moves through the voltages (increasing, always approached from below) and returns
+        the sharpness per voltage. """
+        values = []
+        step = float(np.median(np.abs(np.diff(voltages)))) if len(voltages) > 1 else 0.1
+        self._positioner.setPosition(max(-10, voltages[0] - step), 0)  # approach from below
+        self._sleep(settle + 0.5 * abs(self._positioner.get_abs() - voltages[0]))
+        for v in voltages:
+            self._positioner.setPosition(float(v), 0)
+            self._sleep(settle)
+            values.append(self.focusMetric(self._afImage(framesPerStep), self._afBackground))
+        return np.array(values)
+
+    @QtCore.Slot(float, int, int)
+    def runAutofocus(self, rangeV, steps, framesPerStep):
+        """ Coarse scan of +-rangeV around the current position, fine scan around the sharpest
+        coarse step, parabola fit of the peak; the piezo is moved there (approached from
+        below, like in the scans). On failure the piezo goes back to the start position. """
+        self._busy = True
+        self._abort = False
+        start = None
+        coarse = fine = None
+        try:
+            start = self._positioner.get_abs()
+            settle = 0.15
+            coarseV = np.unique(np.clip(start + np.linspace(-rangeV, rangeV, steps), -10, 10))
+            if len(coarseV) < 5:
+                raise ValueError('scan range too small (clipped at +-10 V)')
+            coarseM = self._afScan(coarseV, framesPerStep, settle)
+            coarse = (coarseV.tolist(), coarseM.tolist())
+            i = int(np.argmax(coarseM))
+            if i == 0 or i == len(coarseV) - 1:
+                raise ValueError(f'the sharpest image is at the edge of the scan '
+                                 f'({coarseV[i]:.2f} V); increase the range or start closer '
+                                 f'to the focus')
+            peakRatio = float(coarseM[i] / np.median(coarseM))
+            if peakRatio < 1.1:
+                raise ValueError(f'no clear sharpness maximum (peak only {peakRatio:.2f}x the '
+                                 f'median); is there structure (dirt, particles) in the image, '
+                                 f'and is the focus within the scan range?')
+
+            fineV = np.linspace(coarseV[i - 1], coarseV[i + 1], 11)
+            fineM = self._afScan(fineV, framesPerStep, settle)
+            fine = (fineV.tolist(), fineM.tolist())
+            j = int(np.argmax(fineM))
+            best = float(fineV[j])
+            # Parabola through the points around the maximum
+            lo, hi = max(0, j - 2), min(len(fineV), j + 3)
+            if hi - lo >= 3:
+                a, b, _ = np.polyfit(fineV[lo:hi], fineM[lo:hi], 2)
+                if a < 0:
+                    vertex = -b / (2 * a)
+                    if fineV[0] <= vertex <= fineV[-1]:
+                        best = float(vertex)
+
+            # Approach the focus from below, like in the scans (piezo hysteresis)
+            self._positioner.setPosition(max(-10, best - (fineV[1] - fineV[0]) * 2), 0)
+            self._sleep(settle)
+            self._positioner.setPosition(best, 0)
+            self._sleep(settle * 2)
+
+            # Spot of the focus camera at the focus, for the focus memory (optional)
+            spot = None
+            try:
+                spot = self._sampleSpot(10)
+            except Exception as e:
+                self.__logger.warning(f'No focus lock spot at the focus: {e}')
+            self.sigAutofocusDone.emit({'best': best, 'start': start, 'peakRatio': peakRatio,
+                                        'coarse': coarse, 'fine': fine, 'spot': spot})
+            start = None  # stay at the focus
+        except _Aborted:
+            self.sigAutofocusDone.emit({'error': 'aborted', 'coarse': coarse, 'fine': fine})
+        except Exception as e:
+            self.__logger.error(f'Autofocus failed: {e}')
+            self.sigAutofocusDone.emit({'error': str(e), 'coarse': coarse, 'fine': fine})
+        finally:
+            if start is not None:
+                self._positioner.setPosition(start, 0)
+            self._busy = False
+
+    # ---- Focus memory ----
+    def _sampleSpot(self, n):
+        """ Median spot centre (x, y) on the focus camera from n frames with a spot. """
+        spots = []
+        for _ in range(10 * n):
+            if len(spots) >= n:
+                break
+            img = self.grabCameraFrame()
+            if img is not None:
+                spot = self.fitSpot(img, fallback=False)
+                if spot is not None:
+                    spots.append(spot[:2])
+            self._sleep(self._updatePeriodMs / 1000)
+        if len(spots) < n:
+            raise ValueError(f'only {len(spots)} of {n} frames with a spot')
+        return tuple(float(v) for v in np.median(np.array(spots), axis=0))
+
+    @QtCore.Slot()
+    def runStoreFocus(self):
+        self._busy = True
+        self._abort = False
+        try:
+            spot = self._sampleSpot(10)
+            self.sigStoreFocusDone.emit({'spot': spot, 'voltage': self._positioner.get_abs()})
+        except _Aborted:
+            self.sigStoreFocusDone.emit({'error': 'aborted'})
+        except Exception as e:
+            self.sigStoreFocusDone.emit({'error': str(e)})
+        finally:
+            self._busy = False
+
+    @QtCore.Slot(float, float, float)
+    def runGoToFocus(self, x, y, pxPerVolt):
+        """ Moves the piezo in steps until the spot, measured along the calibrated direction,
+        is within 0.3 px of the stored spot (x, y). """
+        self._busy = True
+        self._abort = False
+        try:
+            target = self.positionSignal((x, y))
+            residual = None
+            for iteration in range(1, 9):
+                current = self.positionSignal(self._sampleSpot(5))
+                residual = target - current
+                if abs(residual) < 0.3:
+                    self.sigGoToFocusDone.emit({'residual_px': abs(residual),
+                                                'iterations': iteration - 1,
+                                                'voltage': self._positioner.get_abs()})
+                    return
+                dV = float(np.clip(residual / pxPerVolt, -2, 2))
+                newV = float(np.clip(self._positioner.get_abs() + dV, -10, 10))
+                self._positioner.setPosition(newV, 0)
+                self._sleep(0.3 + 0.5 * abs(dV))
+            raise ValueError(f'not converged, residual {abs(residual):.2f} px')
+        except _Aborted:
+            self.sigGoToFocusDone.emit({'error': 'aborted'})
+        except Exception as e:
+            self.sigGoToFocusDone.emit({'error': str(e)})
+        finally:
             self._busy = False
 
     def _sampleSignal(self, n):
