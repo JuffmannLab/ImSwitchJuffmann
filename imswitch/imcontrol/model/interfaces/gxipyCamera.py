@@ -126,6 +126,15 @@ class CameraGXIPY:
         self.SensorHeight = self.camera.HeightMax.get()//self.binning
         self.SensorWidth = self.camera.WidthMax.get()//self.binning
 
+        # Only keep the newest frame in the stream: get_image() otherwise returns the oldest
+        # frame of a full queue when the camera runs faster than the frames are read (e.g. the
+        # focus lock reading at 10 Hz got frames ~16 frames old)
+        try:
+            self.camera.data_stream[0].StreamBufferHandlingMode.set(
+                gx.GxDSStreamBufferHandlingModeEntry.NEWEST_ONLY)
+        except Exception as e:
+            self.__logger.warning(f'Could not set the stream buffer to newest only: {e}')
+
         # set the acq buffer count
         #data_stream = self.camera.data_stream[0]
         #data_stream.set_acquisition_buffer_number(1)
@@ -386,6 +395,9 @@ class CameraGXIPY:
             self.set_flatfielding(property_value)
         elif property_name == "roi_size":
             self.roi_size = property_value
+        elif property_name == "pixel_format":
+            # e.g. "Mono8": the MER2-1220 runs at ~32 fps in Mono8 and ~16 fps in Mono12
+            self.set_pixel_format(property_value)
         elif property_name == "frame_rate":
             self.set_frame_rate(property_value)
         elif property_name == "trigger_source":

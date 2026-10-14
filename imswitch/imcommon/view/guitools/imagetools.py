@@ -42,16 +42,39 @@ def minmaxLevels(arr):
         # a few extreme pixels, so use symmetric levels that ignore the outliers
         return symmetricLevels(arr)
 
+    # 10 % headroom: noise and slightly brighter frames don't immediately reach the upper
+    # limit (shown red with the grayclip colormap, like saturation)
     minlevel = 0
-    maxlevel = arr.max() + 2
+    maxlevel = arr.max() * 1.1 + 2
 
     return minlevel, maxlevel
 
 
+def displayRange(arr, minimum, maximum):
+    """ Range of the contrast slider for an image shown with the levels (minimum, maximum):
+    the full range of the camera for integer images (12 bit if all values fit, so the levels
+    can be raised when the image gets brighter), the range of the data for float images
+    (e.g. differential images). Always includes the levels. """
+    arr = np.asarray(arr)
+    if arr.size == 0:
+        return minimum, maximum
+    if np.issubdtype(arr.dtype, np.integer):
+        if arr.dtype.itemsize == 1:
+            full = 255
+        else:
+            full = 4095 if arr.max() <= 4095 else np.iinfo(arr.dtype).max
+        return min(minimum, 0), max(maximum, full)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return minimum, maximum
+    return min(minimum, float(finite.min())), max(maximum, float(finite.max()))
+
+
 def symmetricLevels(arr, percentile=99.5):
-    """ Levels (-m, m) with m the given percentile of the absolute values. """
+    """ Levels (-m, m) covering all values with 10 % headroom, but at most 3x the given
+    percentile of the absolute values (so single extreme pixels don't compress the contrast). """
     finite = np.abs(arr[np.isfinite(arr)])
-    m = float(np.percentile(finite, percentile)) if finite.size else 0.0
+    m = float(min(finite.max(), 3 * np.percentile(finite, percentile))) * 1.1         if finite.size else 0.0
     if m <= 0:
         m = 1e-6
     return -m, m

@@ -16,7 +16,7 @@ from vispy.scene.visuals import Compound, Line, Markers
 from vispy.visuals.transforms import STTransform
 
 
-from .imagetools import minmaxLevels
+from .imagetools import minmaxLevels, displayRange
 
 import matplotlib.colors as mcolors
 from matplotlib.colors import ListedColormap, Normalize
@@ -175,7 +175,7 @@ class NapariUpdateLevelsWidget(NapariBaseWidget):
             levels = minmaxLevels(layer.data)
             # Set the slider range as well, otherwise it stays at the range of the
             # previous (e.g. live view) images
-            layer.contrast_limits_range = levels
+            layer.contrast_limits_range = displayRange(layer.data, *levels)
             layer.contrast_limits = levels
 
 

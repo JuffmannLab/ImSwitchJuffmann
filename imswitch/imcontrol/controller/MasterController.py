@@ -66,6 +66,8 @@ class MasterController:
 
     def closeEvent(self):
         self.recordingManager.endRecording(emitSignal=False, wait=True)
+        # Stop the synthesizer output (it would otherwise stay at the last frequency)
+        self.synthControlManager.cleanup()
 
         for attrName in dir(self):
             attr = getattr(self, attrName)

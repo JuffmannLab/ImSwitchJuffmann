@@ -60,7 +60,19 @@ class ImageWidget(QtWidgets.QWidget):
         return self.imgLayers[name].data
 
     def setImage(self, name, im):
-        self.imgLayers[name].data = im
+        layer = self.imgLayers[name]
+        # Camera images use the layer's colormap (grayclip: values above the upper limit are
+        # red); differential/flat-field images (float) show contrast, not intensity, so they get
+        # a plain gray colormap without the red "saturation" marker
+        isFloat = np.asarray(im).dtype.kind == 'f'
+        if isFloat != getattr(layer, '_imswitchFloatColormap', False):
+            if isFloat:
+                layer._imswitchCameraColormap = layer.colormap
+                layer.colormap = 'gray'
+            elif getattr(layer, '_imswitchCameraColormap', None) is not None:
+                layer.colormap = layer._imswitchCameraColormap
+            layer._imswitchFloatColormap = isFloat
+        layer.data = im
 
     def clearImage(self, name):
         self.setImage(name, np.zeros((1, 1)))
@@ -106,14 +118,11 @@ class ImageWidget(QtWidgets.QWidget):
         return (x - 0.5 - ox) / s + 0.5, (y - 0.5 - oy) / s + 0.5
 
     def setImageDisplayLevels(self, name, minimum, maximum):
-        # Set the slider range to the current image as well, otherwise it stays at the range
-        # of the previous images when switching between live view and differential view
+        # Set the slider range as well (full camera range for camera images, so the levels
+        # can be raised by hand when the image gets brighter; the data range for differential
+        # images), otherwise it stays at the range of the previous images
         layer = self.imgLayers[name]
-        data = np.asarray(layer.data)
-        finite = data[np.isfinite(data)] if data.dtype.kind == 'f' else data
-        if finite.size > 0:
-            layer.contrast_limits_range = (min(minimum, float(finite.min())),
-                                           max(maximum, float(finite.max())))
+        layer.contrast_limits_range = naparitools.displayRange(layer.data, minimum, maximum)
         layer.contrast_limits = (minimum, maximum)
 
     def getCenterViewbox(self):

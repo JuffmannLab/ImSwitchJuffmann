@@ -33,6 +33,7 @@ class iScatFocusController(ImConWidgetController):
         self.__logger = initLogger(self)
         self._worker = None
         self._thread = None
+        self._routineRunning = False
 
         # Reads the specific values from the configuration file.
         if self._setupInfo.iScatFocus is None:
@@ -53,6 +54,9 @@ class iScatFocusController(ImConWidgetController):
         self._widget.sigAutofocus.connect(self.autofocus)
         self._widget.sigStoreFocus.connect(self.storeFocus)
         self._widget.sigGoToFocus.connect(self.goToFocus)
+        self._widget.sigSelectAfRegion.connect(self.selectAfRegion)
+        self._widget.sigApplyAfRegion.connect(self.applyAfRegion)
+        self._widget.sigClearAfRegion.connect(self.clearAfRegion)
 
         # SLED (light source of the focus lock), controlled by the NiDAQ
         self.sledEnableLine = self._setupInfo.iScatFocus.sledEnableLine
@@ -108,6 +112,9 @@ class iScatFocusController(ImConWidgetController):
         if self.afCamera is None:
             self._widget.autofocusButton.setEnabled(False)
             self._widget.afResultLabel.setText('No camera for the autofocus')
+        # Region of the autofocus camera image used for the autofocus (None: automatic)
+        self.afRegion = self._setupInfo.iScatFocus.autofocusRegion
+        self._showAfRegionText()
         self.zero_offset_px = None # Position at 0V
         self.px_per_volt_forward = None   # Slope while the voltage increases (px/V)
         self.px_per_volt_backward = None  # Slope while the voltage decreases (px/V)
@@ -236,7 +243,7 @@ class iScatFocusController(ImConWidgetController):
         if self._worker is None:
             return
         if enabled:
-            if self._worker.busy:
+            if self._routineRunning:
                 self._widget.setSelectROIChecked(False)
                 return
             self.unlockFocus()
@@ -293,6 +300,9 @@ class iScatFocusController(ImConWidgetController):
 
     def _setRoutineRunning(self, running, text=None):
         """ Disables the buttons that move the piezo while calibration/auto-tuning runs. """
+        # The worker runs the routines one after the other (queued), so the controller's own
+        # state is used; the worker's busy flag is only cleared after it emitted the result
+        self._routineRunning = running
         self._widget.calibButton.setEnabled(not running)
         self._widget.autoTuneButton.setEnabled(not running)
         self._widget.lockButton.setEnabled(not running)
@@ -307,7 +317,7 @@ class iScatFocusController(ImConWidgetController):
     def autofocus(self, rangeV, steps, framesPerStep):
         """ Scans the piezo around the current position and moves it to the position with the
         sharpest image of the autofocus camera (runs in the FocusWorker). """
-        if self._worker is None or self._worker.busy or self.afCamera is None:
+        if self._worker is None or self._routineRunning or self.afCamera is None:
             return
         detectorsManager = self._master.detectorsManager
         detector = detectorsManager[self.afCamera]
@@ -321,10 +331,11 @@ class iScatFocusController(ImConWidgetController):
         self.unlockFocus()
         self._setRoutineRunning(True)
         background = detectorsManager.getFlatField(self.afCamera)
-        self._worker.setAutofocusCamera(detector, background)
+        self._worker.setAutofocusCamera(detector, background, self.afRegion)
         self._widget.showAutofocusCurves(None, None, None)
         self._widget.afResultLabel.setText(
-            f'Autofocus running ({self.afCamera}'
+            f'Autofocus running ({self.afCamera}, '
+            f'{"region" if self.afRegion else "automatic point scatterers"}'
             f'{", flat field background used" if background is not None else ""})...')
         self.sigStartAutofocus.emit(rangeV, steps, framesPerStep)
 
@@ -348,17 +359,87 @@ class iScatFocusController(ImConWidgetController):
                 f"Piezo back at the start position.")
             return
         text = (f"Focus at {result['best']:.3f} V (start {result['start']:.3f} V), "
-                f"sharpness {result['peakRatio']:.2f}x the median of the scan")
+                f"sharpness {result['peakRatio']:.2f}x the median of the scan "
+                f"({result.get('method', '')})")
         self.__logger.info(text)
         if result.get('spot') is not None:
             self._setStoredFocus(result['spot'], result['best'])
             text += '<br>Stored as focus memory.'
         self._widget.afResultLabel.setText(text)
 
+    # ---- Autofocus region ----
+    def _showAfRegionText(self):
+        if self.afRegion:
+            x, y, w, h = self.afRegion
+            self._widget.setAfRegionText(
+                f'Region: x {x}, y {y}, {w} x {h} px (peak contrast in the region)')
+        else:
+            self._widget.setAfRegionText('No region: point-like scatterers are used '
+                                         'automatically (large objects are ignored)')
+
+    def selectAfRegion(self, enabled):
+        """ Shows the current image of the autofocus camera to draw the region, or cancels. """
+        if not enabled:
+            self._widget.hideAfRegionRoi()
+            return
+        if self.afCamera is None:
+            self._widget.setSelectAfRegionChecked(False)
+            return
+        detectorsManager = self._master.detectorsManager
+        detector = detectorsManager[self.afCamera]
+        try:
+            handle = detectorsManager.startDetectorAcquisition(detector)  # if not running yet
+            try:
+                img = detector.getLatestFrame(is_save=True)
+            finally:
+                detectorsManager.stopDetectorAcquisition(detector, {self.afCamera: handle})
+        except Exception as e:
+            self._widget.setSelectAfRegionChecked(False)
+            self._widget.setAfRegionText(f"<font color='red'>No image from {self.afCamera}: "
+                                         f"{e}</font>")
+            return
+        if img is None:
+            self._widget.setSelectAfRegionChecked(False)
+            return
+        self._afRegionShape = np.asarray(img).shape
+        self._widget.showAfRegionImage(img, self.afRegion)
+        self._widget.setAfRegionText('Move/resize the rectangle (e.g. around a point scatterer), '
+                                     'then click "Apply region".')
+
+    def applyAfRegion(self, x, y, w, h):
+        """ Uses the drawn region for the autofocus and saves it in the setup file. """
+        rows, cols = getattr(self, '_afRegionShape', (None, None))
+        if rows is not None:
+            x, y = int(np.clip(x, 0, cols - 1)), int(np.clip(y, 0, rows - 1))
+            w, h = int(np.clip(w, 3, cols - x)), int(np.clip(h, 3, rows - y))
+        self.afRegion = [x, y, w, h]
+        self._widget.hideAfRegionRoi()
+        self._widget.setSelectAfRegionChecked(False)
+        self._saveAfRegion()
+
+    def clearAfRegion(self):
+        self.afRegion = None
+        self._widget.hideAfRegionRoi()
+        self._widget.setSelectAfRegionChecked(False)
+        self._saveAfRegion()
+
+    def _saveAfRegion(self):
+        def update(setupDict):
+            if self.afRegion:
+                setupDict['iScatFocus']['autofocusRegion'] = list(self.afRegion)
+            else:
+                setupDict['iScatFocus'].pop('autofocusRegion', None)
+        try:
+            configfiletools.updateSetupFile(configfiletools.loadOptions()[0], update)
+            self._showAfRegionText()
+        except Exception as e:
+            self.__logger.error(f'Could not save the autofocus region: {e}')
+            self._widget.setAfRegionText(f"<font color='red'>Could not save: {e}</font>")
+
     # ---- Focus memory ----
     def storeFocus(self):
         """ Stores the current spot position of the focus camera as focus memory. """
-        if self._worker is None or self._worker.busy:
+        if self._worker is None or self._routineRunning:
             return
         self._setRoutineRunning(True)
         self.sigStartStoreFocus.emit()
@@ -380,7 +461,7 @@ class iScatFocusController(ImConWidgetController):
 
     def goToFocus(self):
         """ Moves the piezo until the spot of the focus camera is at the stored position. """
-        if self._worker is None or self._worker.busy or self.storedFocus is None:
+        if self._worker is None or self._routineRunning or self.storedFocus is None:
             return
         pxPerVolt = self.px_per_volt if self.px_per_volt else self.autoTuneSlope
         if not pxPerVolt:
@@ -408,7 +489,7 @@ class iScatFocusController(ImConWidgetController):
 
     def runCalibration(self, from_V: float, to_V: float, steps: int):
         """ Starts the calibration in the FocusWorker thread, so the GUI stays responsive. """
-        if self._worker is None or self._worker.busy:
+        if self._worker is None or self._routineRunning:
             return
         self.unlockFocus()
         self._setRoutineRunning(True, 'Calibration running...')
@@ -498,7 +579,7 @@ class iScatFocusController(ImConWidgetController):
         # the one that was analyzed
         self._worker.frameConsumed()
         if np.isnan(position):
-            # ROI selection: frame without beam position, only displayed
+            # ROI selection or no spot in the frame (e.g. SLED off): only displayed
             self._widget.camImg.setImage(img)
             return
         self.setPointSignal = position
@@ -616,7 +697,7 @@ class iScatFocusController(ImConWidgetController):
         """ Automated tuning (see FocusWorker.runAutoTune). Runs in the FocusWorker thread; the
         result arrives in autoTuneDone. step_size is the piezo step in V for the step response;
         it must move the spot clearly more than the noise. """
-        if self._worker is None or self._worker.busy:
+        if self._worker is None or self._routineRunning:
             return
         self.__logger.info("Starting auto-tuning...")
 
@@ -736,10 +817,9 @@ class FocusWorker(Worker):
             self.sigFrameAnalyzed.emit(img, float('nan'))
             return
         position = self.positionSignal(self.fitSpot(img))
-        if position is None:
-            return
+        # Frames without a spot (e.g. SLED off) are still shown, without a position
         self._frameConsumed = False
-        self.sigFrameAnalyzed.emit(img, float(position))
+        self.sigFrameAnalyzed.emit(img, float('nan') if position is None else float(position))
 
     def _sleep(self, seconds):
         """ time.sleep that ends early (raising _Aborted) when abort() is called. """
@@ -947,25 +1027,67 @@ class FocusWorker(Worker):
             self._busy = False
 
     # ---- Autofocus ----
-    def setAutofocusCamera(self, detector, background):
-        """ Camera (detector manager) and optional background image for the next autofocus;
-        set from the controller before sigStartAutofocus. """
+    def setAutofocusCamera(self, detector, background, region=None):
+        """ Camera (detector manager), optional background image and optional region
+        [x, y, width, height] for the next autofocus; set from the controller before
+        sigStartAutofocus. """
         self._afDetector = detector
         self._afBackground = None if background is None else np.array(background, np.float32)
+        self._afRegion = list(region) if region else None
+        self._afFullScale = None
 
-    @staticmethod
-    def focusMetric(img, background=None):
-        """ Image sharpness: variance of the band-passed relative contrast. With a background
-        (pseudo flat field median) of the same size, the contrast is img / background - 1,
-        otherwise relative to a strongly blurred copy of the image itself. """
+    def _relativeContrast(self, img):
+        """ img / background - 1 (pseudo flat field median of the same size if loaded,
+        otherwise a strongly blurred copy of the image), smoothed slightly against noise. """
         img = np.asarray(img, dtype=np.float32)
-        if background is not None and background.shape == img.shape:
-            ref = background
-        else:
-            ref = ndi.gaussian_filter(img, 20)
-        contrast = img / np.maximum(ref, 1) - 1
-        band = ndi.gaussian_filter(contrast, 1) - ndi.gaussian_filter(contrast, 6)
-        return float(np.var(band))
+        bg = self._afBackground
+        ref = bg if bg is not None and bg.shape == img.shape else ndi.gaussian_filter(img, 20)
+        return ndi.gaussian_filter(img / np.maximum(ref, 1) - 1, 0.7)
+
+    def _afMetrics(self, images, maskImages=None):
+        """ Focus measure per image. iScat point scatterers have the most compact PSF and
+        the highest contrast in focus, whereas large objects (dirt) can have their strongest
+        contrast out of focus, so only small structures are used:
+        - with a region: peak |contrast| in the region (saturated pixels ignored);
+        - without: mean of the 3 strongest compact scatterers; large objects (> 1200 px of
+          strong contrast in any of maskImages) and the image border are masked out, with the
+          same mask for all images so the values are comparable. """
+        rels = [self._relativeContrast(img) for img in images]
+        full = self._afFullScale
+        if self._afRegion:
+            x, y, w, h = self._afRegion
+            values = []
+            for img, rel in zip(images, rels):
+                a = np.abs(rel[y:y + h, x:x + w])
+                if full is not None:
+                    a = np.where(np.asarray(img)[y:y + h, x:x + w] >= 0.98 * full, 0, a)
+                if a.size == 0:
+                    raise ValueError('the autofocus region is outside the camera image; '
+                                     'select it again')
+                values.append(float(a.max()))
+            return np.array(values), 'peak contrast in the region'
+
+        mask = np.zeros(rels[0].shape, bool)
+        for rel in ([self._relativeContrast(img) for img in maskImages] if maskImages else rels):
+            noise = 1.4826 * np.median(np.abs(rel - np.median(rel)))
+            strong = ndi.gaussian_filter(np.abs(rel), 3) > 3 * noise
+            labels, n = ndi.label(strong)
+            if n:
+                sizes = ndi.sum(strong, labels, np.arange(1, n + 1))
+                mask |= np.isin(labels, np.flatnonzero(sizes > 1200) + 1)
+        mask = ndi.binary_dilation(mask, iterations=8)
+        b = 15
+        mask[:b] = mask[-b:] = True
+        mask[:, :b] = mask[:, -b:] = True
+        values = []
+        for img, rel in zip(images, rels):
+            a = np.where(mask, 0, np.abs(rel))
+            if full is not None:
+                a = np.where(np.asarray(img) >= 0.98 * full, 0, a)
+            peaks = (a == ndi.maximum_filter(a, size=21)) & (a > 0)
+            top = np.sort(a[peaks])[::-1][:3]
+            values.append(float(top.mean()) if len(top) else 0.0)
+        return np.array(values), 'automatic point scatterers'
 
     def _afImage(self, framesPerStep):
         """ Mean of framesPerStep fresh frames of the autofocus camera. """
@@ -976,21 +1098,25 @@ class FocusWorker(Worker):
             frame = self._afDetector.getLatestFrame(is_save=True)  # taken after the call
             if frame is None:
                 raise ValueError('no frame from the autofocus camera')
+            if self._afFullScale is None:  # for ignoring saturated pixels
+                frame = np.asarray(frame)
+                self._afFullScale = 255 if frame.dtype == np.uint8 else (
+                    4095 if frame.max() <= 4095 else 65535)
             frames.append(np.asarray(frame, dtype=np.float32))
         return np.mean(frames, axis=0)
 
     def _afScan(self, voltages, framesPerStep, settle):
         """ Moves through the voltages (increasing, always approached from below) and returns
-        the sharpness per voltage. """
-        values = []
+        the image (mean of framesPerStep frames) per voltage. """
+        images = []
         step = float(np.median(np.abs(np.diff(voltages)))) if len(voltages) > 1 else 0.1
         self._positioner.setPosition(max(-10, voltages[0] - step), 0)  # approach from below
         self._sleep(settle + 0.5 * abs(self._positioner.get_abs() - voltages[0]))
         for v in voltages:
             self._positioner.setPosition(float(v), 0)
             self._sleep(settle)
-            values.append(self.focusMetric(self._afImage(framesPerStep), self._afBackground))
-        return np.array(values)
+            images.append(self._afImage(framesPerStep))
+        return images
 
     @QtCore.Slot(float, int, int)
     def runAutofocus(self, rangeV, steps, framesPerStep):
@@ -1007,7 +1133,8 @@ class FocusWorker(Worker):
             coarseV = np.unique(np.clip(start + np.linspace(-rangeV, rangeV, steps), -10, 10))
             if len(coarseV) < 5:
                 raise ValueError('scan range too small (clipped at +-10 V)')
-            coarseM = self._afScan(coarseV, framesPerStep, settle)
+            coarseImages = self._afScan(coarseV, framesPerStep, settle)
+            coarseM, method = self._afMetrics(coarseImages)
             coarse = (coarseV.tolist(), coarseM.tolist())
             i = int(np.argmax(coarseM))
             if i == 0 or i == len(coarseV) - 1:
@@ -1021,7 +1148,9 @@ class FocusWorker(Worker):
                                  f'and is the focus within the scan range?')
 
             fineV = np.linspace(coarseV[i - 1], coarseV[i + 1], 11)
-            fineM = self._afScan(fineV, framesPerStep, settle)
+            fineImages = self._afScan(fineV, framesPerStep, settle)
+            # Same mask as for the coarse scan (automatic mode)
+            fineM, _ = self._afMetrics(fineImages, maskImages=coarseImages + fineImages)
             fine = (fineV.tolist(), fineM.tolist())
             j = int(np.argmax(fineM))
             best = float(fineV[j])
@@ -1047,7 +1176,8 @@ class FocusWorker(Worker):
             except Exception as e:
                 self.__logger.warning(f'No focus lock spot at the focus: {e}')
             self.sigAutofocusDone.emit({'best': best, 'start': start, 'peakRatio': peakRatio,
-                                        'coarse': coarse, 'fine': fine, 'spot': spot})
+                                        'coarse': coarse, 'fine': fine, 'spot': spot,
+                                        'method': method})
             start = None  # stay at the focus
         except _Aborted:
             self.sigAutofocusDone.emit({'error': 'aborted', 'coarse': coarse, 'fine': fine})
@@ -1172,25 +1302,44 @@ class FocusWorker(Worker):
         try:
             img = np.asarray(img, dtype=np.float64)
 
-            # Brightest point of the smoothed image as start value
-            sigma = max(1.0, min(img.shape) * 0.02)  # ~2% of image size
-            smoothed = ndi.gaussian_filter(img, sigma=sigma)
-            py, px = np.unravel_index(np.argmax(smoothed), smoothed.shape)
-
-            # Fit window around it
+            # Brightest point of the smoothed image as start value; smoothed on a 4x binned
+            # image (much faster than on the full image)
+            b = 4
+            h, w = (img.shape[0] // b) * b, (img.shape[1] // b) * b
+            binned = img[:h, :w].reshape(h // b, b, w // b, b).mean(axis=(1, 3))
+            sigma = max(1.0, min(binned.shape) * 0.02)  # ~2% of image size
+            smoothed = ndi.gaussian_filter(binned, sigma=sigma)
+            by, bx = np.unravel_index(np.argmax(smoothed), smoothed.shape)
             r = self._fit_radius
+            y0, y1 = max(0, by * b - r), min(img.shape[0], by * b + b + r)
+            x0, x1 = max(0, bx * b - r), min(img.shape[1], bx * b + b + r)
+            py, px = np.unravel_index(np.argmax(ndi.uniform_filter(img[y0:y1, x0:x1], 3)),
+                                      (y1 - y0, x1 - x0))
+            py, px = py + y0, px + x0
+
+            # Widths from the pixels above half maximum in a large window (the background noise
+            # would inflate second moments of the whole window), then the fit in a window of
+            # ~3 widths around the spot (the fit time grows with the number of pixels)
+            y0, y1 = max(0, py - r), min(img.shape[0], py + r + 1)
+            x0, x1 = max(0, px - r), min(img.shape[1], px + r + 1)
+            window = img[y0:y1, x0:x1]
+            offset = np.percentile(window, 5)
+            peak = ndi.uniform_filter(window, 3)[py - y0, px - x0]
+            # No spot if the peak doesn't clearly stand out from the noise (e.g. SLED off)
+            noise = 1.4826 * np.median(np.abs(img - np.median(img)))
+            if peak - offset < max(10 * noise, 5):
+                return failed
+            yy, xx = np.mgrid[y0:y1, x0:x1]
+            mask = window >= offset + 0.5 * (peak - offset)
+            # For a Gaussian, the half-maximum region is an ellipse with semi-axes 1.1774 sigma,
+            # whose coordinates have a standard deviation of half the semi-axis
+            sx = max(2 * np.std(xx[mask]) / 1.1774, 1.0)
+            sy = max(2 * np.std(yy[mask]) / 1.1774, 1.0)
+            r = int(np.clip(3 * max(sx, sy), 8, self._fit_radius))
             y0, y1 = max(0, py - r), min(img.shape[0], py + r + 1)
             x0, x1 = max(0, px - r), min(img.shape[1], px + r + 1)
             window = img[y0:y1, x0:x1]
             yy, xx = np.mgrid[y0:y1, x0:x1]
-
-            # Start values: offset from the dark pixels, widths from the second moments
-            offset = np.percentile(window, 5)
-            weights = np.clip(window - offset, 0, None)
-            if weights.sum() <= 0:
-                return failed
-            sx = np.sqrt(np.sum(weights * (xx - px) ** 2) / weights.sum())
-            sy = np.sqrt(np.sum(weights * (yy - py) ** 2) / weights.sum())
             p0 = [window.max() - offset, px, py, max(sx, 1.0), max(sy, 1.0), offset]
             bounds = ([0, x0, y0, 0.5, 0.5, -np.inf],
                       [np.inf, x1 - 1, y1 - 1, 2 * r, 2 * r, np.inf])

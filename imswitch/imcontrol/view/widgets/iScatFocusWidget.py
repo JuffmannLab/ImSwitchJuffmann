@@ -26,6 +26,9 @@ class iScatFocusWidget(Widget):
     sigAutofocus = QtCore.Signal(float, int, int)  # (range +- V, steps, frames per step)
     sigStoreFocus = QtCore.Signal()
     sigGoToFocus = QtCore.Signal()
+    sigSelectAfRegion = QtCore.Signal(bool)  # show the autofocus camera image to draw the region
+    sigApplyAfRegion = QtCore.Signal(int, int, int, int)  # (x, y, width, height) in camera px
+    sigClearAfRegion = QtCore.Signal()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -225,7 +228,44 @@ class iScatFocusWidget(Widget):
         afLayout.addWidget(self.afFramesEdit, 2, 1)
         afLayout.addWidget(self.autofocusButton, 3, 0, 1, 2)
         afLayout.addWidget(self.afResultLabel, 4, 0, 1, 2)
-        afLayout.addWidget(self.afPlot, 5, 0, 1, 2)
+        # Region of the autofocus camera image used for the autofocus (e.g. a point scatterer)
+        self.selectAfRegionButton = guitools.BetterPushButton('Select region')
+        self.selectAfRegionButton.setCheckable(True)
+        self.selectAfRegionButton.setToolTip(
+            'Show the current image of the autofocus camera and draw the region (e.g. around a '
+            'point scatterer) used for the autofocus')
+        self.applyAfRegionButton = guitools.BetterPushButton('Apply region')
+        self.applyAfRegionButton.setEnabled(False)
+        self.clearAfRegionButton = guitools.BetterPushButton('Clear region')
+        self.afRegionLabel = QtWidgets.QLabel('')
+        self.afRegionLabel.setWordWrap(True)
+        regionButtons = QtWidgets.QHBoxLayout()
+        regionButtons.addWidget(self.selectAfRegionButton)
+        regionButtons.addWidget(self.applyAfRegionButton)
+        regionButtons.addWidget(self.clearAfRegionButton)
+        afLayout.addLayout(regionButtons, 8, 0, 1, 2)
+        afLayout.addWidget(self.afRegionLabel, 9, 0, 1, 2)
+
+        self.afRegionView = pg.GraphicsLayoutWidget()
+        self.afRegionView.setMinimumSize(150, 150)
+        self.afRegionBox = self.afRegionView.addViewBox()
+        self.afRegionBox.setAspectLocked(True)
+        self.afRegionBox.invertY(True)  # rows downwards, like in the live view
+        self.afRegionImg = pg.ImageItem()
+        self.afRegionBox.addItem(self.afRegionImg)
+        self.afRegionRoi = pg.RectROI([0, 0], [40, 40], pen=pg.mkPen('y', width=2), removable=False)
+        self.afRegionRoi.addScaleHandle([0, 0], [1, 1])
+        self.afRegionRoi.addScaleHandle([1, 0], [0, 1])
+        self.afRegionRoi.addScaleHandle([0, 1], [1, 0])
+        self.afRegionRoi.setZValue(10)
+        self.afRegionRoi.hide()
+        self.afRegionBox.addItem(self.afRegionRoi)
+
+        # Sharpness plot and region image next to each other
+        afGraphics = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        afGraphics.addWidget(self.afPlot)
+        afGraphics.addWidget(self.afRegionView)
+        afLayout.addWidget(afGraphics, 5, 0, 1, 2)
         afLayout.addWidget(self.storeFocusButton, 6, 0)
         afLayout.addWidget(self.goToFocusButton, 6, 1)
         afLayout.addWidget(self.focusMemoryLabel, 7, 0, 1, 2)
@@ -306,6 +346,10 @@ class iScatFocusWidget(Widget):
         self.autofocusButton.clicked.connect(self._emitAutofocus)
         self.storeFocusButton.clicked.connect(self.sigStoreFocus)
         self.goToFocusButton.clicked.connect(self.sigGoToFocus)
+        self.selectAfRegionButton.toggled.connect(self.sigSelectAfRegion)
+        self.applyAfRegionButton.clicked.connect(
+            lambda: self.sigApplyAfRegion.emit(*self.getAfRegion()))
+        self.clearAfRegionButton.clicked.connect(self.sigClearAfRegion)
         self.positionSlider.valueChanged.connect(self._onSliderMove)
 
         self.sledEnable.clicked.connect(self.sigSledEnable)
@@ -446,6 +490,39 @@ class iScatFocusWidget(Widget):
         else:
             self.afBestLine.setValue(best)
             self.afBestLine.show()
+
+    def showAfRegionImage(self, img, region=None):
+        """ Shows an image of the autofocus camera (rows, columns) with the region rectangle
+        to move/resize; region (x, y, width, height) or None for a default in the centre. """
+        img = np.asarray(img, dtype=np.float32)
+        low, high = np.percentile(img, [0.5, 99.9])
+        self.afRegionImg.setImage(img.T, levels=(low, high))  # ImageItem: first axis is x
+        if region is None:
+            h, w = img.shape
+            region = (w // 2 - 20, h // 2 - 20, 40, 40)
+        x, y, w, h = region
+        self.afRegionRoi.setPos([x, y], update=False)
+        self.afRegionRoi.setSize([w, h])
+        self.afRegionRoi.show()
+        self.applyAfRegionButton.setEnabled(True)
+        self.afRegionBox.autoRange()
+
+    def hideAfRegionRoi(self):
+        self.afRegionRoi.hide()
+        self.applyAfRegionButton.setEnabled(False)
+
+    def getAfRegion(self):
+        """ The drawn region as (x, y, width, height) in camera pixels. """
+        x, y = self.afRegionRoi.pos()
+        w, h = self.afRegionRoi.size()
+        return int(round(x)), int(round(y)), int(round(w)), int(round(h))
+
+    def setSelectAfRegionChecked(self, checked):
+        with QtCore.QSignalBlocker(self.selectAfRegionButton):
+            self.selectAfRegionButton.setChecked(checked)
+
+    def setAfRegionText(self, text):
+        self.afRegionLabel.setText(text)
 
     def showROI(self, x, y, width, height):
         """ Shows the ROI rectangle on the camera image (image coordinates = sensor pixels

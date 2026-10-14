@@ -26,6 +26,7 @@ class NidaqManager(SignalInterface):
 
         self.__setupInfo = setupInfo
         self.tasks = {}
+        self._onDemandAOTasks = {}  # {channel: (task, min_val, max_val)}, see setAnalog
         self.doTaskWaiter = None
         self.aoTaskWaiter = None
         self.timerTaskWaiter = None
@@ -240,31 +241,50 @@ class NidaqManager(SignalInterface):
         if not self.busy:
             self.busy = True
             try:
-                acquisitionTypeFinite = nidaqmx.constants.AcquisitionType.FINITE
-                tasklen = 10
-                aotask = self.__createChanAOTask('setAnalogTask',
-                                                     channel,
-                                                     acquisitionTypeFinite,
-                                                     r'100kHzTimebase',
-                                                     100000, min_val, max_val, tasklen, False)
-
-                signal = voltage * np.ones(tasklen, dtype=float)
+                # On-demand (software timed) task, kept open per channel: a write takes well
+                # below 1 ms instead of ~25 ms for creating, starting and closing a timed task
+                # each time (matters for the focus lock, which writes at the camera frame rate)
+                aotask = self.__getOnDemandAOTask(channel, min_val, max_val)
                 try:
-                    aotask.write(signal, auto_start=True)
-                except Exception:
-                    self.__logger.error(
-                            'Attempted writing analog data that is too large or too small, or other'
-                            ' error when writing the task.'
-                    )
-                aotask.wait_until_done()
-                aotask.stop()
-                aotask.close()
+                    aotask.write(float(voltage), auto_start=True)
+                except nidaqmx.DaqError as e:
+                    self.__logger.error(f'Could not write {voltage} V to {channel}: {e}')
+                    self.closeOnDemandAOTasks(channel)
             except (nidaqmx._lib.DaqNotFoundError, nidaqmx._lib.DaqFunctionNotSupportedError, nidaqmx.DaqError) as e:
                     warnings.warn(str(e), RuntimeWarning)
             finally:
                 self.busy = False
 
+    def __getOnDemandAOTask(self, channel, min_val, max_val):
+        """ Open on-demand analog output task of the channel, created if needed (or if the
+        voltage range changed). """
+        cached = self._onDemandAOTasks.get(channel)
+        if cached is not None and cached[1:] == (min_val, max_val):
+            return cached[0]
+        self.closeOnDemandAOTasks(channel)
+        aotask = nidaqmx.Task()
+        aotask.ao_channels.add_ao_voltage_chan(channel, min_val=min_val, max_val=max_val)
+        self._onDemandAOTasks[channel] = (aotask, min_val, max_val)
+        return aotask
+
+    def closeOnDemandAOTasks(self, channel=None):
+        """ Closes the open on-demand analog output task of the channel (all if None), e.g.
+        before a scan needs the channels. The outputs keep their last voltage. """
+        channels = list(self._onDemandAOTasks) if channel is None else [channel]
+        for ch in channels:
+            cached = self._onDemandAOTasks.pop(ch, None)
+            if cached is not None:
+                try:
+                    cached[0].close()
+                except Exception as e:
+                    self.__logger.warning(f'Could not close the task of {ch}: {e}')
+
     def runScan(self, signalDic, scanInfoDict):
+        # The scan tasks need the analog outputs
+        self.closeOnDemandAOTasks()
+        self.__runScan(signalDic, scanInfoDict)
+
+    def __runScan(self, signalDic, scanInfoDict):
         """ Function assuming that the user wants to run a full scan with a stage
         controlled by analog voltage outputs and a cycle of TTL pulses continuously
         running. """

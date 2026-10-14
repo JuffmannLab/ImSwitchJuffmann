@@ -2,7 +2,7 @@ import imslib as imslib
 from pathlib import Path
 import atexit
 
-from imslib import Percent, PointClock
+from imslib import Percent, PointClock, StopStyle
 
 from imswitch.imcommon.model import initLogger
 from imswitch.imcontrol.model.managers.ims_events import EventWaiter, WaitOnEventsThenPrint, EVENT_MESSAGES
@@ -30,8 +30,24 @@ class SynthControlManager:
         atexit.register(self.cleanup)
 
     def cleanup(self):
-        self.stopPlayer()
-        self.ims.Disconnect()
+        """ Stops the output and disconnects, like the iMS examples on exit: without ClearTone
+        the DDS keeps outputting the last frequency (e.g. the zero position of the image).
+        Called when ImSwitch closes and again at exit; does nothing the second time. """
+        if self.ims is None:
+            return
+        try:
+            if self.player is not None:
+                self.player.Stop(StopStyle.IMMEDIATELY)
+                self.player = None
+            imslib.SignalPath(self.ims).ClearTone()
+        except Exception as e:
+            self.__logger.error(f'Could not stop the synthesizer output: {e}')
+        try:
+            self.ims.Disconnect()
+        except Exception as e:
+            self.__logger.error(f'Could not disconnect the synthesizer: {e}')
+        self.ims = None
+        self.__logger.info('Synthesizer output stopped and disconnected')
 
     def downloadImages(self):
         imagePath = Path(__file__).resolve().parents[4]
@@ -104,11 +120,17 @@ class SynthControlManager:
         self.player.Play()
 
     def stopPlayer(self):
+        """ Stops the image playback and switches the output off (ClearTone, like the iMS
+        examples): otherwise the synthesizer stays at the last frequency and the beam stays on
+        one spot (which saturated the iScat camera). """
         if self.player is None:
             return
-        else:
-            self.player.Stop()
-            self.player = None
+        self.player.Stop(StopStyle.IMMEDIATELY)
+        self.player = None
+        try:
+            imslib.SignalPath(self.ims).ClearTone()
+        except Exception as e:
+            self.__logger.error(f'Could not switch the synthesizer output off: {e}')
 
     def getConfig(self):
         return self.clockrate, self.trigger, self.repeatID

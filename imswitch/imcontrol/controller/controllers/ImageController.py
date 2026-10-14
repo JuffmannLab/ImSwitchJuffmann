@@ -78,7 +78,7 @@ class ImageController(LiveUpdatedController):
                 self._updateLayerScales()
                 self._shouldResetView = True
 
-            if not init:
+            if not init or self._outsideLevels(detectorName, im):
                 self.autoLevels([detectorName], im)
 
             if not init or self._shouldResetView:
@@ -98,6 +98,23 @@ class ImageController(LiveUpdatedController):
             self._shouldResetView = True
 
         self._lastShape = shape
+
+    def _outsideLevels(self, detectorName, im):
+        """ Whether the image no longer fits the displayed levels after the illumination changed:
+        most of it above/below the levels (overexposed/black), or the brightest pixels using less
+        than a quarter of the level range (very dim). The levels are then set again. """
+        low, high = self._widget.getImageDisplayLevels(detectorName)
+        sample = np.asarray(im)[::4, ::4]
+        if low < 0 < high:
+            # Symmetric levels of differential images: values much smaller than the levels
+            # (e.g. after a strong first image) or mostly outside them
+            m = max(-low, high)
+            strength = float(np.percentile(np.abs(sample), 99.9))
+            return strength < 0.25 * m or float(np.median(np.abs(sample))) > m
+        median = float(np.median(sample))
+        if median > high or median < low:
+            return True
+        return float(np.percentile(sample, 99.9)) < low + 0.25 * (high - low)
 
     def _updateLayerScales(self):
         """ Sets the display scale of all live layers that have an image (see __init__). The

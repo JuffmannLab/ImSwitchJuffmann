@@ -201,6 +201,11 @@ class iScatFocusInfo:
     """ Camera whose images are used for the autofocus (image sharpness). Optional; default:
     the first camera marked forPseudoFlatFielding, forDifferential or forAcquisition. """
 
+    autofocusRegion: Optional[List[int]] = None
+    """ Region [x, y, width, height] (camera pixels, x = column) of the autofocus camera image
+    used for the autofocus, e.g. around a point scatterer; set in the Autofocus tab. Optional;
+    without it, point-like scatterers are used automatically. """
+
 @dataclass(frozen=True)
 class AutofocusInfo:
     camera: str
